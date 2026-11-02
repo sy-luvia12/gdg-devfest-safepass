@@ -47,19 +47,13 @@ export function readDocId(data: unknown, field: string): string {
   return value;
 }
 
-export function readPrice(data: unknown): number {
-  const value = record(data).price;
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw new HttpsError('invalid-argument', 'price must be a non-negative integer.');
-  }
-  return value;
-}
-
 const ms = (t: Timestamp) => t.toMillis();
 
 export function ticketFromSnap(snap: DocumentSnapshot<DocumentData>): Ticket | null {
   const d = snap.data();
   if (!d) return null;
+  // A cancelled ticket has no owner and no QR, so every caller treats it as missing.
+  if (d.status === 'cancelled') return null;
   const base = { id: snap.id, eventId: d.eventId, ownerUid: d.ownerUid, nftNumber: d.nftNumber };
   if (d.status === 'used') return { ...base, status: 'used', usedAtMs: ms(d.usedAt) };
   const qr = d.qrToken && d.qrExpiresAt ? { token: d.qrToken, expiresAtMs: ms(d.qrExpiresAt) } : null;
@@ -76,6 +70,8 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
     faceValue: d.faceValue,
     allowedDomains: d.allowedDomains,
     issuedCount: d.issuedCount,
+    nftSeq: d.nftSeq,
     enteredCount: d.enteredCount,
+    reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
   };
 }

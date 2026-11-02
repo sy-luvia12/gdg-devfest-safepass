@@ -31,7 +31,7 @@ async function signIn(email: string): Promise<Client> {
     issueTicket: call('issueTicket'),
     refreshQrToken: call('refreshQrToken'),
     verifyEntry: call('verifyEntry'),
-    transferTicket: call('transferTicket'),
+    cancelTicket: call('cancelTicket'),
   };
 }
 
@@ -44,9 +44,12 @@ const ALICE = 'alice@korea.ac.kr';
 const BOB = 'bob@yonsei.ac.kr';
 const CAROL = 'carol@skku.edu';
 const STAFF = 'staff@korea.ac.kr';
+const DAVE = 'dave@korea.ac.kr';
+const ERIN = 'erin@yonsei.ac.kr';
+const GHOST = 'ghost@korea.ac.kr';
 const OUTSIDER = 'outsider@gmail.com';
 
-let alice: Client, bob: Client, carol: Client, staff: Client, outsider: Client;
+let alice: Client, bob: Client, carol: Client, dave: Client, erin: Client, staff: Client, outsider: Client;
 
 beforeAll(async () => {
   await clearEmulators();
@@ -57,11 +60,13 @@ beforeAll(async () => {
     faceValue: 10_000,
     allowedDomains: ['korea.ac.kr', 'yonsei.ac.kr', 'skku.edu'],
     issuedCount: 0,
+    nftSeq: 0,
     enteredCount: 0,
+    reassignMode: 'queue',
   });
   await db.doc(`seedProfiles/${ALICE}`).set({ name: 'Alice Kim', studentId: '2024000001', photoUrl: 'https://example.com/a.png', role: 'student' });
   await db.doc(`seedProfiles/${STAFF}`).set({ name: 'Gate Staff', studentId: '', photoUrl: null, role: 'staff' });
-  [alice, bob, carol, staff, outsider] = await Promise.all([ALICE, BOB, CAROL, STAFF, OUTSIDER].map(signIn));
+  [alice, bob, carol, dave, erin, staff, outsider] = await Promise.all([ALICE, BOB, CAROL, DAVE, ERIN, STAFF, OUTSIDER].map(signIn));
 });
 
 afterAll(async () => {
@@ -138,30 +143,59 @@ describe('prototype demo scenario', () => {
     expect(await codeOf(bob.verifyEntry({ qrPayload }))).toBe('functions/permission-denied');
   });
 
-  it('a transfer above face value is rejected and still recorded', async () => {
-    expect(await bob.transferTicket({ ticketId: bobTicket, toEmail: CAROL, price: 20_000 })).toEqual({
-      ok: false,
-      reason: 'OVER_FACE_VALUE',
-    });
-    const log = await db.collection('transfers').where('ticketId', '==', bobTicket).get();
-    expect(log.docs.map((d) => d.data())).toMatchObject([{ result: 'rejected', reason: 'OVER_FACE_VALUE', price: 20_000 }]);
-    expect((await db.doc(`tickets/${bobTicket}`).get()).get('ownerUid')).not.toBe(await uidOf(CAROL));
+  const onWaitlist = (email: string, order: number) =>
+    db.doc(`events/${EVENT}/waitlist/${email}`).set({ order, status: 'waiting', assignedTicketId: null });
+  const waitlistDoc = async (email: string) => (await db.doc(`events/${EVENT}/waitlist/${email}`).get()).data();
+
+  it('a used ticket cannot be cancelled and a non-owner is permission-denied', async () => {
+    expect(await alice.cancelTicket({ ticketId: aliceTicket })).toEqual({ ok: false, reason: 'TICKET_USED' });
+    expect(await codeOf(carol.cancelTicket({ ticketId: bobTicket }))).toBe('functions/permission-denied');
   });
 
-  it('a non-owner cannot transfer and a bad price is invalid-argument', async () => {
-    expect(await codeOf(carol.transferTicket({ ticketId: bobTicket, toEmail: CAROL, price: 0 }))).toBe('functions/permission-denied');
-    expect(await codeOf(bob.transferTicket({ ticketId: bobTicket, toEmail: CAROL, price: 1.5 }))).toBe('functions/invalid-argument');
-  });
+  it('queue mode skips a waitlisted person without an account and gives the ticket to the next in line', async () => {
+    await onWaitlist(GHOST, 1);
+    await onWaitlist(CAROL, 2);
+    expect(await bob.cancelTicket({ ticketId: bobTicket })).toEqual({ ok: true, outcome: 'REASSIGNED' });
 
-  it('a valid transfer moves ownership and clears the QR', async () => {
-    expect(await bob.transferTicket({ ticketId: bobTicket, toEmail: CAROL, price: 10_000 })).toEqual({ ok: true });
+    const carolUid = await uidOf(CAROL);
     const stored = (await db.doc(`tickets/${bobTicket}`).get()).data()!;
-    expect(stored.ownerUid).toBe(await uidOf(CAROL));
+    expect(stored.ownerUid).toBe(carolUid);
     expect(stored.qrToken).toBeNull();
-    const results = (await db.collection('transfers').where('ticketId', '==', bobTicket).get()).docs.map((d) => d.get('result'));
-    expect(results.sort()).toEqual(['rejected', 'success']);
+    expect(await waitlistDoc(CAROL)).toMatchObject({ status: 'assigned', assignedTicketId: bobTicket });
+    expect(await waitlistDoc(GHOST)).toMatchObject({ status: 'waiting' });
+    const log = await db.collection('reassignments').where('ticketId', '==', bobTicket).get();
+    expect(log.docs.map((d) => d.data())).toMatchObject([{ fromUid: await uidOf(BOB), toUid: carolUid, mode: 'queue' }]);
     expect(await codeOf(bob.refreshQrToken({ ticketId: bobTicket }))).toBe('functions/permission-denied');
     expect((await carol.refreshQrToken({ ticketId: bobTicket })).qrPayload).toMatch(/^TTV1:/);
+  });
+
+  it('with nobody eligible the ticket is released and its number is not reused', async () => {
+    expect(await carol.cancelTicket({ ticketId: bobTicket })).toEqual({ ok: true, outcome: 'RELEASED' });
+    expect((await db.doc(`tickets/${bobTicket}`).get()).data()).toMatchObject({ status: 'cancelled', ownerUid: null });
+    expect((await db.doc(`events/${EVENT}`).get()).get('issuedCount')).toBe(1);
+    expect(await codeOf(carol.refreshQrToken({ ticketId: bobTicket }))).toBe('functions/not-found');
+    const log = await db.collection('reassignments').where('ticketId', '==', bobTicket).get();
+    expect(log.docs.map((d) => d.get('toUid')).sort()).toEqual([null, await uidOf(CAROL)].sort());
+
+    expect((await carol.issueTicket({ eventId: EVENT })).nftNumber).toBe('#0003');
+  });
+
+  it('random mode picks one eligible waitlisted student and leaves the other waiting', async () => {
+    await db.doc(`events/${EVENT}`).update({ reassignMode: 'random' });
+    await dave.ensureUser();
+    await erin.ensureUser();
+    await onWaitlist(DAVE, 3);
+    await onWaitlist(ERIN, 4);
+    const carolTicket = (await db.collection('tickets').where('ownerUid', '==', await uidOf(CAROL)).get()).docs[0].id;
+
+    expect(await carol.cancelTicket({ ticketId: carolTicket })).toEqual({ ok: true, outcome: 'REASSIGNED' });
+
+    const owner = (await db.doc(`tickets/${carolTicket}`).get()).get('ownerUid');
+    expect([await uidOf(DAVE), await uidOf(ERIN)]).toContain(owner);
+    const statuses = [DAVE, ERIN].map(async (e) => (await waitlistDoc(e))!.status);
+    expect((await Promise.all(statuses)).sort()).toEqual(['assigned', 'waiting']);
+    const log = await db.collection('reassignments').where('ticketId', '==', carolTicket).get();
+    expect(log.docs.map((d) => d.get('mode'))).toEqual(['random']);
   });
 });
 

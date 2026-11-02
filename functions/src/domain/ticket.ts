@@ -1,4 +1,4 @@
-import type { TransferReason, VerifyEntryReason } from '../api';
+import type { VerifyEntryReason } from '../api';
 
 export interface QrToken {
   token: string;
@@ -25,8 +25,13 @@ export interface FestivalEvent {
   faceValue: number;
   allowedDomains: string[];
   issuedCount: number;
+  // Only ever grows, so ticket numbers stay unique when a cancelled ticket lowers issuedCount.
+  nftSeq: number;
   enteredCount: number;
+  reassignMode: ReassignMode;
 }
+
+export type ReassignMode = 'queue' | 'random';
 
 export const QR_PREFIX = 'TTV1';
 export const QR_TTL_MS = 30_000;
@@ -67,25 +72,25 @@ export function decideEntry(
   return hit ? { ok: false, reason: hit[0] } : { ok: true, ticket: ticket as IssuedTicket };
 }
 
-export interface TransferFacts {
-  ticket: Ticket;
-  event: Pick<FestivalEvent, 'faceValue' | 'allowedDomains'>;
-  price: number;
-  recipient: { email: string; hasTicket: boolean } | null;
+export interface WaitlistEntry {
+  email: string;
+  order: number;
 }
 
-// Order is the priority from docs/api.md 2.5: the first matching rule wins.
-const transferRules: ReadonlyArray<[TransferReason, (f: TransferFacts) => boolean]> = [
-  ['OVER_FACE_VALUE', (f) => f.price > f.event.faceValue],
-  ['RECIPIENT_NOT_FOUND', (f) => f.recipient === null],
-  ['RECIPIENT_NOT_ALLOWED', (f) => f.recipient !== null && !f.event.allowedDomains.includes(emailDomain(f.recipient.email))],
-  ['RECIPIENT_HAS_TICKET', (f) => f.recipient?.hasTicket === true],
-  ['TICKET_USED', (f) => f.ticket.status === 'used'],
-];
+// The order in which waitlist entries are tried for a cancelled ticket. The first eligible entry wins,
+// so a shuffle gives every eligible entry the same chance.
+export function candidateOrder(mode: ReassignMode, waiting: readonly WaitlistEntry[], rng: () => number): WaitlistEntry[] {
+  const entries = [...waiting];
+  if (mode === 'queue') return entries.sort((a, b) => a.order - b.order);
+  for (let i = entries.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [entries[i], entries[j]] = [entries[j], entries[i]];
+  }
+  return entries;
+}
 
-export function decideTransfer(facts: TransferFacts): Decision<TransferReason> {
-  const hit = transferRules.find(([, rejects]) => rejects(facts));
-  return hit ? { ok: false, reason: hit[0] } : { ok: true };
+export function isDomainAllowed(event: Pick<FestivalEvent, 'allowedDomains'>, email: string): boolean {
+  return event.allowedDomains.includes(emailDomain(email));
 }
 
 export function emailDomain(email: string): string {

@@ -47,21 +47,14 @@ export type VerifyEntryResponse =
     }
   | { ok: false; reason: VerifyEntryReason };
 
-export const TRANSFER_REASONS = [
-  'OVER_FACE_VALUE',
-  'RECIPIENT_NOT_FOUND',
-  'RECIPIENT_NOT_ALLOWED',
-  'RECIPIENT_HAS_TICKET',
-  'TICKET_USED',
-] as const;
-export type TransferReason = (typeof TRANSFER_REASONS)[number];
+export const CANCEL_REASONS = ['TICKET_USED'] as const;
+export type CancelReason = (typeof CANCEL_REASONS)[number];
 
-export interface TransferTicketRequest {
+export interface CancelTicketRequest {
   ticketId: string;
-  toEmail: string;
-  price: number;
 }
-export type TransferTicketResponse = { ok: true } | { ok: false; reason: TransferReason };
+// REASSIGNED: the ticket went to someone on the waitlist. RELEASED: nobody could take it, so it is issuable again.
+export type CancelTicketResponse = { ok: true; outcome: 'REASSIGNED' | 'RELEASED' } | { ok: false; reason: CancelReason };
 
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
@@ -69,5 +62,5 @@ export interface Callables {
   issueTicket: [IssueTicketRequest, IssueTicketResponse];
   refreshQrToken: [RefreshQrTokenRequest, RefreshQrTokenResponse];
   verifyEntry: [VerifyEntryRequest, VerifyEntryResponse];
-  transferTicket: [TransferTicketRequest, TransferTicketResponse];
+  cancelTicket: [CancelTicketRequest, CancelTicketResponse];
 }

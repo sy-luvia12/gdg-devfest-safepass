@@ -23,9 +23,9 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(async (
     if (!owned.empty) throw new HttpsError('already-exists', 'Already holding a ticket for this event.');
     if (event.issuedCount >= event.capacity) throw new HttpsError('resource-exhausted', 'Event is full.');
 
-    const nftNumber = formatNftNumber(event.issuedCount + 1);
+    const nftNumber = formatNftNumber(event.nftSeq + 1);
     const ticketRef = db.collection('tickets').doc();
-    tx.update(eventRef, { issuedCount: FieldValue.increment(1) });
+    tx.update(eventRef, { issuedCount: FieldValue.increment(1), nftSeq: FieldValue.increment(1) });
     tx.create(ticketRef, {
       eventId,
       ownerUid: caller.uid,

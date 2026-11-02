@@ -17,6 +17,9 @@ const profiles = [
   { email: 'admin@example.ac.kr', name: '관리자', studentId: '', role: 'admin' },
 ];
 
+// Placeholder waitlist. The student council registers the real one from a Google Sheet.
+const waitlist = ['waitlist1@korea.ac.kr', 'waitlist2@yonsei.ac.kr'];
+
 async function main() {
   await db.doc('events/demo-festival').set({
     name: '데모 축제',
@@ -25,14 +28,20 @@ async function main() {
     faceValue: 10_000,
     allowedDomains: ['korea.ac.kr', 'yonsei.ac.kr', 'skku.edu', 'kaist.ac.kr'],
     issuedCount: 0,
+    nftSeq: 0,
     enteredCount: 0,
+    reassignMode: 'queue',
   });
+
+  for (const [i, email] of waitlist.entries()) {
+    await db.doc(`events/demo-festival/waitlist/${email}`).set({ order: i + 1, status: 'waiting', assignedTicketId: null });
+  }
 
   for (const { email, ...p } of profiles) {
     await db.doc(`seedProfiles/${email}`).set({ ...p, photoUrl: null });
   }
 
-  console.log(`seeded events/demo-festival and ${profiles.length} seedProfiles in ${projectId}`);
+  console.log(`seeded events/demo-festival, ${waitlist.length} waitlist entries and ${profiles.length} seedProfiles in ${projectId}`);
 }
 
 main().catch((e) => {

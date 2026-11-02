@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   decideEntry,
-  decideTransfer,
+  candidateOrder,
   emailDomain,
+  isDomainAllowed,
   formatNftNumber,
   formatQrPayload,
   parseQrPayload,
   type Ticket,
-  type TransferFacts,
 } from '../src/domain/ticket';
 
 const NOW = 1_700_000_000_000;
@@ -77,53 +77,46 @@ describe('decideEntry', () => {
   });
 });
 
-describe('decideTransfer', () => {
-  const ok: TransferFacts = {
-    ticket: issued(null),
-    event: { faceValue: 10_000, allowedDomains: ['korea.ac.kr'] },
-    price: 10_000,
-    recipient: { email: 'bob@korea.ac.kr', hasTicket: false },
-  };
+describe('candidateOrder', () => {
+  const entries = [
+    { email: 'c@korea.ac.kr', order: 3 },
+    { email: 'a@korea.ac.kr', order: 1 },
+    { email: 'b@korea.ac.kr', order: 2 },
+  ];
+  const emails = (list: { email: string }[]) => list.map((e) => e.email);
 
-  it('allows a transfer at face value to an allowed recipient without a ticket', () => {
-    expect(decideTransfer(ok)).toEqual({ ok: true });
+  it('queue mode sorts by order and leaves the input untouched', () => {
+    const copy = [...entries];
+    expect(emails(candidateOrder('queue', entries, () => 0.5))).toEqual(['a@korea.ac.kr', 'b@korea.ac.kr', 'c@korea.ac.kr']);
+    expect(entries).toEqual(copy);
   });
 
-  it('allows a free transfer', () => {
-    expect(decideTransfer({ ...ok, price: 0 })).toEqual({ ok: true });
+  it('random mode follows the rng, so the same draw gives the same order', () => {
+    expect(emails(candidateOrder('random', entries, () => 0))).toEqual(['a@korea.ac.kr', 'b@korea.ac.kr', 'c@korea.ac.kr']);
+    expect(emails(candidateOrder('random', entries, () => 0.999))).toEqual(emails(entries));
   });
 
-  it('rejects a price above face value', () => {
-    expect(decideTransfer({ ...ok, price: 10_001 })).toEqual({ ok: false, reason: 'OVER_FACE_VALUE' });
+  it('random mode returns every entry exactly once', () => {
+    const shuffled = candidateOrder('random', entries, Math.random);
+    expect(emails(shuffled).sort()).toEqual(emails(entries).sort());
   });
 
-  it('rejects an unknown recipient', () => {
-    expect(decideTransfer({ ...ok, recipient: null })).toEqual({ ok: false, reason: 'RECIPIENT_NOT_FOUND' });
+  it('an empty waitlist stays empty in both modes', () => {
+    expect(candidateOrder('queue', [], Math.random)).toEqual([]);
+    expect(candidateOrder('random', [], Math.random)).toEqual([]);
+  });
+});
+
+describe('isDomainAllowed', () => {
+  const event = { allowedDomains: ['korea.ac.kr'] };
+
+  it('accepts a listed domain regardless of case', () => {
+    expect(isDomainAllowed(event, 'Kim@Korea.AC.KR')).toBe(true);
   });
 
-  it('rejects a recipient outside allowedDomains', () => {
-    const recipient = { email: 'bob@gmail.com', hasTicket: false };
-    expect(decideTransfer({ ...ok, recipient })).toEqual({ ok: false, reason: 'RECIPIENT_NOT_ALLOWED' });
-  });
-
-  it('rejects a recipient who already holds a ticket', () => {
-    const recipient = { email: 'bob@korea.ac.kr', hasTicket: true };
-    expect(decideTransfer({ ...ok, recipient })).toEqual({ ok: false, reason: 'RECIPIENT_HAS_TICKET' });
-  });
-
-  it('rejects a used ticket', () => {
-    expect(decideTransfer({ ...ok, ticket: used })).toEqual({ ok: false, reason: 'TICKET_USED' });
-  });
-
-  it('applies rules in api.md order when several fail', () => {
-    const everythingWrong: TransferFacts = { ...ok, ticket: used, price: 99_999, recipient: null };
-    expect(decideTransfer(everythingWrong)).toEqual({ ok: false, reason: 'OVER_FACE_VALUE' });
-    expect(decideTransfer({ ...everythingWrong, price: 0 })).toEqual({ ok: false, reason: 'RECIPIENT_NOT_FOUND' });
-    const gmailHolder = { email: 'bob@gmail.com', hasTicket: true };
-    expect(decideTransfer({ ...everythingWrong, price: 0, recipient: gmailHolder })).toEqual({
-      ok: false,
-      reason: 'RECIPIENT_NOT_ALLOWED',
-    });
+  it('rejects a personal gmail and a look-alike suffix', () => {
+    expect(isDomainAllowed(event, 'kim@gmail.com')).toBe(false);
+    expect(isDomainAllowed(event, 'kim@evilkorea.ac.kr')).toBe(false);
   });
 });
 
