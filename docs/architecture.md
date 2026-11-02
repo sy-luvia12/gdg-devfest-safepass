@@ -19,6 +19,7 @@
 | `users` | role(`student`/`staff`/`admin`) | 검표·관리자 화면 접근 제한 |
 | `events` | enteredCount | 관리자 화면 실시간 인원. 매번 `tickets`를 세지 않고 카운터 하나를 구독한다 |
 | `events` | allowedDomains | 발급 가능한 학교 도메인. 학생회가 행사를 만들 때 등록한다 |
+| `events` | reassignMode | 취소표 재배정 방식. `queue`(대기 순서) 또는 `random`(대기 명단에서 무작위). 운영측이 행사별로 한 번 정한다 |
 
 ### 1.3 서버 함수
 
@@ -27,7 +28,7 @@
 | `issueTicket` | 도메인(`allowedDomains`), 1인 1매, 정원을 확인하고 발급 |
 | `refreshQrToken` | 내 입장권 화면이 30초마다 호출. 새 토큰과 만료 시각을 `tickets`에 저장하고 반환 |
 | `verifyEntry` | 토큰 일치·미사용·미만료를 확인하고, 트랜잭션으로 사용됨 처리와 `enteredCount+1`. 이름·학번·사진 반환 |
-| `transferTicket` | 정가 초과면 거부, 아니면 주인 변경. 결과를 `transfers`에 기록 |
+| `cancelTicket` | 주인이 입장권을 취소하면 `reassignMode`에 따라 대기 명단의 다음 사람 또는 무작위 한 명에게 재배정. 이력을 `reassignments`에 기록. 대기자가 없으면 다시 발급 가능한 수량으로 돌린다 |
 
 ### 1.4 보안 규칙 최소선
 
@@ -39,26 +40,26 @@
 
 프로토타입에서 뺀 것 중 기획안 피치에 필요한 것을 우선순위 순으로 붙인다. 2.4~2.6은 시간이 부족하면 발표에서 설계로만 설명한다.
 
-### 2.1 블록체인 연동 (NFT 입장권, 정가 양도)
+### 2.1 블록체인 연동 (NFT 입장권, 취소표 재배정)
 
 "왜 NFT인가"에 대한 답이므로 가장 먼저 붙인다.
 
 - 클라이언트는 블록체인에 직접 접근하지 않는다. 함수가 서버 지갑으로 트랜잭션을 보낸다.
 - 사용자 지갑은 서버가 만들고 관리한다. 개인키는 Secret Manager의 마스터 키로 암호화해 `walletKeys`에 저장하고, 클라이언트 접근은 전면 차단한다.
-- 화면의 표시용 NFT 번호를 실제 tokenId로 바꾼다. `tickets`에 tokenId와 mintTx를, `transfers`에 txHash를 추가한다.
+- 화면의 표시용 NFT 번호를 실제 tokenId로 바꾼다. `tickets`에 tokenId와 mintTx를, `reassignments`에 txHash를 추가한다.
 
 컨트랙트 `FestivalTicket.sol` (ERC-721, OpenZeppelin):
 
 ```solidity
-mint(to, eventId, faceValue) onlyMinter      // 발급. 서버 지갑만 호출
-list(tokenId, price)                         // price > faceValue면 revert
-buy(tokenId) payable                         // msg.value == price일 때 NFT와 대금을 한 트랜잭션에서 교환
-cancelList(tokenId)
-markUsed(tokenId) onlyMinter                 // 입장 후 양도 불가 처리
+mint(to, eventId) onlyMinter                 // 발급. 서버 지갑만 호출
+reassign(tokenId, to) onlyMinter             // 취소표를 대기자에게 이전
+release(tokenId) onlyMinter                  // 대기자가 없어 취소 상태로 표시
+markUsed(tokenId) onlyMinter                 // 입장 후 이전 불가 처리
 ```
 
-- **양도 경로 제한**: `_update`를 오버라이드해 `buy`를 거치지 않는 직접 전송을 막는다. 정가 규칙 우회를 막기 위해서다. `mint`와 `buy` 내부 이동만 예외로 허용한다.
-- **원자적 교환**: `buy` 한 번에 대금과 NFT가 동시에 이동한다. 대금은 테스트넷 코인이고, 서버의 펀딩 지갑이 사용자 지갑에 가스와 대금을 충전한다.
+- **개인 간 전송 금지**: `_update`를 오버라이드해 `onlyMinter`(서버 발급 지갑)가 아닌 전송을 모두 막는다. 학생끼리 NFT를 옮기는 경로가 없어서 거래 자체가 불가능하다.
+- **컨트랙트가 보장하는 범위**: 개인 간 전송 금지와 이력 위변조 불가까지다. 누구에게 재배정할지(대기 순서 또는 무작위)는 서버가 판단한다. 따라서 "학생회도 규칙을 바꿀 수 없다"는 말은 이전 경로 제한에 한해 쓴다.
+- **가스**: 모든 트랜잭션을 서버 발급 지갑이 보내서 사용자 지갑에 가스를 충전할 필요가 없다.
 - **테스트 코인**: faucet마다 하루 지급량이 제한되어 있으므로 연동 전날부터 펀딩 지갑에 모아 둔다.
 - **실패 대비**: 블록체인 호출이 실패해도 Firestore 상태로 화면이 동작하게 하고, 트랜잭션 해시는 나중에 채운다.
 
@@ -102,6 +103,7 @@ markUsed(tokenId) onlyMinter                 // 입장 후 양도 불가 처리
 - `importRoster(eventId, sheetUrl)`: 학생회 시트에서 학교 이메일·이름·학번을 읽어 `events/{eventId}/roster`에 저장한다. 시트는 Functions 서비스 계정에 보기 권한으로 공유해야 한다.
 - `requireRoster`를 켠 행사는 명단에 있는 사람만 발급받는다.
 - `exportEntries(eventId)`: 입장 기록을 새 시트로 내보낸다.
+- `importWaitlist(eventId, sheetUrl)`: 학생회가 시트에 정리한 대기 명단을 행 순서대로 `events/{eventId}/waitlist`에 저장한다. 순서가 `queue` 방식의 순번이 되고, `random` 방식은 이 명단 안에서만 뽑는다. 프로토타입에서는 시드 스크립트가 대신 넣는다.
 
 ### 2.6 행사 후 데이터 삭제
 
@@ -140,11 +142,11 @@ tell-the-vision/
 ├─ apps/web/        웹앱 (프론트)
 ├─ functions/       Cloud Functions (백엔드)
 │  └─ src/
-│     ├─ tickets/     발급, 양도
+│     ├─ tickets/     발급, 취소·재배정
 │     ├─ entry/       QR 토큰, 검표
 │     ├─ auth/        학교 메일 인증, 재학생 승인, 기기 관리 (2.2~2.3)
 │     ├─ chain/       컨트랙트 호출, 지갑 관리 (2.1)
-│     ├─ sheets/      명단 연동 (2.5)
+│     ├─ sheets/      명단·대기 명단 연동 (2.5)
 │     └─ privacy/     행사 후 삭제 (2.6)
 ├─ contracts/       Hardhat + OpenZeppelin (2.1)
 ├─ firestore.rules
@@ -159,7 +161,7 @@ tell-the-vision/
 | 날짜 | 백엔드 | 디자인 + 프론트 |
 | --- | --- | --- |
 | 11/4 (수) | Hardhat 세팅, 컨트랙트, Amoy 배포, 발급 시 mint 연동 | 기기 키와 서명 QR, 검표 2단계(승인 버튼) |
-| 11/5 (목) | `list`/`buy` 양도 연동, 서명 검증, `confirmSchoolEmail`, `approveUser` | 양도 결과 표시, 학교 메일 인증과 사진 업로드 온보딩, 관리자 승인 화면 |
+| 11/5 (목) | 취소 재배정의 체인 연동(`reassign`), 서명 검증, `confirmSchoolEmail`, `approveUser`, `importWaitlist` | 취소 화면과 결과 안내, 학교 메일 인증과 사진 업로드 온보딩, 관리자 승인 화면 |
 | 11/6 (금) | 데모 데이터 정리, 여유 시 App Check | 두 폰으로 리허설 |
 
 - 11/5는 피치덱 초안 마감일이다. PM 업무와 겹치지 않게 개발 범위를 정한다.
@@ -175,6 +177,8 @@ tell-the-vision/
 - [ ] 언어: TypeScript 추천 (JavaScript도 가능)
 - [ ] 명단 용도: 발급 대상 제한(`requireRoster`) / 참고용
 - [ ] 행사 후 삭제 기간 (기본 7일)
+- [ ] 대기 명단에 있지만 아직 로그인하지 않은 사람: 지금 설계는 이번 배정에서 건너뛰고 대기 상태로 남긴다. 순서를 지키려면 메일로 자리를 예약해 두는 방식도 가능하다.
+- [ ] 취소 가능 마감 시점 (예: 행사 전날까지)
 - [ ] 기획안 '최소 수집'에 학생증 사진 추가 여부: 본인 사진만으로는 계정을 넘겨받은 외부인이 자기 얼굴을 등록하는 것을 막을 수 없어, 설계에는 학생증 사진 관리자 승인을 넣었다
 
 위에 없는 기술(Firebase 계열, App Check, Sheets API, ERC-721과 OpenZeppelin, WebCrypto, Functions의 Node 런타임)은 기획안 요구 사항이거나 설계가 의존하므로 고정한다.

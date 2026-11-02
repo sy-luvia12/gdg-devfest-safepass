@@ -9,7 +9,7 @@
 - **인증**: 모든 함수는 로그인을 요구한다. 로그인하지 않았으면 `unauthenticated`를 반환한다.
 - **시간**: 응답의 시각은 모두 ms 단위 epoch 숫자다. Firestore에는 `Timestamp`로 저장한다.
 - **거부와 오류 구분**:
-  - 예상된 거부(웃돈 양도, 만료 QR 등)는 정상 응답 `{ ok: false, reason }`으로 돌려준다. 프론트는 `reason`에 따라 안내 문구를 보여 준다.
+  - 예상된 거부(만료 QR, 이미 사용된 입장권 등)는 정상 응답 `{ ok: false, reason }`으로 돌려준다. 프론트는 `reason`에 따라 안내 문구를 보여 준다.
   - 잘못된 호출은 `HttpsError`로 던진다. 인증 없음, 권한 없음, 형식 오류, 대상 없음이 해당한다.
 - **쓰기 권한**: Firestore 쓰기는 함수만 한다. 클라이언트는 아래 3장의 읽기·구독만 한다.
 
@@ -49,6 +49,7 @@
 | allowedDomains | string[] | 발급 가능한 학교 도메인 |
 | issuedCount | number | 발급 수 (NFT 번호 생성에도 사용) |
 | enteredCount | number | 입장 수 (관리자 화면 실시간 표시) |
+| reassignMode | `'queue' \| 'random'` | 취소표 재배정 방식. 운영측이 행사별로 한 번 정한다 (프로토타입은 시드 데이터). `queue`는 대기 순서대로, `random`은 대기 명단에서 무작위 |
 
 ### `tickets/{ticketId}`
 | 필드 | 타입 | 설명 |
@@ -62,15 +63,26 @@
 | issuedAt | Timestamp | |
 | usedAt | Timestamp \| null | |
 
-### `transfers/{transferId}`
+### `events/{eventId}/waitlist/{email}`
+학생회가 구글 시트로 등록한다. 클라이언트는 읽지 못한다.
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| name | string | |
+| studentId | string | |
+| order | number | 시트의 행 순서. `queue` 방식의 순번 |
+| status | `'waiting' \| 'assigned'` | |
+| assignedTicketId | string \| null | 배정된 입장권 |
+
+### `reassignments/{id}`
+취소표 재배정 이력. 클라이언트는 읽지 못한다.
+
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | ticketId | string | |
-| fromUid | string | |
-| toUid | string \| null | 받는 사람을 못 찾으면 null |
-| price | number | 입력한 가격 |
-| result | `'success' \| 'rejected'` | |
-| reason | string \| null | 거부 사유 (`transferTicket`의 reason과 같은 값) |
+| fromUid | string | 취소한 사람 |
+| toUid | string \| null | 받은 사람. 대기자가 없어 다시 발급 가능 상태로 돌아가면 null |
+| mode | `'queue' \| 'random'` | 배정 당시 방식 |
 | createdAt | Timestamp | |
 
 ### `seedProfiles/{email}` (프로토타입 전용)
@@ -134,19 +146,28 @@
 
 캡처본은 30초 안에 다시 교체되므로 실제로는 3번(`TOKEN_MISMATCH`)이나 4번(`EXPIRED`)에서 걸린다. 프론트는 두 사유를 모두 "만료된 QR"로 안내하면 된다.
 
-### 2.5 `transferTicket`
-여유 있을 때만 만든다(기획자 계획 ⑥). 프로토타입에는 대금 이동이 없다.
+### 2.5 `cancelTicket`
+기존 양도(`transferTicket`)를 대체한다. 취소표는 개인 간 거래 없이 운영 규칙대로 대기 명단에 재배정된다. 여유 있을 때만 만든다(기획자 계획 ⑥ 자리).
 
 - **호출자**: 입장권 주인
-- **요청**: `{ ticketId: string; toEmail: string; price: number }`
-- **응답**: `{ ok: true } | { ok: false; reason: 'OVER_FACE_VALUE' | 'RECIPIENT_NOT_FOUND' | 'RECIPIENT_NOT_ALLOWED' | 'RECIPIENT_HAS_TICKET' | 'TICKET_USED' }`
+- **요청**: `{ ticketId: string }`
+- **응답**: `{ ok: true; outcome: 'REASSIGNED' | 'RELEASED' } | { ok: false; reason: 'TICKET_USED' }`
+  - `REASSIGNED`: 대기자에게 넘어갔다. 받은 사람의 신원은 취소한 사람에게 알려 주지 않는다.
+  - `RELEASED`: 받을 수 있는 대기자가 없어 입장권이 취소 상태가 되고 다시 발급 가능한 수량으로 돌아갔다.
 - **처리** (트랜잭션)
-  1. 주인이 아니면 `permission-denied`, price가 0 이상의 정수가 아니면 `invalid-argument`
-  2. `price > faceValue`면 `OVER_FACE_VALUE`
-  3. 받는 사람이 `users`에 없으면 `RECIPIENT_NOT_FOUND`, 도메인이 허용되지 않으면 `RECIPIENT_NOT_ALLOWED`, 이미 입장권이 있으면 `RECIPIENT_HAS_TICKET`
-  4. 입장권 status가 `used`면 `TICKET_USED`
-  5. 통과하면 `ownerUid`를 바꾸고 QR 토큰을 지운다.
-  6. 성공이든 거부든 `transfers`에 한 건 기록한다.
+  1. 주인이 아니면 `permission-denied`, 입장권이 없으면 `not-found`, status가 `used`면 `TICKET_USED`
+  2. `events.reassignMode`에 따라 `waitlist`에서 `status == 'waiting'`인 후보를 고른다. `queue`는 `order`가 가장 작은 사람, `random`은 무작위 한 명이다.
+  3. 후보는 다음 조건을 모두 만족해야 한다. 만족하지 못하면 이번 배정에서만 건너뛰고 `waiting`으로 남긴다.
+     - 이미 로그인해서 `users`에 같은 메일이 있다.
+     - 메일 도메인이 `allowedDomains`에 있다.
+     - 이 행사의 입장권을 아직 갖고 있지 않다.
+  4. 후보가 있으면 `ownerUid`를 그 사람으로 바꾸고 QR 토큰을 지운다. `waitlist`는 `assigned`로, `reassignments`에 한 건 기록한다.
+  5. 후보가 없으면 입장권을 취소 상태로 두고 `issuedCount`를 1 줄인다. 번호 중복을 피하려고 `nftNumber`는 별도 증가 카운터로 만든다. `reassignments`에는 `toUid: null`로 기록한다.
+- 새 주인은 별도 알림 없이, 내 입장권 화면의 실시간 구독(`ownerUid == uid`)으로 입장권이 나타난다.
+
+### 2.6 대기 명단 등록
+- 프로토타입: 시드 스크립트가 `waitlist`를 직접 넣는다.
+- 이후 [2.5]: 학생회가 구글 시트로 등록하는 `importWaitlist`를 만든다. 아래 6장 참고.
 
 ## 3. 클라이언트 직접 읽기 [P]
 
@@ -157,7 +178,6 @@
 | 내 입장권 | `tickets` where `ownerUid == uid` | `onSnapshot` |
 | 내 정보 | `users/{uid}` | `getDoc` |
 | 관리자 실시간 현황 | `events/{eventId}`의 `enteredCount / capacity` | `onSnapshot` |
-| 양도 내역 (선택) | `transfers` where `fromUid == uid` | `getDocs` |
 
 QR 토큰은 `refreshQrToken` 응답으로만 받는다. 입장권 문서에도 `qrToken`이 있지만 화면은 응답값을 쓴다.
 
@@ -179,9 +199,6 @@ service cloud.firestore {
     match /events/{eventId} {
       allow read: if signedIn();
     }
-    match /transfers/{id} {
-      allow read: if signedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
-    }
     match /{document=**} {
       allow write: if false;   // 쓰기는 함수(Admin SDK)만
     }
@@ -193,6 +210,8 @@ service cloud.firestore {
 
 - `events/demo-festival`: 가상 축제 1개. `allowedDomains`에 팀원 학교 도메인, `capacity`는 데모용 소수(예: 50)
 - `seedProfiles/{email}`: 테스트 학생 3~4명(PM 준비). 검표용 staff 1명, 관리자 admin 1명
+- `events/demo-festival.reassignMode`: 데모용 방식 하나. 두 방식을 다 보여 주려면 값을 바꿔 두 번 시연한다.
+- `events/demo-festival/waitlist/{email}`: 대기 명단 2~3명. 발급받지 않은 테스트 학생 계정으로 넣는다.
 
 ## 6. 다음 단계 변경 사항 [2.x]
 
@@ -201,10 +220,7 @@ service cloud.firestore {
 | 단계 | 함수 | 호출자 | 요약 |
 | --- | --- | --- | --- |
 | 2.1 | `issueTicket` 변경 | student | 발급 후 사용자 지갑으로 `mint`. `tickets`에 tokenId, mintTx 추가. 체인 실패 시 Firestore 발급은 유지하고 재시도 |
-| 2.1 | `listTicket` | 주인 | `{ ticketId, price }`. 컨트랙트 `list`. 정가 초과는 온체인 revert → `OVER_FACE_VALUE` |
-| 2.1 | `cancelListing` | 주인 | `{ ticketId }`. 컨트랙트 `cancelList` |
-| 2.1 | `buyTicket` | student | `{ ticketId }`. 구매자 지갑으로 `buy`. 성공 시 주인 변경, `transfers`에 txHash |
-| 2.1 | `transferTicket` 제거 | | `listTicket`과 `buyTicket`으로 대체 |
+| 2.1 | `cancelTicket` 변경 | 주인 | Firestore에서 재배정한 뒤 체인 모듈 `reassignTicket`으로 NFT 주인을 옮긴다. 서버 발급 지갑이 호출하므로 사용자 지갑 서명이 필요 없다. 체인 실패 시 Firestore 결과는 유지하고 재시도 |
 | 2.2 | `registerDevice` | 본인 | `{ publicKeyJwk }`. 이미 등록돼 있으면 `already-exists` |
 | 2.2 | `resetDevice` | admin | `{ uid }`. 기기 등록 초기화 |
 | 2.2 | `refreshQrToken` 제거 | | 클라이언트가 기기 키로 직접 서명해 QR 생성 |
@@ -216,6 +232,7 @@ service cloud.firestore {
 | 2.3 | `issueTicket` 변경 | | `verifyStatus == approved` 확인. 도메인과 1인 1매를 `schoolEmail` 기준으로 검사 |
 | 2.4 | 전체 | | callable 옵션에 `enforceAppCheck: true` |
 | 2.5 | `importRoster` | admin | `{ eventId, sheetUrl }` |
+| 2.5 | `importWaitlist` | admin | `{ eventId, sheetUrl }`. 시트 행 순서대로 `waitlist`에 저장하고 `order`를 매긴다. 같은 메일이 이미 있으면 갱신한다 |
 | 2.5 | `exportEntries` | admin | `{ eventId }` → `{ sheetUrl }` |
 | 2.6 | `purgeEventData` | 예약 함수 | 하루 한 번. 종료 7일 지난 행사의 개인 데이터 삭제 |
 
@@ -231,11 +248,12 @@ service cloud.firestore {
 | `TOKEN_MISMATCH`, `EXPIRED` | 만료된 QR이에요. 화면의 최신 QR을 보여 주세요 |
 | `USED` | 이미 입장한 입장권이에요 |
 | `INVALID_FORMAT`, `NOT_FOUND` | 인식할 수 없는 QR이에요 |
-| `OVER_FACE_VALUE` | 정가보다 비싸게 양도할 수 없어요 |
-| `RECIPIENT_NOT_FOUND` | 가입하지 않은 사용자예요 |
-| `RECIPIENT_NOT_ALLOWED` | 이 행사에 참여할 수 없는 학교예요 |
-| `RECIPIENT_HAS_TICKET` | 받는 사람이 이미 입장권을 가지고 있어요 |
-| `TICKET_USED` | 이미 사용된 입장권이에요 |
+| `TICKET_USED` | 이미 사용된 입장권은 취소할 수 없어요 |
+
+| outcome | 문구 예시 |
+| --- | --- |
+| `REASSIGNED` | 취소했어요. 입장권이 대기자에게 넘어갔어요 |
+| `RELEASED` | 취소했어요. 대기자가 없어 다시 발급 가능한 표로 돌아갔어요 |
 
 ## 8. 체인 모듈 약속 [2.1]
 
@@ -244,22 +262,20 @@ service cloud.firestore {
 ```ts
 createWallet(uid: string): Promise<{ address: string }>
 mintTicket(p: { toUid: string; eventId: string; faceValue: number }): Promise<{ tokenId: string; txHash: string }>
-listTicket(p: { ownerUid: string; tokenId: string; price: number }): Promise<{ txHash: string }>
-cancelListing(p: { ownerUid: string; tokenId: string }): Promise<{ txHash: string }>
-buyTicket(p: { buyerUid: string; tokenId: string }): Promise<{ txHash: string }>
+reassignTicket(p: { tokenId: string; toUid: string }): Promise<{ txHash: string }>
+releaseTicket(tokenId: string): Promise<{ txHash: string }>
 markUsed(tokenId: string): Promise<{ txHash: string }>
 ```
 
-- **오류**: 실패하면 `ChainError`를 던진다. 코드는 `OVER_FACE_VALUE`, `NOT_LISTED`, `INSUFFICIENT_FUNDS`, `TX_FAILED` 중 하나다.
+- `reassignTicket`은 취소표를 대기자에게 옮긴다. `releaseTicket`은 대기자가 없을 때 취소 상태로 표시한다.
+- **오류**: 실패하면 `ChainError`를 던진다. 코드는 `INSUFFICIENT_FUNDS`, `TX_FAILED` 중 하나다.
 - **tokenId**: uint256은 JS 숫자 범위를 넘을 수 있어 문자열로 주고받는다.
 - **지갑**: 개인키는 Secret Manager의 마스터 키로 암호화해 `walletKeys/{uid}`에 저장한다. 이 컬렉션은 체인 모듈만 읽는다.
-- **가스와 대금**: `buyTicket` 전에 펀딩 지갑이 구매자 지갑에 대금과 가스를 충전한다.
+- **가스**: 발급, 재배정, 입장 처리는 모두 서버 발급 지갑이 보낸다. 대금이 없고 사용자 지갑 서명도 필요 없어서, 사용자 지갑에 가스를 충전할 필요가 없다.
 
 | 동작 | 순서 | 이유 |
 | --- | --- | --- |
-| `mintTicket`, `markUsed` | Firestore 먼저, 체인은 나중에 재시도 | 체인이 느리거나 실패해도 발급·검표가 멈추지 않게 |
-| `listTicket`, `buyTicket` | 체인 성공 후 Firestore 반영 | 정가 규칙을 컨트랙트가 보장하므로 체인 결과가 기준 |
+| `mintTicket`, `reassignTicket`, `releaseTicket`, `markUsed` | Firestore 먼저, 체인은 나중에 재시도 | 재배정 규칙은 서버가 판단하므로 Firestore가 기준이고, 체인이 느리거나 실패해도 발급·검표·취소가 멈추지 않게 |
 
 정해야 할 것:
-- 원 ↔ 테스트 코인 환산 비율: Firestore의 정가는 원 단위이고 온체인 대금은 POL이다. 데모용 고정 비율을 정한다 (예: 10,000원 = 0.01 POL).
 - eventId의 온체인 표현: Firestore 문서 ID(문자열)를 `keccak256`으로 바꾼 `bytes32` 사용 추천
