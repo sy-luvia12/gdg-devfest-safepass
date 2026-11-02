@@ -42,7 +42,7 @@ describe('decideEntry', () => {
   const fresh = issued({ token: 'good', expiresAtMs: NOW + 10_000 });
 
   it('admits a ticket with the current, unexpired token', () => {
-    expect(decideEntry(fresh, 'good', NOW)).toEqual({ ok: true });
+    expect(decideEntry(fresh, 'good', NOW)).toEqual({ ok: true, ticket: fresh });
   });
 
   it('rejects a missing ticket as NOT_FOUND', () => {
@@ -73,7 +73,7 @@ describe('decideEntry', () => {
 
   it('still admits at the exact expiry instant', () => {
     const edge = issued({ token: 'good', expiresAtMs: NOW });
-    expect(decideEntry(edge, 'good', NOW)).toEqual({ ok: true });
+    expect(decideEntry(edge, 'good', NOW)).toEqual({ ok: true, ticket: edge });
   });
 });
 

@@ -16,6 +16,8 @@ export type Ticket =
   | (TicketBase & { status: 'issued'; qr: QrToken | null })
   | (TicketBase & { status: 'used'; usedAtMs: number });
 
+export type IssuedTicket = Extract<Ticket, { status: 'issued' }>;
+
 export interface FestivalEvent {
   id: string;
   name: string;
@@ -55,9 +57,14 @@ const entryRules: ReadonlyArray<[EntryRejection, (t: Ticket | null, token: strin
   ['EXPIRED', (t, _token, nowMs) => t?.status === 'issued' && t.qr !== null && nowMs > t.qr.expiresAtMs],
 ];
 
-export function decideEntry(ticket: Ticket | null, token: string, nowMs: number): Decision<EntryRejection> {
+export function decideEntry(
+  ticket: Ticket | null,
+  token: string,
+  nowMs: number,
+): { ok: true; ticket: IssuedTicket } | { ok: false; reason: EntryRejection } {
   const hit = entryRules.find(([, rejects]) => rejects(ticket, token, nowMs));
-  return hit ? { ok: false, reason: hit[0] } : { ok: true };
+  // No rule matched, so NOT_FOUND and USED did not either: the ticket exists and is issued.
+  return hit ? { ok: false, reason: hit[0] } : { ok: true, ticket: ticket as IssuedTicket };
 }
 
 export interface TransferFacts {
