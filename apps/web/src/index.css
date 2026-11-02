@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* 기본 테마 (DESIGN.md 2장). 학교·행사 테마는 src/app/theme.ts가 :root에 덮어쓴다 */
+  :root {
+    --c-p1: 207 228 255;
+    --c-p2: 220 215 255;
+    --c-p3: 250 211 228;
+    --c-p4: 255 226 201;
+    --grad-ticket: linear-gradient(160deg, #cfe4ff 0%, #dcd7ff 45%, #fad3e4 100%);
+    --grad-button: linear-gradient(90deg, #e6e1ff 0%, #fbdcea 100%);
+    --grad-orb: radial-gradient(circle at 35% 35%, #ffe2c9 0%, #fad3e4 30%, #dcd7ff 60%, #cfe4ff 100%);
+  }
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+  body {
+    @apply bg-bg font-sans text-body text-ink antialiased;
+    letter-spacing: -0.01em;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
