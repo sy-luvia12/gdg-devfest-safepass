@@ -7,7 +7,7 @@
 | 폴더 | 내용 | 담당 |
 | --- | --- | --- |
 | `functions/` | Cloud Functions (백엔드), 시드 스크립트(`seed.ts`) | 백엔드 |
-| `apps/web/` | 웹앱 (프론트). 초기화는 프론트 담당이 한다 | 프론트 |
+| `apps/web/` | 웹앱 (프론트) | 프론트 |
 | `contracts/` | 스마트 컨트랙트. 초기화는 블록체인 담당이 한다 | 블록체인 |
 | `docs/` | API 명세, 기술 설계 | 전원 |
 
@@ -21,7 +21,7 @@ npm --prefix functions run build
 npm --prefix functions test
 ```
 
-에뮬레이터 통합 테스트는 JDK 21 이상이 필요하다.
+에뮬레이터 통합 테스트는 JDK 21 이상이 필요하다. 기본 Java가 21 미만이면 `JAVA_HOME`을 21 이상으로 지정해서 실행한다.
 
 ```bash
 npm --prefix functions run test:int
