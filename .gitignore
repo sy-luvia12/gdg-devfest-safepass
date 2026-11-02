@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+.env
+.env.*
+!.env.example
+*.pdf
+
+functions/lib/
+apps/web/dist/
+.firebase/
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log

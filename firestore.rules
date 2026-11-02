@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function role() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || role() == 'admin');
+    }
+    match /tickets/{ticketId} {
+      allow read: if signedIn() && (resource.data.ownerUid == request.auth.uid || role() == 'admin');
+    }
+    match /events/{eventId} {
+      allow read: if signedIn();
+    }
+    match /transfers/{id} {
+      allow read: if signedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+    }
+    match /{document=**} {
+      allow write: if false;   // 쓰기는 함수(Admin SDK)만
+    }
+  }
+}
