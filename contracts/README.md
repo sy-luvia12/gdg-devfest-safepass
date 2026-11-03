@@ -2,6 +2,12 @@
 
 SafePass 입장권 컨트랙트 `FestivalTicket` (ERC-721, OpenZeppelin 5.6.1, Hardhat 2).
 
+## 표준
+- ERC-721 + **ERC-5192 (Minimal Soulbound NFTs, Final)**.
+  - 모든 입장권은 `locked() == true`이고, 발급 때 `Locked` 이벤트가 나간다.
+  - `supportsInterface(0xb45a3c0e) == true`라서 지갑·익스플로러가 양도 불가 토큰으로 인식한다.
+  - 표준이 막는 것은 ERC-721 전송 함수다. 운영자의 `reassign`은 별도 함수이고, 사유 코드 이벤트가 남는다.
+
 ## 규칙 (배포 후 바꿀 수 없음)
 - 서버 발급 지갑(MINTER_ROLE)만 입장권을 발급·이동·소각한다. 학생 간 `transferFrom`, `approve`는 모두 revert.
 - 행사 정원은 `createEvent(eventKey, capacity)` 때 고정되고, 활성 입장권 수가 정원을 넘을 수 없다.

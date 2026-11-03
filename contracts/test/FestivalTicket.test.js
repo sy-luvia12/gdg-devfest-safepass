@@ -155,6 +155,23 @@ describe('FestivalTicket', () => {
     });
   });
 
+  describe('ERC-5192 soulbound', () => {
+    it('announces the ERC-5192 interface (0xb45a3c0e)', async () => {
+      expect(await ticket.supportsInterface('0xb45a3c0e')).to.equal(true);
+    });
+
+    it('emits Locked on mint and reports every ticket as locked, also after a reassign', async () => {
+      await expect(ticket.connect(minter).mint(alice.address, T1, EVENT)).to.emit(ticket, 'Locked').withArgs(T1);
+      expect(await ticket.locked(T1)).to.equal(true);
+      await ticket.connect(minter).reassign(T1, bob.address, R.QUEUE);
+      expect(await ticket.locked(T1)).to.equal(true);
+    });
+
+    it('throws for a ticket that does not exist, as the standard asks', async () => {
+      await expect(ticket.locked(tokenOf('ghost'))).to.be.revertedWithCustomError(ticket, 'ERC721NonexistentToken');
+    });
+  });
+
   it('supports the ERC-721 and AccessControl interfaces', async () => {
     expect(await ticket.supportsInterface('0x80ac58cd')).to.equal(true); // ERC-721
     expect(await ticket.supportsInterface('0x7965db0b')).to.equal(true); // AccessControl
