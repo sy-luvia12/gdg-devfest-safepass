@@ -37,7 +37,7 @@ describe('budget()', () => {
     expect(r.setupCost).to.equal((GAS.deploy + GAS.createEvent) * gwei(30));
     expect(r.perTicket).to.equal(TICKET_GAS * gwei(30));
     expect(r.canSetup).to.equal(true);
-    // (0.1 - 0.0516) / 0.00458 = 10.57
+    // (0.1 - 0.0528) / 0.00458 = 10.3
     expect(r.ticketsCovered).to.equal(10);
   });
 
