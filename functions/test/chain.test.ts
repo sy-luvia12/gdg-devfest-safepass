@@ -1,5 +1,6 @@
 import { HDNodeWallet } from 'ethers';
 import { describe, expect, it } from 'vitest';
+import { ChainError, redact, toChainError } from '../src/chain/client';
 import { eventKeyOf, tokenIdOf } from '../src/chain/ids';
 import { deriveAddress } from '../src/chain/wallets';
 
@@ -32,5 +33,37 @@ describe('student wallets', () => {
     expect(() => deriveAddress(PHRASE, -1)).toThrow(RangeError);
     expect(() => deriveAddress(PHRASE, 2 ** 31)).toThrow(RangeError);
     expect(() => deriveAddress(PHRASE, 1.5)).toThrow(RangeError);
+  });
+});
+
+describe('chain error redaction', () => {
+  const KEY_URL = 'https://polygon-amoy.g.alchemy.com/v2/SECRET_API_KEY_123';
+
+  it('cuts every URL out of a message, so the RPC API key never reaches chainOps or logs', () => {
+    const out = redact(`request failed (requestUrl="${KEY_URL}", other=wss://x.example/abc)`);
+    expect(out).not.toContain('SECRET_API_KEY_123');
+    expect(out).not.toContain('alchemy.com');
+    expect(out).toContain('[url]');
+  });
+
+  it('keeps transaction hashes, which are public and needed to debug', () => {
+    const hash = `0x${'ab'.repeat(32)}`;
+    expect(redact(`transaction ${hash} failed`)).toContain(hash);
+  });
+
+  it('turns an ethers error into a short TX_FAILED without the URL', () => {
+    const e = Object.assign(new Error(`could not detect network (url=${KEY_URL})`), {
+      code: 'NETWORK_ERROR',
+      shortMessage: 'could not detect network',
+    });
+    const c = toChainError(e);
+    expect(c).toBeInstanceOf(ChainError);
+    expect(c.code).toBe('TX_FAILED');
+    expect(c.message).toBe('NETWORK_ERROR: could not detect network');
+    expect(toChainError(new Error(`boom ${KEY_URL}`)).message).toBe('boom [url]');
+  });
+
+  it('maps a funds error by code or by message', () => {
+    expect(toChainError(new Error("Sender doesn't have enough funds to send tx")).code).toBe('INSUFFICIENT_FUNDS');
   });
 });

@@ -368,6 +368,7 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 ### 실패
 - minter 가스가 부족하면 op는 `blocked`가 되고 재시도하지 않는다. 입장권 `chain.status`도 `blocked`가 된다.
 - 그 밖의 오류는 예외를 던져 Functions가 백오프로 재시도한다.
+- `chainOps.error`와 로그에 남는 체인 오류 메시지에서는 URL을 모두 지운다(RPC API 키 보호).
 - 체인 설정이 비어 있으면 op는 `pending`으로 남는다. 이때도 발급·검표·취소는 그대로 동작한다.
 - `retryChainOps`(admin): `pending`·`blocked` op를 오래된 순서로 다시 처리한다. 응답은 `{ ok, done, blocked, failed }`다.
 
@@ -379,8 +380,8 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 ### 설정 (Functions params)
 | 이름 | 종류 | 값 |
 | --- | --- | --- |
-| `CHAIN_RPC_URL` | string | Amoy RPC URL. 비어 있으면 체인 꺼짐 |
-| `CHAIN_CONTRACT_ADDRESS` | string | `contracts/deployments/amoy.json`의 address |
+| `CHAIN_CONTRACT_ADDRESS` | string | `contracts/deployments/amoy.json`의 address. 비어 있으면 체인 꺼짐 |
+| `CHAIN_RPC_URL` | secret | Amoy RPC URL. Alchemy·Infura URL에는 API 키가 들어 있어 비밀값으로 둔다 |
 | `CHAIN_MINTER_KEY` | secret | minter 개인키 |
 | `CHAIN_WALLET_MNEMONIC` | secret | 학생 주소 파생용 니모닉 |
 

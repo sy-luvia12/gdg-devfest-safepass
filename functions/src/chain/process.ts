@@ -1,5 +1,5 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
-import { ChainError, type ChainClient } from './client';
+import { ChainError, redact, type ChainClient } from './client';
 import { chainOpId, type ChainOpDoc } from './outbox';
 import { deriveAddress } from './wallets';
 
@@ -94,7 +94,7 @@ export async function processChainOp(deps: ChainDeps, opId: string): Promise<Pro
       await ticketRef.update({ 'chain.status': 'blocked' });
       return 'blocked';
     }
-    await opRef.update({ error: e instanceof Error ? e.message.slice(0, 500) : String(e), attempts: FieldValue.increment(1) });
+    await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
     throw e;
   }
 }
