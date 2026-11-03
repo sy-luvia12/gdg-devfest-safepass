@@ -348,3 +348,43 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 ### 보안 규칙 추가
 - `scanLogs`: 관리자, 또는 `staffUid`가 본인인 기록. 스태프는 `where('staffUid', '==', uid)` 쿼리로만 읽는다.
 - `deviceResets`: 관리자, 또는 본인 문서.
+
+## 11. 체인 연동 구현 [2.1]
+
+8장의 약속을 아래처럼 구현했다(`functions/src/chain/`, 컨트랙트는 `contracts/README.md`).
+
+### 흐름 (아웃박스)
+- `issueTicket`, `cancelTicket`, `verifyEntry`는 Firestore 트랜잭션 안에서 입장권 변경과 함께 `chainOps/{ticketId}-{seq}`를 만든다. kind는 `mint`, `reassign`, `release`, `markUsed`다.
+- 입장권 문서에는 `chainSeq`(마지막 op 번호)와 `chain`이 생긴다.
+  - `chain`의 필드: `status`(`pending`/`done`/`blocked`), `tokenId`, `mintTx`, `lastTx`, `contractOwner`
+  - 타입: `TicketChainState`
+- `processChainOp`(Firestore 트리거)가 op를 한 번에 하나씩 체인에 보낸다(`maxInstances: 1`, `concurrency: 1`, `retry: true`).
+  - 같은 입장권의 op n은 op n-1이 `done`이 된 뒤에만 실행된다.
+  - 체인에 이미 반영된 결과는 건너뛴다. 그래서 재시도해도 안전하다.
+- 체인 이전에 발급된 입장권은 다음 op 앞에 그때 주인으로 `mint`를 먼저 넣는다.
+- `reassign`과 `release`의 txHash는 `reassignments/{id}.txHash`에도 기록한다.
+- 사유 코드: 1 대기 순서, 2 무작위, 3 대기자 없음, 4 운영진 회수
+
+### 실패
+- minter 가스가 부족하면 op는 `blocked`가 되고 재시도하지 않는다. 입장권 `chain.status`도 `blocked`가 된다.
+- 그 밖의 오류는 예외를 던져 Functions가 백오프로 재시도한다.
+- 체인 설정이 비어 있으면 op는 `pending`으로 남는다. 이때도 발급·검표·취소는 그대로 동작한다.
+- `retryChainOps`(admin): `pending`·`blocked` op를 오래된 순서로 다시 처리한다. 응답은 `{ ok, done, blocked, failed }`다.
+
+### 학생 주소
+- 니모닉 하나에서 `m/44'/60'/0'/0/{index}`로 파생한다.
+- `users`에는 `walletIndex`와 `walletAddress`만 둔다. 개인키는 저장하지 않는다.
+- index는 `counters/wallets`에서 한 번만 배정한다.
+
+### 설정 (Functions params)
+| 이름 | 종류 | 값 |
+| --- | --- | --- |
+| `CHAIN_RPC_URL` | string | Amoy RPC URL. 비어 있으면 체인 꺼짐 |
+| `CHAIN_CONTRACT_ADDRESS` | string | `contracts/deployments/amoy.json`의 address |
+| `CHAIN_MINTER_KEY` | secret | minter 개인키 |
+| `CHAIN_WALLET_MNEMONIC` | secret | 학생 주소 파생용 니모닉 |
+
+### 테스트
+- `npm --prefix functions test`: 식별자·주소 파생 단위 테스트
+- `npm --prefix functions run test:int`: 체인이 꺼진 상태에서 op가 순서대로 쌓이는지 확인
+- `npm --prefix functions run test:chain`: Hardhat 로컬 노드 + Firestore 에뮬레이터. 재시도 안전성, 순서, 가스 부족 시 `blocked`를 확인

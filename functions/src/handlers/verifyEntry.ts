@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { onCall } from 'firebase-functions/v2/https';
 import type { VerifyEntryReason, VerifyEntryResponse } from '../api';
+import { enqueueChainOps } from '../chain/outbox';
 import { decideEntry, parseQrPayload, scanResultFor } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, qrTokenRef, readDocId, readString, requireAuth, requireRole, ticketFromSnap } from './boundary';
@@ -14,9 +15,8 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
   return db.runTransaction(async (tx): Promise<VerifyEntryResponse> => {
     const staff = await requireRole(tx, caller.uid, ['staff', 'admin']);
     const qr = parseQrPayload(raw);
-    const ticket = qr
-      ? ticketFromSnap(await tx.get(db.doc(`tickets/${qr.ticketId}`)), await tx.get(qrTokenRef(qr.ticketId)))
-      : null;
+    const ticketSnap = qr ? await tx.get(db.doc(`tickets/${qr.ticketId}`)) : null;
+    const ticket = qr && ticketSnap ? ticketFromSnap(ticketSnap, await tx.get(qrTokenRef(qr.ticketId))) : null;
     // A ticket for another school's event is refused before anything else, so it never counts as entered here.
     const decision: ReturnType<typeof decideEntry> | { ok: false; reason: VerifyEntryReason } = !qr
       ? { ok: false, reason: 'INVALID_FORMAT' }
@@ -42,7 +42,11 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
     });
     if (!decision.ok) return decision;
 
-    tx.update(db.doc(`tickets/${decision.ticket.id}`), {
+    const ticketRef = db.doc(`tickets/${decision.ticket.id}`);
+    const { chainSeq } = enqueueChainOps(tx, ticketRef, ticketSnap!.data()!, [{ kind: 'markUsed' }]);
+    tx.update(ticketRef, {
+      chainSeq,
+      'chain.status': 'pending',
       status: 'used',
       usedAt: FieldValue.serverTimestamp(),
       qrToken: null,

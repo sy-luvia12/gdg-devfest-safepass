@@ -9,3 +9,5 @@ export { setReassignMode } from './handlers/setReassignMode';
 export { setAllowReissue } from './handlers/setAllowReissue';
 export { setStaff } from './handlers/setStaff';
 export { requestDeviceReset } from './handlers/requestDeviceReset';
+export { processChainOp } from './handlers/processChainOp';
+export { retryChainOps } from './handlers/retryChainOps';

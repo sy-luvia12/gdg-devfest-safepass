@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { IssueReason, IssueTicketResponse } from '../api';
+import { enqueueChainOps } from '../chain/outbox';
 import { emailDomain, formatNftNumber } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
@@ -34,11 +35,14 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(async (
 
     const nftNumber = formatNftNumber(event.nftSeq + 1);
     const ticketRef = db.collection('tickets').doc();
+    const { chainSeq } = enqueueChainOps(tx, ticketRef, { eventId }, [{ kind: 'mint', toUid: caller.uid }]);
     tx.update(eventRef, { issuedCount: FieldValue.increment(1), nftSeq: FieldValue.increment(1) });
     tx.create(ticketRef, {
       eventId,
       ownerUid: caller.uid,
       nftNumber,
+      chainSeq,
+      chain: { status: 'pending' },
       status: 'issued',
       qrToken: null,
       qrExpiresAt: null,
