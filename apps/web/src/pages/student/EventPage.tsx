@@ -22,6 +22,7 @@ export function EventPage() {
   const [loadError, setLoadError] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
+  const [cancelledBefore, setCancelledBefore] = useState(false);
 
   const load = useCallback(() => {
     setLoadError(false);
@@ -39,8 +40,11 @@ export function EventPage() {
       navigate('/ticket');
     } catch (e) {
       const code = e instanceof ApiError ? e.code : 'unknown';
+      if (code === 'cancelled_before') setCancelledBefore(true);
       setIssueError(
-        code === 'sold_out'
+        code === 'cancelled_before'
+          ? '이 축제 입장권을 취소한 적이 있어서 다시 받을 수 없어요'
+          : code === 'sold_out'
           ? '모두 발급되었어요'
           : code === 'not_school_account'
             ? '학교 계정으로만 받을 수 있어요'
@@ -115,6 +119,8 @@ export function EventPage() {
         {issueError && <p role="alert" className="text-center text-caption text-danger">{issueError}</p>}
         {ticket ? (
           <Button onClick={() => navigate('/ticket')}>내 입장권 보기</Button>
+        ) : cancelledBefore ? (
+          <Button disabled>취소한 입장권은 다시 받을 수 없어요</Button>
         ) : soldOut ? (
           <Button disabled>모두 발급되었어요</Button>
         ) : (
