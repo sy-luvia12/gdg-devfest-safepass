@@ -3,12 +3,14 @@
 // Gas units measured on the Hardhat network (2026-11-04, solc 0.8.28, optimizer 200).
 // test/budget.test.js re-measures them and fails when the contract drifts more than 5%.
 const GAS = {
-  deploy: 1_710_876n,
-  createEvent: 48_572n,
+  deploy: 1_932_154n,
+  createEvent: 48_624n,
   mint: 102_881n,
   reassign: 62_088n,
-  markUsed: 49_649n,
+  markUsed: 49_737n,
   release: 41_419n,
+  commitDraw: 76_095n, // one per lottery round
+  seedDraw: 50_726n,
 };
 
 // One ticket that is issued and later scanned at the gate.

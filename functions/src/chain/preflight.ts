@@ -6,7 +6,7 @@ import { redact } from './client';
 
 const ERC5192_ID = '0xb45a3c0e';
 // mint + markUsed, measured in contracts/scripts/budget.js (contracts/test/budget.test.js keeps it honest).
-const TICKET_GAS = 102_881n + 49_649n;
+const TICKET_GAS = 102_881n + 49_737n;
 
 export interface PreflightInput {
   rpcUrl: string;
