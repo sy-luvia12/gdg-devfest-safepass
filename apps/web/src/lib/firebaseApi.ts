@@ -32,7 +32,7 @@ import {
   type VerifyResult,
   type WaitlistEntry,
 } from '@/types';
-import { getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
+import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
 
 /** 학교에 행사가 없을 때 처음 보여줄 행사 */
@@ -208,7 +208,9 @@ async function registerThisDevice(uid: string): Promise<User['deviceStatus']> {
 async function withDevice(user: User): Promise<User> {
   if (user.role !== 'student') return user;
   try {
-    return { ...user, deviceStatus: await registerThisDevice(user.uid) };
+    const deviceStatus = await registerThisDevice(user.uid);
+    // 서버는 기기 이름을 따로 두지 않는다. 이 기기가 등록 기기일 때만 이 기기 이름을 보여준다
+    return { ...user, deviceStatus, deviceName: deviceStatus === 'registered' ? `${describeThisDevice()} (이 기기)` : undefined };
   } catch {
     return user;
   }

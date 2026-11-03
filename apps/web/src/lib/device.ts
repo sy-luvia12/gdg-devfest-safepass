@@ -68,3 +68,33 @@ export async function signRefresh(keys: CryptoKeyPair, ticketId: string): Promis
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, data);
   return { signedAt, signature: base64url(sig) };
 }
+
+/** 화면에 보여줄 이 기기 이름 (예: iPhone · Safari). 기기를 특정하는 정보는 쓰지 않는다 */
+export function describeThisDevice(): string {
+  const ua = navigator.userAgent;
+  const os = /iPhone/.test(ua)
+    ? 'iPhone'
+    : /iPad/.test(ua)
+      ? 'iPad'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /Mac OS X/.test(ua)
+          ? 'Mac'
+          : /Windows/.test(ua)
+            ? 'Windows'
+            : '기기';
+  const browser = /SamsungBrowser/.test(ua)
+    ? '삼성 인터넷'
+    : /KAKAOTALK/.test(ua)
+      ? '카카오톡'
+      : /Edg\//.test(ua)
+        ? 'Edge'
+        : /CriOS|Chrome\//.test(ua)
+          ? 'Chrome'
+          : /FxiOS|Firefox\//.test(ua)
+            ? 'Firefox'
+            : /Safari\//.test(ua)
+              ? 'Safari'
+              : '브라우저';
+  return `${os} · ${browser}`;
+}
