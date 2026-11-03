@@ -67,7 +67,7 @@ export function EntriesPage() {
         l.userName ?? '',
         maskStudentId(l.studentId),
         RESULT_LABEL[l.result],
-        staffNames[l.staffUid ?? ''] ?? '',
+        l.staffName ?? staffNames[l.staffUid ?? ''] ?? '',
       ]),
     );
 
@@ -123,7 +123,7 @@ export function EntriesPage() {
               },
               { header: '학번', cell: (l) => <span className="text-ink-2 tabular">{maskStudentId(l.studentId)}</span> },
               { header: '결과', cell: (l) => <StatusBadge kind={l.result} scan /> },
-              { header: '검표 스태프', cell: (l) => <span className="text-ink-2">{staffNames[l.staffUid ?? ''] ?? '-'}</span> },
+              { header: '검표 스태프', cell: (l) => <span className="text-ink-2">{l.staffName ?? staffNames[l.staffUid ?? ''] ?? '-'}</span> },
               {
                 header: '시각',
                 className: 'text-right',

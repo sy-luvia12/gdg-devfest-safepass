@@ -27,6 +27,8 @@ export const getSchool: typeof mock.getSchool = real ? fb.getSchool : mock.getSc
 export const getEvent: typeof mock.getEvent = real ? fb.getEvent : mock.getEvent;
 export const updateEventTheme: typeof mock.updateEventTheme = real ? notYet : mock.updateEventTheme;
 export const updateEventSettings: typeof mock.updateEventSettings = real ? notYet : mock.updateEventSettings;
+/** 테스트용: 취소 후 재발급 허용 (백엔드 setAllowReissue) */
+export const updateAllowReissue: typeof mock.updateAllowReissue = real ? fb.updateAllowReissue : mock.updateAllowReissue;
 
 // 재학생 승인 · 기기 (백엔드 다음 단계 2.2, 2.3)
 export const submitVerification: typeof mock.submitVerification = real ? notYet : mock.submitVerification;
@@ -34,10 +36,12 @@ export const listPendingVerifications: typeof mock.listPendingVerifications = re
   ? empty([])
   : mock.listPendingVerifications;
 export const reviewVerification: typeof mock.reviewVerification = real ? notYet : mock.reviewVerification;
-export const requestDeviceReset: typeof mock.requestDeviceReset = real ? notYet : mock.requestDeviceReset;
-export const getMyDeviceReset: typeof mock.getMyDeviceReset = real ? empty(null) : mock.getMyDeviceReset;
-export const listDeviceResets: typeof mock.listDeviceResets = real ? empty([]) : mock.listDeviceResets;
-export const resolveDeviceReset: typeof mock.resolveDeviceReset = real ? notYet : mock.resolveDeviceReset;
+export const requestDeviceReset: typeof mock.requestDeviceReset = real ? fb.requestDeviceReset : mock.requestDeviceReset;
+export const getMyDeviceReset: typeof mock.getMyDeviceReset = real ? fb.getMyDeviceReset : mock.getMyDeviceReset;
+export const listDeviceResets: typeof mock.listDeviceResets = real ? fb.listDeviceResets : mock.listDeviceResets;
+export const resolveDeviceReset: typeof mock.resolveDeviceReset = real ? fb.resolveDeviceReset : mock.resolveDeviceReset;
+/** 관리자가 학생 이메일로 기기 등록을 지운다 (백엔드 resetDevice) */
+export const resetDeviceByEmail: typeof mock.resetDeviceByEmail = real ? fb.resetDeviceByEmail : mock.resetDeviceByEmail;
 
 // 입장권
 export const issueTicket: typeof mock.issueTicket = real ? fb.issueTicket : mock.issueTicket;
@@ -54,17 +58,16 @@ export const verifyEntry: typeof mock.verifyEntry = real ? fb.verifyEntry : mock
 export const subscribeStaffStats: typeof mock.subscribeStaffStats = real
   ? fb.subscribeStaffStats
   : mock.subscribeStaffStats;
-export const getMyScanHistory: typeof mock.getMyScanHistory = real ? empty([]) : mock.getMyScanHistory;
+export const getMyScanHistory: typeof mock.getMyScanHistory = real ? fb.getMyScanHistory : mock.getMyScanHistory;
 
 // 관리자
 export const subscribeEventStats: typeof mock.subscribeEventStats = real
   ? fb.subscribeEventStats
   : mock.subscribeEventStats;
-export const listEntries: typeof mock.listEntries = real ? empty([]) : mock.listEntries;
-export const listReassignments: typeof mock.listReassignments = real ? empty([]) : mock.listReassignments;
-export const getWaitlist: typeof mock.getWaitlist = real ? empty([]) : mock.getWaitlist;
-/** 재배정 방식은 백엔드에서 시드로 정한다 (변경 함수는 다음 단계) */
-export const updateReassignMode: typeof mock.updateReassignMode = real ? notYet : mock.updateReassignMode;
+export const listEntries: typeof mock.listEntries = real ? fb.listEntries : mock.listEntries;
+export const listReassignments: typeof mock.listReassignments = real ? fb.listReassignments : mock.listReassignments;
+export const getWaitlist: typeof mock.getWaitlist = real ? fb.getWaitlist : mock.getWaitlist;
+export const updateReassignMode: typeof mock.updateReassignMode = real ? fb.updateReassignMode : mock.updateReassignMode;
 export const listTickets: typeof mock.listTickets = real ? empty([]) : mock.listTickets;
 export const getRoster: typeof mock.getRoster = real ? empty(null) : mock.getRoster;
 export const importRoster: typeof mock.importRoster = real ? notYet : mock.importRoster;

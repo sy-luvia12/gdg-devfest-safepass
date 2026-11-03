@@ -1,11 +1,38 @@
 // 백엔드(functions/, docs/api.md)에 연결한 데이터 함수.
 // 백엔드 응답을 화면이 쓰는 types.ts 모양으로 바꿔서 돌려준다.
-// 백엔드에 아직 없는 값(학교, 승인 상태, 기기, 행사 장소·테마)은 기본값을 채운다.
+// 백엔드에 아직 없는 값(학교, 승인 상태, 행사 테마)은 기본값을 채운다.
 import { GoogleAuthProvider, signInWithPopup, signOut as fbSignOut } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, limit, onSnapshot, query, where, type DocumentData } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  type DocumentData,
+} from 'firebase/firestore';
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 import type { Callables, UserProfile } from '../../../../functions/src/api';
-import { ApiError, type CancelResult, type Event, type EventStats, type School, type StaffStats, type Ticket, type User, type VerifyResult } from '@/types';
+import {
+  ApiError,
+  type CancelResult,
+  type DeviceResetRequest,
+  type Event,
+  type EventStats,
+  type ReassignMode,
+  type Reassignment,
+  type ScanLog,
+  type School,
+  type StaffStats,
+  type Ticket,
+  type User,
+  type VerifyResult,
+  type WaitlistEntry,
+} from '@/types';
+import { getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
 
 /** 프로토타입은 행사 1개 (functions/seed.ts) */
@@ -21,6 +48,7 @@ function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e;
   if (e instanceof FunctionsError) {
     const code = e.code.replace('functions/', '');
+    if (deviceReason(e) === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
     if (code === 'permission-denied') return new ApiError('not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
     if (code === 'not-found') return new ApiError('not_found');
@@ -30,7 +58,14 @@ function toApiError(e: unknown): ApiError {
   return new ApiError('unknown');
 }
 
-function toUser(p: UserProfile): User {
+/** 함수 오류의 details.reason (기기 확인 실패, 재발급 금지 등) */
+function deviceReason(e: unknown): string | undefined {
+  if (!(e instanceof FunctionsError)) return undefined;
+  const details = e.details as { reason?: string } | undefined;
+  return details?.reason;
+}
+
+function toUser(p: UserProfile, deviceStatus: User['deviceStatus'] = 'registered'): User {
   return {
     uid: p.uid,
     schoolId: SCHOOL_ID,
@@ -39,9 +74,9 @@ function toUser(p: UserProfile): User {
     email: p.email,
     photoUrl: p.photoUrl ?? '',
     role: p.role,
-    // 재학생 승인·기기 등록은 백엔드 다음 단계(2.2, 2.3). 지금은 통과한 것으로 본다
+    // 재학생 승인은 백엔드 다음 단계(2.3). 지금은 통과한 것으로 본다
     verifyStatus: 'approved',
-    deviceStatus: 'registered',
+    deviceStatus,
   };
 }
 
@@ -64,6 +99,7 @@ function toEvent(id: string, d: DocumentData): Event {
     theme: { source: 'school', colors: [] },
     settings: { requireRoster: false },
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
+    allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };
 }
@@ -75,9 +111,9 @@ function toTicket(id: string, d: DocumentData): Ticket {
     ownerUid: d.ownerUid,
     nftTokenId: d.nftNumber ?? '',
     status: d.status === 'used' ? 'used' : 'issued',
-    // 토큰이 없거나 지났으면 qrExpiresAt이 0이라 화면이 바로 refreshQrToken을 부른다
-    qrToken: d.qrToken ?? '',
-    qrExpiresAt: millis(d.qrExpiresAt),
+    // 문서의 토큰은 쓰지 않는다. 0으로 두면 화면이 바로 기기 서명을 붙인 refreshQrToken을 부른다
+    qrToken: '',
+    qrExpiresAt: 0,
     issuedAt: millis(d.issuedAt),
     usedAt: d.usedAt ? millis(d.usedAt) : undefined,
   };
@@ -93,7 +129,7 @@ export async function signInWithSchoolAccount(): Promise<User> {
   try {
     await signInWithPopup(auth, new GoogleAuthProvider());
     const { data } = await call('ensureUser')();
-    const user = toUser(data);
+    const user = await withDevice(toUser(data));
     // 학생은 행사에서 허용한 학교 도메인만 들어온다. 스태프·관리자는 시드로 정해진 계정이라 통과
     if (user.role === 'student') {
       const event = await getEvent(EVENT_ID);
@@ -116,7 +152,33 @@ export async function getCurrentUser(): Promise<User | null> {
   await auth.authStateReady();
   if (!auth.currentUser) return null;
   const { data } = await call('ensureUser')();
-  return toUser(data);
+  return withDevice(toUser(data));
+}
+
+// ---------- 기기 묶기 (docs/api.md 9장) ----------
+
+/** 이 기기를 등록한다. 이미 다른 기기가 등록돼 있으면 'blocked' */
+async function registerThisDevice(uid: string): Promise<User['deviceStatus']> {
+  const stored = await getDeviceKeys(uid);
+  if (stored.registered) return 'registered';
+  try {
+    await call('registerDevice')({ publicKeyJwk: await publicKeyJwk(stored.keys) });
+  } catch (e) {
+    if (e instanceof FunctionsError && e.code.replace('functions/', '') === 'already-exists') return 'blocked';
+    throw e;
+  }
+  await setRegistered(stored, true);
+  return 'registered';
+}
+
+/** 학생만 기기를 묶는다. IndexedDB·WebCrypto를 못 쓰는 브라우저는 확인 없이 통과 (서버가 requireDevice로 막는다) */
+async function withDevice(user: User): Promise<User> {
+  if (user.role !== 'student') return user;
+  try {
+    return { ...user, deviceStatus: await registerThisDevice(user.uid) };
+  } catch {
+    return user;
+  }
 }
 
 export async function getSchool(_schoolId: string): Promise<School> {
@@ -155,12 +217,35 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   return ticket;
 }
 
-export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
+async function requestQr(ticketId: string, uid: string) {
+  let deviceProof;
   try {
-    const { data } = await call('refreshQrToken')({ ticketId });
-    return { token: data.qrPayload.split(':')[2] ?? '', expiresAt: data.expiresAt };
+    deviceProof = await signRefresh((await getDeviceKeys(uid)).keys, ticketId);
+  } catch {
+    deviceProof = undefined;
+  }
+  const { data } = await call('refreshQrToken')({ ticketId, deviceProof });
+  return { token: data.qrPayload.split(':')[2] ?? '', expiresAt: data.expiresAt };
+}
+
+/** 기기 서명을 붙여 새 QR을 받는다. 다른 기기에 등록된 계정이면 ApiError('device_blocked') */
+export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new ApiError('unauthenticated');
+  try {
+    return await requestQr(ticketId, uid);
   } catch (e) {
-    throw toApiError(e);
+    const reason = deviceReason(e);
+    if (!reason) throw toApiError(e);
+    // 서버 등록이 지워졌거나(관리자 초기화) 서명이 안 맞으면 이 기기로 다시 등록해 본다
+    const stored = await getDeviceKeys(uid);
+    await setRegistered(stored, false);
+    if ((await registerThisDevice(uid)) === 'blocked') throw new ApiError('device_blocked');
+    try {
+      return await requestQr(ticketId, uid);
+    } catch (again) {
+      throw deviceReason(again) ? new ApiError('device_blocked') : toApiError(again);
+    }
   }
 }
 
@@ -182,7 +267,7 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
 
 // ---------- 검표 ----------
 
-// 내가 처리한 입장 수. 백엔드에 검표 기록이 아직 없어서 이 탭에서 센다
+// 내가 처리한 입장 수. 스태프는 scanLogs를 읽을 수 없어서 이 탭에서 센다
 let myOkCount = 0;
 const myCountListeners = new Set<() => void>();
 
@@ -225,7 +310,192 @@ export function subscribeStaffStats(eventId: string, cb: (s: StaffStats) => void
 
 // ---------- 관리자 ----------
 
-/** 입장 인원만 실시간. 거부 수·최근 기록은 백엔드에 검표 기록이 생기면 채운다 */
+function toScanLog(id: string, d: DocumentData): ScanLog {
+  return {
+    id,
+    eventId: d.eventId ?? '',
+    ticketId: d.ticketId ?? undefined,
+    userName: d.studentName ?? undefined,
+    studentId: d.studentId ?? undefined,
+    staffUid: d.staffUid ?? undefined,
+    staffName: d.staffName || undefined,
+    result: d.result,
+    // 서버 시각이 아직 안 붙은 로컬 스냅샷은 지금 시각으로 보여준다
+    at: millis(d.scannedAt) || Date.now(),
+  };
+}
+
+// 행사가 하나라 eventId로 거르지 않는다 (같이 쓰면 복합 색인이 필요하다)
+const scanLogsQuery = (n: number) => query(collection(db, 'scanLogs'), orderBy('scannedAt', 'desc'), limit(n));
+
+/** 입장 인원(행사 문서) + 거부 수·최근 기록(scanLogs 최근 500건) */
 export function subscribeEventStats(eventId: string, cb: (s: EventStats) => void): () => void {
-  return watchEvent(eventId, (e) => cb({ enteredCount: e.enteredCount, capacity: e.capacity, rejectedCount: 0, recent: [] }));
+  let event: Event | null = null;
+  let logs: ScanLog[] = [];
+  const emit = () =>
+    event &&
+    cb({
+      enteredCount: event.enteredCount,
+      capacity: event.capacity,
+      rejectedCount: logs.filter((l) => l.result !== 'ok').length,
+      recent: logs.slice(0, 20),
+    });
+  const offEvent = watchEvent(eventId, (e) => {
+    event = e;
+    emit();
+  });
+  const offLogs = onSnapshot(
+    scanLogsQuery(500),
+    (snap) => {
+      logs = snap.docs.map((d) => toScanLog(d.id, d.data()));
+      emit();
+    },
+    () => emit(),
+  );
+  return () => {
+    offEvent();
+    offLogs();
+  };
+}
+
+export async function listEntries(_eventId: string): Promise<ScanLog[]> {
+  const snap = await getDocs(scanLogsQuery(500));
+  return snap.docs.map((d) => toScanLog(d.id, d.data()));
+}
+
+async function userName(uid: string | null | undefined, cache: Map<string, string>): Promise<string | undefined> {
+  if (!uid) return undefined;
+  if (!cache.has(uid)) {
+    const snap = await getDoc(doc(db, 'users', uid));
+    cache.set(uid, (snap.get('name') as string | undefined) ?? '알 수 없음');
+  }
+  return cache.get(uid);
+}
+
+/** 취소·재배정 기록. 백엔드는 uid만 남기므로 이름과 입장권 번호를 붙인다 (관리자는 users·tickets를 읽을 수 있다) */
+export async function listReassignments(eventId: string): Promise<Reassignment[]> {
+  const snap = await getDocs(query(collection(db, 'reassignments'), orderBy('createdAt', 'desc'), limit(200)));
+  const names = new Map<string, string>();
+  return Promise.all(
+    snap.docs.map(async (d) => {
+      const r = d.data();
+      // 새 기록은 표시용 값을 같이 저장한다. 예전 기록만 따로 찾아 붙인다
+      const ticket = r.nftNumber ? null : await getDoc(doc(db, 'tickets', r.ticketId));
+      return {
+        id: d.id,
+        ticketId: r.ticketId,
+        eventId: r.eventId ?? (ticket?.get('eventId') as string | undefined) ?? eventId,
+        nftTokenId: r.nftNumber ?? (ticket?.get('nftNumber') as string | undefined) ?? '-',
+        fromUid: r.fromUid,
+        fromName: r.fromName || ((await userName(r.fromUid, names)) ?? '알 수 없음'),
+        toName: r.toUid ? r.toName || (await userName(r.toUid, names)) : undefined,
+        mode: r.mode === 'random' ? 'random' : 'queue',
+        outcome: r.toUid ? 'reassigned' : 'released',
+        createdAt: millis(r.createdAt),
+      } satisfies Reassignment;
+    }),
+  );
+}
+
+/** 대기 명단. 문서 id가 이메일이고, 가입한 사람이면 이름을 붙인다 */
+export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
+  const snap = await getDocs(collection(db, 'events', eventId, 'waitlist'));
+  const rows = await Promise.all(
+    snap.docs.map(async (d) => {
+      const account = await getDocs(query(collection(db, 'users'), where('email', '==', d.id), limit(1)));
+      return {
+        email: d.id,
+        name: (account.docs[0]?.get('name') as string | undefined) ?? '가입 전',
+        order: (d.get('order') as number | undefined) ?? 0,
+        status: d.get('status') === 'assigned' ? 'assigned' : 'waiting',
+      } satisfies WaitlistEntry;
+    }),
+  );
+  return rows.sort((a, b) => a.order - b.order);
+}
+
+export async function updateReassignMode(eventId: string, mode: ReassignMode): Promise<Event> {
+  try {
+    await call('setReassignMode')({ eventId, mode });
+  } catch (e) {
+    throw toApiError(e);
+  }
+  return getEvent(eventId);
+}
+
+/** 학생 이메일로 찾아 기기 등록을 지운다. 학생이 다음에 로그인한 폰이 새 기기가 된다 */
+export async function resetDeviceByEmail(email: string): Promise<string> {
+  const found = await getDocs(query(collection(db, 'users'), where('email', '==', email.trim().toLowerCase()), limit(1)));
+  const account = found.docs[0];
+  if (!account) throw new ApiError('not_found');
+  try {
+    await call('resetDevice')({ uid: account.id });
+  } catch (e) {
+    throw toApiError(e);
+  }
+  return (account.get('name') as string | undefined) ?? email;
+}
+
+export async function updateAllowReissue(eventId: string, allow: boolean): Promise<Event> {
+  try {
+    await call('setAllowReissue')({ eventId, allow });
+  } catch (e) {
+    throw toApiError(e);
+  }
+  return getEvent(eventId);
+}
+
+// ---------- 기기 초기화 요청 (deviceResets/{uid}) ----------
+
+function toDeviceReset(id: string, d: DocumentData): DeviceResetRequest {
+  return {
+    id,
+    uid: d.uid ?? id,
+    userName: d.name ?? '',
+    studentId: d.studentId ?? '',
+    deviceName: d.email ?? '',
+    requestedAt: millis(d.requestedAt) || Date.now(),
+    status: d.status === 'done' ? 'done' : 'pending',
+  };
+}
+
+export async function requestDeviceReset(): Promise<DeviceResetRequest> {
+  try {
+    await call('requestDeviceReset')();
+  } catch (e) {
+    throw toApiError(e);
+  }
+  const mine = await getMyDeviceReset();
+  if (!mine) throw new ApiError('unknown');
+  return mine;
+}
+
+export async function getMyDeviceReset(): Promise<DeviceResetRequest | null> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const snap = await getDoc(doc(db, 'deviceResets', uid));
+  const reset = snap.exists() ? toDeviceReset(snap.id, snap.data()) : null;
+  return reset?.status === 'pending' ? reset : null;
+}
+
+export async function listDeviceResets(): Promise<DeviceResetRequest[]> {
+  const snap = await getDocs(query(collection(db, 'deviceResets'), orderBy('requestedAt', 'desc'), limit(200)));
+  return snap.docs.map((d) => toDeviceReset(d.id, d.data()));
+}
+
+/** 요청 문서 id가 학생 uid라서 그대로 resetDevice에 넘긴다 */
+export async function resolveDeviceReset(id: string): Promise<void> {
+  try {
+    await call('resetDevice')({ uid: id });
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 스태프 본인 검표 기록. 규칙상 staffUid 조건이 있어야 읽을 수 있고, 복합 색인을 피하려고 정렬은 여기서 한다 */
+export async function getMyScanHistory(): Promise<ScanLog[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new ApiError('unauthenticated');
+  const snap = await getDocs(query(collection(db, 'scanLogs'), where('staffUid', '==', uid), limit(500)));
+  return snap.docs.map((d) => toScanLog(d.id, d.data())).sort((a, b) => b.at - a.at);
 }
