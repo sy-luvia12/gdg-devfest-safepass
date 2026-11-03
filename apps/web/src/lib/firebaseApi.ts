@@ -123,6 +123,18 @@ function toTicket(id: string, d: DocumentData): Ticket {
     qrExpiresAt: 0,
     issuedAt: millis(d.issuedAt),
     usedAt: d.usedAt ? millis(d.usedAt) : undefined,
+    chain: toChain(d.chain),
+  };
+}
+
+function toChain(c: unknown): Ticket['chain'] {
+  if (!c || typeof c !== 'object') return undefined;
+  const { status, tokenId, lastTx } = c as Record<string, unknown>;
+  if (status !== 'pending' && status !== 'done' && status !== 'blocked') return undefined;
+  return {
+    status,
+    tokenId: typeof tokenId === 'string' ? tokenId : undefined,
+    lastTx: typeof lastTx === 'string' ? lastTx : undefined,
   };
 }
 
