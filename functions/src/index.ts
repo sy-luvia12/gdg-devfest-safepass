@@ -6,3 +6,5 @@ export { cancelTicket } from './handlers/cancelTicket';
 export { registerDevice } from './handlers/registerDevice';
 export { resetDevice } from './handlers/resetDevice';
 export { setReassignMode } from './handlers/setReassignMode';
+export { setAllowReissue } from './handlers/setAllowReissue';
+export { requestDeviceReset } from './handlers/requestDeviceReset';

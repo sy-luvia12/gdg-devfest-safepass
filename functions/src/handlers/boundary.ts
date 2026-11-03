@@ -75,14 +75,19 @@ export function readDeviceProof(data: unknown): DeviceProof | null {
 
 const ms = (t: Timestamp) => t.toMillis();
 
-export function ticketFromSnap(snap: DocumentSnapshot<DocumentData>): Ticket | null {
+// The live QR token sits in qrTokens/{ticketId}, which no client can read, so the owner cannot copy it
+// from the ticket document on another phone. Only callers that check a token pass the qr snapshot.
+export const qrTokenRef = (ticketId: string) => db.doc(`qrTokens/${ticketId}`);
+
+export function ticketFromSnap(snap: DocumentSnapshot<DocumentData>, qrSnap?: DocumentSnapshot<DocumentData>): Ticket | null {
   const d = snap.data();
   if (!d) return null;
   // A cancelled ticket has no owner and no QR, so every caller treats it as missing.
   if (d.status === 'cancelled') return null;
   const base = { id: snap.id, eventId: d.eventId, ownerUid: d.ownerUid, nftNumber: d.nftNumber };
   if (d.status === 'used') return { ...base, status: 'used', usedAtMs: ms(d.usedAt) };
-  const qr = d.qrToken && d.qrExpiresAt ? { token: d.qrToken, expiresAtMs: ms(d.qrExpiresAt) } : null;
+  const q = qrSnap?.data();
+  const qr = q?.token && q.expiresAt ? { token: q.token as string, expiresAtMs: ms(q.expiresAt) } : null;
   return { ...base, status: 'issued', qr };
 }
 
@@ -101,5 +106,6 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
     enteredCount: d.enteredCount ?? 0,
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
     requireDevice: d.requireDevice === true,
+    allowReissueAfterCancel: d.allowReissueAfterCancel === true,
   };
 }

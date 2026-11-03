@@ -17,9 +17,15 @@ service cloud.firestore {
         allow read: if isAdmin();
       }
     }
+    // 스태프는 자기가 검표한 기록만 ("내 검표 기록"). 쿼리에 where('staffUid', '==', uid)가 있어야 한다
     match /scanLogs/{id} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (signedIn() && resource.data.staffUid == request.auth.uid);
     }
+    // 기기 초기화 요청: 관리자는 전체, 학생은 자기 요청만
+    match /deviceResets/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    }
+    // qrTokens, devices는 match가 없어서 클라이언트가 읽을 수 없다. QR 토큰은 함수만 다룬다
     match /reassignments/{id} {
       allow read: if isAdmin();
     }

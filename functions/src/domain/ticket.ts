@@ -30,6 +30,8 @@ export interface FestivalEvent {
   enteredCount: number;
   reassignMode: ReassignMode;
   requireDevice: boolean;
+  // Test events only: lets a student who cancelled take a ticket again.
+  allowReissueAfterCancel: boolean;
 }
 
 export const QR_PREFIX = 'TTV1';

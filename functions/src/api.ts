@@ -22,6 +22,10 @@ export interface IssueTicketResponse {
   ticketId: string;
   nftNumber: string;
 }
+// failed-precondition with details.reason. CANCELLED_BEFORE: this student cancelled a ticket for the event and
+// the event does not set allowReissueAfterCancel.
+export const ISSUE_REASONS = ['CANCELLED_BEFORE'] as const;
+export type IssueReason = (typeof ISSUE_REASONS)[number];
 
 export const REASSIGN_MODES = ['queue', 'random'] as const;
 export type ReassignMode = (typeof REASSIGN_MODES)[number];
@@ -101,6 +105,19 @@ export interface SetReassignModeResponse {
   ok: true;
 }
 
+export interface SetAllowReissueRequest {
+  eventId: string;
+  allow: boolean;
+}
+export interface SetAllowReissueResponse {
+  ok: true;
+}
+
+// The student asks the council to reset their device. Stored in deviceResets/{uid}; resetDevice marks it done.
+export interface RequestDeviceResetResponse {
+  ok: true;
+}
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -111,4 +128,6 @@ export interface Callables {
   registerDevice: [RegisterDeviceRequest, RegisterDeviceResponse];
   resetDevice: [ResetDeviceRequest, ResetDeviceResponse];
   setReassignMode: [SetReassignModeRequest, SetReassignModeResponse];
+  setAllowReissue: [SetAllowReissueRequest, SetAllowReissueResponse];
+  requestDeviceReset: [void, RequestDeviceResetResponse];
 }

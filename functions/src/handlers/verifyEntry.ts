@@ -3,7 +3,7 @@ import { onCall } from 'firebase-functions/v2/https';
 import type { VerifyEntryResponse } from '../api';
 import { decideEntry, parseQrPayload, scanResultFor } from '../domain/ticket';
 import { db } from '../firebase';
-import { eventFromSnap, readString, requireAuth, requireRole, ticketFromSnap } from './boundary';
+import { eventFromSnap, qrTokenRef, readString, requireAuth, requireRole, ticketFromSnap } from './boundary';
 
 export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (request) => {
   const caller = requireAuth(request);
@@ -12,7 +12,9 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
   return db.runTransaction(async (tx): Promise<VerifyEntryResponse> => {
     const staff = await requireRole(tx, caller.uid, ['staff', 'admin']);
     const qr = parseQrPayload(raw);
-    const ticket = qr ? ticketFromSnap(await tx.get(db.doc(`tickets/${qr.ticketId}`))) : null;
+    const ticket = qr
+      ? ticketFromSnap(await tx.get(db.doc(`tickets/${qr.ticketId}`)), await tx.get(qrTokenRef(qr.ticketId)))
+      : null;
     const decision = qr ? decideEntry(ticket, qr.token, Date.now()) : ({ ok: false, reason: 'INVALID_FORMAT' } as const);
     const owner = ticket ? ((await tx.get(db.doc(`users/${ticket.ownerUid}`))).data() ?? null) : null;
     const eventRef = decision.ok ? db.doc(`events/${decision.ticket.eventId}`) : null;
@@ -37,6 +39,7 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
       qrExpiresAt: null,
     });
     tx.update(eventRef!, { enteredCount: FieldValue.increment(1) });
+    tx.delete(qrTokenRef(decision.ticket.id));
 
     return {
       ok: true,

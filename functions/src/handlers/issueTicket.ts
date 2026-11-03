@@ -1,6 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { IssueTicketResponse } from '../api';
+import type { IssueReason, IssueTicketResponse } from '../api';
 import { emailDomain, formatNftNumber } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
@@ -21,6 +21,15 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(async (
       db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', caller.uid).limit(1),
     );
     if (!owned.empty) throw new HttpsError('already-exists', 'Already holding a ticket for this event.');
+    if (!event.allowReissueAfterCancel) {
+      const cancelled = await tx.get(
+        db.collection('reassignments').where('fromUid', '==', caller.uid).where('eventId', '==', eventId).limit(1),
+      );
+      if (!cancelled.empty) {
+        const reason: IssueReason = 'CANCELLED_BEFORE';
+        throw new HttpsError('failed-precondition', 'A cancelled ticket cannot be taken again.', { reason });
+      }
+    }
     if (event.issuedCount >= event.capacity) throw new HttpsError('resource-exhausted', 'Event is full.');
 
     const nftNumber = formatNftNumber(event.nftSeq + 1);
