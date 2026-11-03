@@ -305,3 +305,32 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 
 ### 이벤트 문서 기본값
 콘솔에서 만든 문서에 없는 카운터는 0으로 읽는다. `nftSeq`가 없으면 `issuedCount`를 쓴다. 시드 스크립트는 비어 있는 필드만 채우고 기존 값은 덮어쓰지 않는다.
+
+## 10. 취소 후 재발급 금지, QR 토큰 보관, 기기 초기화 요청 [P]
+
+처리 방침은 노션 "요청 처리 방침" 페이지를 따른다.
+
+### 취소 후 재발급 금지 (`issueTicket`)
+- `reassignments`에 `fromUid == 나`, `eventId == 행사` 기록이 있으면 `failed-precondition`, `details.reason`은 `CANCELLED_BEFORE`다.
+- `events.allowReissueAfterCancel`이 `true`인 행사는 다시 받을 수 있다. 테스트 행사만 켠다.
+- 이 변경 전에 만든 `reassignments`에는 `eventId`가 없어서 재발급 금지에 걸리지 않는다.
+
+### `reassignments/{id}` 추가 필드
+`eventId`, `nftNumber`, `fromName`, `toName`(재배정되지 않았으면 null)을 같이 저장한다.
+
+### QR 토큰 보관
+- `refreshQrToken`은 토큰을 `qrTokens/{ticketId}`(`token`, `expiresAt`)에 쓴다. 입장권 문서의 `qrToken`, `qrExpiresAt`은 null로 둔다.
+- `qrTokens`는 어떤 클라이언트도 읽을 수 없다. `verifyEntry`만 읽고, 입장 처리·취소 때 지운다.
+
+### `deviceResets/{uid}`
+학생의 기기 초기화 요청. `uid`, `name`, `studentId`, `email`, `status`(`pending`/`done`), `requestedAt`, `resolvedAt`. `resetDevice`가 `done`으로 바꾼다.
+
+### 함수
+| 함수 | 호출자 | 요청 → 응답 |
+| --- | --- | --- |
+| `setAllowReissue` | admin | `{ eventId, allow: boolean }` → `{ ok: true }` |
+| `requestDeviceReset` | student | 없음 → `{ ok: true }`. 다시 요청하면 요청 시각을 갱신한다 |
+
+### 보안 규칙 추가
+- `scanLogs`: 관리자, 또는 `staffUid`가 본인인 기록. 스태프는 `where('staffUid', '==', uid)` 쿼리로만 읽는다.
+- `deviceResets`: 관리자, 또는 본인 문서.

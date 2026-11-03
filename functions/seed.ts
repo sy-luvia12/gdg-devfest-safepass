@@ -21,6 +21,8 @@ const event = {
   enteredCount: 0,
   reassignMode: 'queue',
   requireDevice: false,
+  // Test event: a student who cancelled may take a ticket again. Real events keep this false.
+  allowReissueAfterCancel: true,
 };
 
 // A profile only applies before the first sign-in. Add test accounts here first.

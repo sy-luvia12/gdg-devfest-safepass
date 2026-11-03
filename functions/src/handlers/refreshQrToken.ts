@@ -5,7 +5,7 @@ import type { RefreshQrTokenResponse } from '../api';
 import { deviceFailure, parseDeviceKey } from '../domain/device';
 import { formatQrPayload, QR_TTL_MS } from '../domain/ticket';
 import { db } from '../firebase';
-import { eventFromSnap, readDeviceProof, readDocId, requireAuth, ticketFromSnap } from './boundary';
+import { eventFromSnap, qrTokenRef, readDeviceProof, readDocId, requireAuth, ticketFromSnap } from './boundary';
 
 export const refreshQrToken = onCall<unknown, Promise<RefreshQrTokenResponse>>(async (request) => {
   const caller = requireAuth(request);
@@ -14,7 +14,8 @@ export const refreshQrToken = onCall<unknown, Promise<RefreshQrTokenResponse>>(a
   const ticketRef = db.doc(`tickets/${ticketId}`);
 
   return db.runTransaction(async (tx) => {
-    const ticket = ticketFromSnap(await tx.get(ticketRef));
+    const ticketSnap = await tx.get(ticketRef);
+    const ticket = ticketFromSnap(ticketSnap);
     if (!ticket) throw new HttpsError('not-found', 'Ticket not found.');
     if (ticket.ownerUid !== caller.uid) throw new HttpsError('permission-denied', 'Not your ticket.');
     if (ticket.status === 'used') throw new HttpsError('failed-precondition', 'Ticket already used.');
@@ -28,7 +29,9 @@ export const refreshQrToken = onCall<unknown, Promise<RefreshQrTokenResponse>>(a
 
     const token = randomBytes(16).toString('base64url');
     const expiresAt = Date.now() + QR_TTL_MS;
-    tx.update(ticketRef, { qrToken: token, qrExpiresAt: Timestamp.fromMillis(expiresAt) });
+    tx.set(qrTokenRef(ticketId), { token, expiresAt: Timestamp.fromMillis(expiresAt) });
+    // Tickets issued before qrTokens existed may still carry a readable token.
+    if (ticketSnap.get('qrToken')) tx.update(ticketRef, { qrToken: null, qrExpiresAt: null });
     return { qrPayload: formatQrPayload(ticketId, token), expiresAt };
   });
 });

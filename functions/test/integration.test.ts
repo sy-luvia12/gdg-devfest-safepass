@@ -3,7 +3,18 @@ import { deleteApp, initializeApp as initAdmin } from 'firebase-admin/app';
 import { getFirestore as adminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { deleteApp as deleteClientApp, initializeApp, type FirebaseApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-import { collection, connectFirestoreEmulator, doc as clientDoc, getDocs, getFirestore, setDoc, type Firestore } from 'firebase/firestore';
+import {
+  collection,
+  connectFirestoreEmulator,
+  doc as clientDoc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  query,
+  setDoc,
+  where,
+  type Firestore,
+} from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Callables, DeviceKey } from '../src/api';
@@ -40,6 +51,8 @@ async function signIn(email: string): Promise<Client> {
     registerDevice: call('registerDevice'),
     resetDevice: call('resetDevice'),
     setReassignMode: call('setReassignMode'),
+    setAllowReissue: call('setAllowReissue'),
+    requestDeviceReset: call('requestDeviceReset'),
     fs,
   };
 }
@@ -90,6 +103,11 @@ afterAll(async () => {
 });
 
 const codeOf = (p: Promise<unknown>) => p.then(() => 'resolved', (e: { code?: string }) => e.code);
+const reasonOf = (p: Promise<unknown>) =>
+  p.then(
+    () => 'resolved',
+    (e: { details?: { reason?: string } }) => e.details?.reason,
+  );
 
 describe('prototype demo scenario', () => {
   let aliceTicket: string;
@@ -135,6 +153,22 @@ describe('prototype demo scenario', () => {
     });
     expect(await staff.verifyEntry({ qrPayload })).toEqual({ ok: false, reason: 'USED' });
     expect((await db.doc(`events/${EVENT}`).get()).get('enteredCount')).toBe(1);
+    expect((await db.doc(`qrTokens/${aliceTicket}`).get()).exists).toBe(false);
+  });
+
+  it('the live QR token is kept out of the ticket document and no client can read it', async () => {
+    await dave.ensureUser();
+    const ticketId = (await dave.issueTicket({ eventId: EVENT })).ticketId;
+    await dave.refreshQrToken({ ticketId });
+    const ticket = (await getDoc(clientDoc(dave.fs, 'tickets', ticketId))).data()!;
+    expect(ticket.qrToken).toBeNull();
+    expect((await db.doc(`qrTokens/${ticketId}`).get()).get('token')).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(await codeOf(getDoc(clientDoc(dave.fs, 'qrTokens', ticketId)))).toBe('permission-denied');
+    expect(await codeOf(getDoc(clientDoc(chief.fs, 'qrTokens', ticketId)))).toBe('permission-denied');
+    // Give the seat back so the counts below stay as they were. Allowed because dave never cancelled.
+    await db.doc(`tickets/${ticketId}`).delete();
+    await db.doc(`qrTokens/${ticketId}`).delete();
+    await db.doc(`events/${EVENT}`).update({ issuedCount: 1, nftSeq: 1 });
   });
 
   it('a used ticket cannot get a new QR', async () => {
@@ -147,7 +181,7 @@ describe('prototype demo scenario', () => {
     const current = await bob.refreshQrToken({ ticketId: bobTicket });
     expect(await staff.verifyEntry({ qrPayload: old.qrPayload })).toEqual({ ok: false, reason: 'TOKEN_MISMATCH' });
 
-    await db.doc(`tickets/${bobTicket}`).update({ qrExpiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+    await db.doc(`qrTokens/${bobTicket}`).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
     expect(await staff.verifyEntry({ qrPayload: current.qrPayload })).toEqual({ ok: false, reason: 'EXPIRED' });
     expect(await staff.verifyEntry({ qrPayload: 'not a ticket' })).toEqual({ ok: false, reason: 'INVALID_FORMAT' });
     expect(await staff.verifyEntry({ qrPayload: 'TTV1:nope:abc' })).toEqual({ ok: false, reason: 'NOT_FOUND' });
@@ -197,11 +231,13 @@ describe('prototype demo scenario', () => {
     const carolUid = await uidOf(CAROL);
     const stored = (await db.doc(`tickets/${bobTicket}`).get()).data()!;
     expect(stored.ownerUid).toBe(carolUid);
-    expect(stored.qrToken).toBeNull();
+    expect((await db.doc(`qrTokens/${bobTicket}`).get()).exists).toBe(false);
     expect(await waitlistDoc(CAROL)).toMatchObject({ status: 'assigned', assignedTicketId: bobTicket });
     expect(await waitlistDoc(GHOST)).toMatchObject({ status: 'waiting' });
     const log = await db.collection('reassignments').where('ticketId', '==', bobTicket).get();
-    expect(log.docs.map((d) => d.data())).toMatchObject([{ fromUid: await uidOf(BOB), toUid: carolUid, mode: 'queue' }]);
+    expect(log.docs.map((d) => d.data())).toMatchObject([
+      { eventId: EVENT, nftNumber: '#0002', fromUid: await uidOf(BOB), fromName: 'bob', toUid: carolUid, toName: 'carol', mode: 'queue' },
+    ]);
     expect(await codeOf(bob.refreshQrToken({ ticketId: bobTicket }))).toBe('functions/permission-denied');
     expect((await carol.refreshQrToken({ ticketId: bobTicket })).qrPayload).toMatch(/^TTV1:/);
   });
@@ -214,6 +250,14 @@ describe('prototype demo scenario', () => {
     const log = await db.collection('reassignments').where('ticketId', '==', bobTicket).get();
     expect(log.docs.map((d) => d.get('toUid')).sort()).toEqual([null, await uidOf(CAROL)].sort());
 
+    expect(await reasonOf(carol.issueTicket({ eventId: EVENT }))).toBe('CANCELLED_BEFORE');
+    expect(await codeOf(bob.issueTicket({ eventId: EVENT }))).toBe('functions/failed-precondition');
+  });
+
+  it('a test event can let a student who cancelled take a ticket again', async () => {
+    expect(await codeOf(carol.setAllowReissue({ eventId: EVENT, allow: true }))).toBe('functions/permission-denied');
+    expect(await codeOf(chief.setAllowReissue({ eventId: EVENT, allow: 'yes' as never }))).toBe('functions/invalid-argument');
+    expect(await chief.setAllowReissue({ eventId: EVENT, allow: true })).toEqual({ ok: true });
     expect((await carol.issueTicket({ eventId: EVENT })).nftNumber).toBe('#0003');
   });
 
@@ -236,12 +280,6 @@ describe('prototype demo scenario', () => {
   });
 });
 
-const reasonOf = (p: Promise<unknown>) =>
-  p.then(
-    () => 'resolved',
-    (e: { details?: { reason?: string } }) => e.details?.reason,
-  );
-
 describe('hand-made event documents', () => {
   it('an event without counters still issues #0001 and creates them', async () => {
     await db.doc('events/bare-event').set({ name: 'Bare', capacity: 5, allowedDomains: ['korea.ac.kr'] });
@@ -261,6 +299,13 @@ describe('admin features and security rules', () => {
     expect(await codeOf(getDocs(collection(bob.fs, 'reassignments')))).toBe('permission-denied');
     expect(await codeOf(getDocs(collection(bob.fs, 'events', EVENT, 'waitlist')))).toBe('permission-denied');
     expect(await codeOf(getDocs(collection(staff.fs, 'scanLogs')))).toBe('permission-denied');
+  });
+
+  it('staff reads only the scans they made', async () => {
+    const mine = query(collection(staff.fs, 'scanLogs'), where('staffUid', '==', await uidOf(STAFF)));
+    expect((await getDocs(mine)).size).toBe(6);
+    const others = query(collection(staff.fs, 'scanLogs'), where('staffUid', '==', await uidOf(CHIEF)));
+    expect(await codeOf(getDocs(others))).toBe('permission-denied');
   });
 
   it('no client can write, not even an admin', async () => {
@@ -345,6 +390,22 @@ describe('device binding', () => {
     const fresh = newDevice();
     await frank.registerDevice({ publicKeyJwk: fresh.key });
     expect((await frank.refreshQrToken({ ticketId, deviceProof: fresh.proof(ticketId) })).expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it('a student asks for a reset, sees only their own request, and the admin reset closes it', async () => {
+    expect(await frank.requestDeviceReset()).toEqual({ ok: true });
+    expect(await codeOf(staff.requestDeviceReset())).toBe('functions/permission-denied');
+    const frankUid = await uidOf(FRANK);
+    expect((await getDoc(clientDoc(frank.fs, 'deviceResets', frankUid))).data()).toMatchObject({
+      uid: frankUid,
+      email: FRANK,
+      status: 'pending',
+    });
+    expect(await codeOf(getDoc(clientDoc(bob.fs, 'deviceResets', frankUid)))).toBe('permission-denied');
+    expect((await getDocs(collection(chief.fs, 'deviceResets'))).size).toBe(1);
+
+    await chief.resetDevice({ uid: frankUid });
+    expect((await db.doc(`deviceResets/${frankUid}`).get()).get('status')).toBe('done');
   });
 
   it('an event that does not require a device still refreshes without a proof', async () => {
