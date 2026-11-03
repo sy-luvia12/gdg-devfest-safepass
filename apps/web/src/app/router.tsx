@@ -15,6 +15,7 @@ import { ScanHistoryPage } from '@/pages/staff/ScanHistoryPage';
 import { ScanPage } from '@/pages/staff/ScanPage';
 import { DevicePage } from '@/pages/student/DevicePage';
 import { EventPage } from '@/pages/student/EventPage';
+import { EventsPage } from '@/pages/student/EventsPage';
 import { HistoryPage } from '@/pages/student/HistoryPage';
 import { LoginPage } from '@/pages/student/LoginPage';
 import { OnboardingPage } from '@/pages/student/OnboardingPage';
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
           { path: '/onboarding', element: <OnboardingPage /> },
           { path: '/onboarding/pending', element: <PendingPage /> },
           { path: '/device', element: <DevicePage /> },
+          { path: '/events', element: <EventsPage /> },
           { path: '/event', element: <EventPage /> },
           { path: '/ticket', element: <TicketPage /> },
           { path: '/ticket/history', element: <HistoryPage /> },

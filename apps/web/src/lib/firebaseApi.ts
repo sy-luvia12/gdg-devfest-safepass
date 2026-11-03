@@ -35,9 +35,12 @@ import {
 import { getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
 
-/** 학교 도메인으로 행사를 못 찾을 때(관리자 gmail 등) 처음 보여줄 행사 */
+/** 학교에 행사가 없을 때 처음 보여줄 행사 */
 export const EVENT_ID = import.meta.env.VITE_EVENT_ID || 'demo-festival';
 const DEFAULT_BRAND = '#9C8CFF';
+
+// 지금 보고 있는 학교. 고연전/연고전처럼 학교마다 다른 묶음 이름을 고를 때 쓴다
+let viewerSchoolId = '';
 
 function call<K extends keyof Callables>(name: K) {
   return httpsCallable<Callables[K][0], Callables[K][1]>(functions, name);
@@ -65,7 +68,7 @@ function deviceReason(e: unknown): string | undefined {
   return details?.reason;
 }
 
-// 학교당 행사 1개라서 학교 id는 행사 문서 id를 그대로 쓴다
+// schoolId: 메일 도메인으로 찾은 학교. 학교 메일이 아닌 운영 계정(gmail)은 빈 값
 function toUser(p: UserProfile, schoolId: string, deviceStatus: User['deviceStatus'] = 'registered'): User {
   return {
     uid: p.uid,
@@ -88,7 +91,9 @@ function millis(v: unknown): number {
 function toEvent(id: string, d: DocumentData): Event {
   return {
     id,
-    schoolId: id,
+    schoolId: (d.schoolIds as string[] | undefined)?.[0] ?? '',
+    schoolIds: d.schoolIds ?? [],
+    seriesName: (d.seriesName as Record<string, string> | undefined)?.[viewerSchoolId] ?? firstValue(d.seriesName),
     name: d.name ?? '',
     date: new Date(millis(d.date) || Date.now()).toISOString(),
     place: d.place ?? '',
@@ -124,29 +129,34 @@ function domainOf(email: string) {
   return email.split('@')[1]?.toLowerCase() ?? '';
 }
 
+function firstValue(v: unknown): string | undefined {
+  return v && typeof v === 'object' ? (Object.values(v)[0] as string | undefined) : undefined;
+}
+
 function toSchool(id: string, d: DocumentData): School {
   return {
     id,
-    name: d.schoolName ?? d.name ?? '',
-    domain: (d.allowedDomains as string[] | undefined)?.[0] ?? '',
+    name: d.name ?? '',
+    domain: (d.domains as string[] | undefined)?.[0] ?? '',
     brandColor: d.brandColor ?? DEFAULT_BRAND,
-    currentEventId: id,
+    // 처음 보여줄 행사는 AuthProvider가 listEvents로 정한다
+    currentEventId: EVENT_ID,
   };
 }
 
-/** 이메일 도메인을 허용하는 행사. 없으면 null */
-async function eventIdForEmail(email: string): Promise<string | null> {
+/** 메일 도메인이 속한 학교. 없으면 null */
+async function schoolIdForEmail(email: string): Promise<string | null> {
   const snap = await getDocs(
-    query(collection(db, 'events'), where('allowedDomains', 'array-contains', domainOf(email)), limit(1)),
+    query(collection(db, 'schools'), where('domains', 'array-contains', domainOf(email)), limit(1)),
   );
   return snap.docs[0]?.id ?? null;
 }
 
-/** 학생은 자기 학교 행사만. 스태프·관리자는 시드로 정해진 계정이라 못 찾으면 기본 행사로 시작해 고른다 */
+/** 학생은 학교 메일이어야 한다. 스태프·관리자는 시드로 정해진 계정이라 학교 없이 들어와 학교를 고른다 */
 async function profileToUser(p: UserProfile): Promise<User | null> {
-  const eventId = await eventIdForEmail(p.email);
-  if (!eventId && p.role === 'student') return null;
-  return withDevice(toUser(p, eventId ?? EVENT_ID));
+  const schoolId = await schoolIdForEmail(p.email);
+  if (!schoolId && p.role === 'student') return null;
+  return withDevice(toUser(p, schoolId ?? ''));
 }
 
 // ---------- 로그인 · 학교 · 행사 ----------
@@ -156,7 +166,7 @@ export async function signInWithSchoolAccount(): Promise<User> {
     await signInWithPopup(auth, new GoogleAuthProvider());
     const { data } = await call('ensureUser')();
     const user = await profileToUser(data);
-    // 학생은 어느 행사든 허용한 학교 도메인이어야 들어온다
+    // 학생은 등록된 학교의 메일이어야 들어온다
     if (!user) {
       await fbSignOut(auth);
       throw new ApiError('not_school_account');
@@ -204,17 +214,25 @@ async function withDevice(user: User): Promise<User> {
   }
 }
 
-/** 학교 = 행사 문서의 schoolName·brandColor */
+/** 학교 이름·상징색 (schools/{id}). 이 학교가 보는 사람 학교가 된다 */
 export async function getSchool(schoolId: string): Promise<School> {
-  const snap = await getDoc(doc(db, 'events', schoolId));
+  const snap = await getDoc(doc(db, 'schools', schoolId));
   if (!snap.exists()) throw new ApiError('not_found');
+  viewerSchoolId = snap.id;
   return toSchool(snap.id, snap.data());
 }
 
-/** 관리자·스태프가 고를 수 있는 학교(행사) 전체 */
+/** 관리자·스태프가 고를 수 있는 학교 전체 */
 export async function listSchools(): Promise<School[]> {
-  const snap = await getDocs(collection(db, 'events'));
+  const snap = await getDocs(collection(db, 'schools'));
   return snap.docs.map((d) => toSchool(d.id, d.data())).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+/** 학교가 참여하는 행사들, 날짜순. 고연전처럼 두 학교가 함께하는 행사는 양쪽에 나온다 */
+export async function listEvents(schoolId: string): Promise<Event[]> {
+  viewerSchoolId = schoolId;
+  const snap = await getDocs(query(collection(db, 'events'), where('schoolIds', 'array-contains', schoolId)));
+  return snap.docs.map((d) => toEvent(d.id, d.data())).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getEvent(eventId: string): Promise<Event> {

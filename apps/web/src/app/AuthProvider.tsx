@@ -1,95 +1,117 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '@/lib/api';
-import type { School, User } from '@/types';
+import type { Event, School, User } from '@/types';
+
+/** 보고 있는 학교와 그 학교의 행사들. eventId는 그중 지금 보고 있는 행사 */
+type Scope = { school: School; events: Event[]; eventId: string };
 
 type AuthState = {
   user: User | null;
-  /** 로그인한 사람의 학교. 행사 id와 테마 기본색이 여기서 나온다. */
+  /** 보고 있는 학교. 테마 기본색이 여기서 나온다. 학생은 자기 학교 */
   school: School | null;
+  /** 보고 있는 학교가 참여하는 행사들 (날짜순) */
+  events: Event[];
+  /** 지금 보고 있는 행사. 화면은 useEventId()로 읽는다 */
+  eventId: string | null;
   loading: boolean;
-  signIn: () => Promise<{ user: User; school: School }>;
+  signIn: () => Promise<{ user: User } & Scope>;
   signOut: () => Promise<void>;
   /** 승인 요청·기기 초기화 등으로 내 정보가 바뀐 뒤 다시 읽는다 */
   refreshUser: () => Promise<User | null>;
-  /** 관리자·스태프가 고를 수 있는 학교(행사). 학생은 빈 배열 */
+  /** 관리자·스태프가 고를 수 있는 학교. 학생은 빈 배열 */
   schools: School[];
-  /** 관리자·스태프가 보고 있는 학교(행사)를 바꾼다. 다음에 들어와도 유지된다 */
-  selectSchool: (schoolId: string) => void;
+  /** 관리자·스태프가 보는 학교를 바꾼다. 그 학교의 행사 중 지난번 것이나 첫 행사로 간다 */
+  selectSchool: (schoolId: string) => Promise<void>;
+  /** 보고 있는 행사를 바꾼다. 다음에 들어와도 유지된다 */
+  selectEvent: (eventId: string) => void;
 };
 
 const SCHOOL_KEY = 'safepass-school';
+const EVENT_KEY = 'safepass-event';
 
-function storedSchoolId(): string | null {
+function stored(key: string): string | null {
   try {
-    return localStorage.getItem(SCHOOL_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function storeSchoolId(id: string) {
+function store(key: string, value: string) {
   try {
-    localStorage.setItem(SCHOOL_KEY, id);
+    localStorage.setItem(key, value);
   } catch {
-    // 저장이 막힌 브라우저는 매번 기본 학교로 시작한다
+    // 저장이 막힌 브라우저는 매번 첫 학교·첫 행사로 시작한다
   }
 }
 
-/** 학생은 자기 학교. 관리자·스태프는 지난번에 고른 학교가 목록에 있으면 그 학교 */
-async function resolveSchool(u: User): Promise<{ school: School; schools: School[] }> {
-  if (u.role === 'student') return { school: await api.getSchool(u.schoolId), schools: [] };
+/** 학교의 행사 목록을 읽고, 지난번에 본 행사가 있으면 그 행사를 고른다 */
+async function scopeFor(school: School): Promise<Scope> {
+  const events = await api.listEvents(school.id);
+  const last = stored(EVENT_KEY);
+  const pick =
+    events.find((e) => e.id === last) ?? events.find((e) => e.id === school.currentEventId) ?? events[0];
+  return { school, events, eventId: pick?.id ?? school.currentEventId };
+}
+
+/** 학생은 자기 학교. 관리자·스태프는 지난번에 고른 학교, 없으면 자기 학교나 첫 학교 */
+async function resolve(u: User): Promise<Scope & { schools: School[] }> {
+  if (u.role === 'student') return { ...(await scopeFor(await api.getSchool(u.schoolId))), schools: [] };
   const schools = await api.listSchools();
-  const picked = schools.find((s) => s.id === storedSchoolId()) ?? schools.find((s) => s.id === u.schoolId);
-  return { school: picked ?? (await api.getSchool(u.schoolId)), schools };
+  const last = stored(SCHOOL_KEY);
+  const pick = schools.find((s) => s.id === last) ?? schools.find((s) => s.id === u.schoolId) ?? schools[0];
+  const school = pick ? await api.getSchool(pick.id) : await api.getSchool(u.schoolId);
+  return { ...(await scopeFor(school)), schools };
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [school, setSchool] = useState<School | null>(null);
+  const [scope, setScope] = useState<Scope | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const apply = useCallback((u: User, r: Scope & { schools: School[] }) => {
+    setScope({ school: r.school, events: r.events, eventId: r.eventId });
+    setSchools(r.schools);
+    setUser(u);
+  }, []);
 
   useEffect(() => {
     (async () => {
       const u = await api.getCurrentUser();
-      if (u) {
-        const r = await resolveSchool(u);
-        setSchool(r.school);
-        setSchools(r.schools);
-        setUser(u);
-      }
+      if (u) apply(u, await resolve(u));
     })()
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [apply]);
 
   const signIn = useCallback(async () => {
     const u = await api.signInWithSchoolAccount();
-    const r = await resolveSchool(u);
-    setSchool(r.school);
-    setSchools(r.schools);
-    setUser(u);
-    return { user: u, school: r.school };
-  }, []);
+    const r = await resolve(u);
+    apply(u, r);
+    return { user: u, school: r.school, events: r.events, eventId: r.eventId };
+  }, [apply]);
 
   const signOut = useCallback(async () => {
     await api.signOut();
     setUser(null);
-    setSchool(null);
+    setScope(null);
     setSchools([]);
   }, []);
 
-  const selectSchool = useCallback(
-    (schoolId: string) => {
-      const next = schools.find((s) => s.id === schoolId);
-      if (!next) return;
-      storeSchoolId(schoolId);
-      setSchool(next);
-    },
-    [schools],
-  );
+  const selectSchool = useCallback(async (schoolId: string) => {
+    const next = await scopeFor(await api.getSchool(schoolId));
+    store(SCHOOL_KEY, schoolId);
+    store(EVENT_KEY, next.eventId);
+    setScope(next);
+  }, []);
+
+  const selectEvent = useCallback((eventId: string) => {
+    store(EVENT_KEY, eventId);
+    setScope((s) => (s && s.events.some((e) => e.id === eventId) ? { ...s, eventId } : s));
+  }, []);
 
   const refreshUser = useCallback(async () => {
     const u = await api.getCurrentUser();
@@ -98,8 +120,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, school, loading, signIn, signOut, refreshUser, schools, selectSchool }),
-    [user, school, loading, signIn, signOut, refreshUser, schools, selectSchool],
+    () => ({
+      user,
+      school: scope?.school ?? null,
+      events: scope?.events ?? [],
+      eventId: scope?.eventId ?? null,
+      loading,
+      signIn,
+      signOut,
+      refreshUser,
+      schools,
+      selectSchool,
+      selectEvent,
+    }),
+    [user, scope, loading, signIn, signOut, refreshUser, schools, selectSchool, selectEvent],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -110,9 +144,9 @@ export function useAuth(): AuthState {
   return ctx;
 }
 
-/** 지금 학교의 행사 id. RequireRole 안쪽 화면에서만 쓴다. */
+/** 지금 보고 있는 행사 id. RequireRole 안쪽 화면에서만 쓴다. */
 export function useEventId(): string {
-  const { school } = useAuth();
-  if (!school) throw new Error('useEventId needs a signed-in user');
-  return school.currentEventId;
+  const { eventId } = useAuth();
+  if (!eventId) throw new Error('useEventId needs a signed-in user');
+  return eventId;
 }

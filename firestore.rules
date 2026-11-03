@@ -11,6 +11,10 @@ service cloud.firestore {
     match /tickets/{ticketId} {
       allow read: if signedIn() && (resource.data.ownerUid == request.auth.uid || role() == 'admin');
     }
+    // 학교 이름·상징색·메일 도메인. 로그인한 사람은 누구나 읽는다
+    match /schools/{schoolId} {
+      allow read: if signedIn();
+    }
     match /events/{eventId} {
       allow read: if signedIn();
       match /waitlist/{email} {

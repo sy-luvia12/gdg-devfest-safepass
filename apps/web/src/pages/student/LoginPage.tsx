@@ -9,7 +9,7 @@ import { Orb } from '@/components/Orb';
 import { StateView } from '@/components/StateView';
 import { getMyTicket, USE_MOCK } from '@/lib/api';
 import { MOCK_OUTSIDER, MOCK_SCHOOL_ACCOUNTS, mockReset, mockSelectAccount, mockSelectedAccount } from '@/lib/mock';
-import { ApiError, type School, type User } from '@/types';
+import { ApiError, type User } from '@/types';
 
 // mock일 때만 쓰는 데모 계정 전환 패널. 숨기려면 VITE_DEMO_PANEL=off
 const SHOW_DEMO_PANEL = USE_MOCK && import.meta.env.VITE_DEMO_PANEL !== 'off';
@@ -20,20 +20,19 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const goHome = async (u: User, school: School) => {
+  const goHome = async (u: User, eventCount: number, eventId: string) => {
     if (u.role !== 'student') return navigate(homePathFor(u.role), { replace: true });
     const gate = studentGatePath(u);
     if (gate) return navigate(gate, { replace: true });
-    const ticket = await getMyTicket(school.currentEventId);
-    navigate(ticket ? '/ticket' : '/event', { replace: true });
+    navigate(await studentHome(eventCount, eventId), { replace: true });
   };
 
   const onStart = async () => {
     setSubmitting(true);
     setError(null);
     try {
-      const { user: u, school } = await signIn();
-      await goHome(u, school);
+      const { user: u, events, eventId } = await signIn();
+      await goHome(u, events.length, eventId);
     } catch (e) {
       setError(
         e instanceof ApiError && e.code === 'not_school_account'
@@ -89,17 +88,22 @@ export function LoginPage() {
   );
 }
 
-/** 이미 로그인한 학생: 입장권 유무에 따라 /ticket 또는 /event */
+/** 행사가 여러 개면 축제 목록, 하나면 입장권 유무에 따라 /ticket 또는 /event */
+async function studentHome(eventCount: number, eventId: string): Promise<string> {
+  if (eventCount > 1) return '/events';
+  const ticket = await getMyTicket(eventId).catch(() => null);
+  return ticket ? '/ticket' : '/event';
+}
+
+/** 이미 로그인한 학생 */
 function StudentRedirect() {
   const eventId = useEventId();
-  const { user } = useAuth();
+  const { user, events } = useAuth();
   const gate = user ? studentGatePath(user) : null;
   const [to, setTo] = useState<string | null>(null);
   useEffect(() => {
-    getMyTicket(eventId)
-      .then((t) => setTo(t ? '/ticket' : '/event'))
-      .catch(() => setTo('/event'));
-  }, [eventId]);
+    void studentHome(events.length, eventId).then(setTo);
+  }, [events.length, eventId]);
   if (gate) return <Navigate to={gate} replace />;
   return to ? <Navigate to={to} replace /> : <StateView kind="loading" fullScreen />;
 }

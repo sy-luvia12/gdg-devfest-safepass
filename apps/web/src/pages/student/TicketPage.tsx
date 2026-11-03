@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, History, LayoutDashboard, ShieldCheck, Smartphone, UserRound } from 'lucide-react';
+import { Copy, History, LayoutDashboard, LayoutList, ShieldCheck, Smartphone, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useEventId } from '@/app/AuthProvider';
+import { eventTitle } from '@/app/format';
 import { AppHeader } from '@/components/AppHeader';
 import { BottomBar, Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
@@ -20,7 +21,7 @@ const CANCEL_DONE: Record<Exclude<CancelResult, 'used'>, { title: string; descri
 export function TicketPage() {
   const eventId = useEventId();
   const navigate = useNavigate();
-  const { user, refreshUser } = useAuth();
+  const { user, events, refreshUser } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [ticket, setTicket] = useState<Ticket | null | undefined>(undefined);
   const [error, setError] = useState(false);
@@ -93,6 +94,7 @@ export function TicketPage() {
       title="내 입장권"
       right={
         <>
+          {events.length > 1 && <IconButton icon={LayoutList} label="축제 목록" onClick={() => navigate('/events')} />}
           {user?.role === 'admin' && (
             <IconButton icon={LayoutDashboard} label="관리자 화면" onClick={() => navigate('/admin')} />
           )}
@@ -149,7 +151,7 @@ export function TicketPage() {
     <>
       {header}
       <main className="flex flex-col gap-4 px-5 pb-36 pt-2 md:pb-10">
-        <TicketCard eventName={event.name} ticket={ticket} owner={user} />
+        <TicketCard eventName={eventTitle(event)} ticket={ticket} owner={user} />
         <div className="flex flex-col items-center gap-1.5 text-caption text-ink-2">
           <p className="flex items-center gap-1.5">
             <Smartphone size={16} strokeWidth={1.75} />

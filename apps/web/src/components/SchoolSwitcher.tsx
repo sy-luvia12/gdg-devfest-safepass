@@ -1,22 +1,59 @@
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '@/app/AuthProvider';
+import { eventTitle } from '@/app/format';
 import { cx } from './cx';
 
-/** 관리자·스태프가 볼 학교(행사)를 고른다. 고를 학교가 2곳 이상일 때만 보인다 */
+/** 관리자·스태프가 볼 학교와 행사를 고른다. 고를 것이 2개 이상인 칸만 보인다 */
 export function SchoolSwitcher({ className }: { className?: string }) {
-  const { school, schools, selectSchool } = useAuth();
-  if (!school || schools.length < 2) return null;
+  const { school, schools, events, eventId, selectSchool, selectEvent } = useAuth();
+  if (!school) return null;
+  const showSchools = schools.length > 1;
+  const showEvents = events.length > 1;
+  if (!showSchools && !showEvents) return null;
   return (
-    <label className={cx('relative inline-flex h-8 items-center rounded-full bg-surface', className)}>
-      <span className="sr-only">학교 선택</span>
+    <div className={cx('flex flex-wrap items-center gap-2', className)}>
+      {showSchools && (
+        <Select
+          label="학교 선택"
+          value={school.id}
+          options={schools.map((s) => ({ value: s.id, label: s.name }))}
+          onChange={(id) => void selectSchool(id)}
+        />
+      )}
+      {showEvents && (
+        <Select
+          label="행사 선택"
+          value={eventId ?? ''}
+          options={events.map((e) => ({ value: e.id, label: eventTitle(e) }))}
+          onChange={selectEvent}
+        />
+      )}
+    </div>
+  );
+}
+
+function Select({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="relative inline-flex h-8 min-w-0 items-center rounded-full bg-surface">
+      <span className="sr-only">{label}</span>
       <select
-        value={school.id}
-        onChange={(e) => selectSchool(e.target.value)}
-        className="h-full cursor-pointer appearance-none rounded-full bg-transparent pl-3 pr-8 text-label text-ink outline-none focus-visible:ring-2 focus-visible:ring-lavender"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-full min-w-0 max-w-[12rem] cursor-pointer appearance-none truncate rounded-full bg-transparent pl-3 pr-8 text-label text-ink outline-none focus-visible:ring-2 focus-visible:ring-lavender"
       >
-        {schools.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>

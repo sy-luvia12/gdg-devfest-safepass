@@ -50,6 +50,18 @@
 | issuedCount | number | 발급 수 (NFT 번호 생성에도 사용) |
 | enteredCount | number | 입장 수 (관리자 화면 실시간 표시) |
 | reassignMode | `'queue' \| 'random'` | 취소표 재배정 방식. 운영측이 행사별로 한 번 정한다 (프로토타입은 시드 데이터). `queue`는 대기 순서대로, `random`은 대기 명단에서 무작위 |
+| schoolIds | string[] | 참여 학교 (`schools` 문서 id). 학생 화면의 축제 목록과 관리자 학교 선택에 쓴다. 고연전은 `['korea', 'yonsei']` |
+| seriesName | map? | 묶음 이름을 학교별로 (예: `{ korea: '고연전', yonsei: '연고전' }`). 이때 `name`은 경기 이름 |
+| place | string | 장소 |
+
+### `schools/{schoolId}`
+학교 이름과 상징색. 로그인한 사람은 누구나 읽는다. 쓰기는 시드(`functions/seed.ts`)만.
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| name | string | 학교 이름 |
+| brandColor | string | 상징색 hex. 앱 테마 기본색 |
+| domains | string[] | 학교 메일 도메인. 학생의 학교를 정한다 |
 
 ### `tickets/{ticketId}`
 | 필드 | 타입 | 설명 |

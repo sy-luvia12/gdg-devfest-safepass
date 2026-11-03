@@ -172,6 +172,7 @@ function seed(): MockState {
       ...event,
       id: eventId,
       schoolId: school.id,
+      schoolIds: [school.id],
       allowedDomains: [school.domain],
       theme: { source: 'school', colors: [] },
       settings: { requireRoster: false },
@@ -428,7 +429,12 @@ export async function getSchool(schoolId: string): Promise<School> {
   return school;
 }
 
-/** 관리자·스태프가 고를 수 있는 학교(행사). mock은 자기 학교만 */
+/** 학교가 참여하는 행사. mock은 학교당 1개 */
+export async function listEvents(schoolId: string): Promise<Event[]> {
+  return load().events.filter((e) => e.schoolId === schoolId);
+}
+
+/** 관리자·스태프가 고를 수 있는 학교. mock은 자기 학교만 */
 export async function listSchools(): Promise<School[]> {
   const s = load();
   const uid = currentUid();

@@ -13,20 +13,20 @@ const ThemeContext = createContext<ThemeState | null>(null);
 
 /** 로그인한 학교의 행사 테마(행사 디자인 > 학교 상징색 > 기본)를 :root에 적용한다 */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { school } = useAuth();
+  const { school, eventId } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
 
   useEffect(() => {
     setEvent(null);
-    if (!school) return;
+    if (!school || !eventId) return;
     let cancelled = false;
-    getEvent(school.currentEventId)
+    getEvent(eventId)
       .then((e) => !cancelled && setEvent(e))
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [school]);
+  }, [school, eventId]);
 
   useEffect(() => {
     // 로그인 전(로그인 화면)은 항상 SafePass 기본 보라 테마

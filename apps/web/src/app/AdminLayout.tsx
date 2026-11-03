@@ -17,6 +17,7 @@ import {
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
+import { eventTitle } from '@/app/format';
 import { SchoolSwitcher } from '@/components/SchoolSwitcher';
 import { getEvent, listDeviceResets, listPendingVerifications } from '@/lib/api';
 import type { Event } from '@/types';
@@ -62,7 +63,7 @@ export function AdminLayout() {
   const eventId = useEventId();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { school, schools, signOut } = useAuth();
+  const { school, signOut } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [badges, setBadges] = useState({ approvals: 0, devices: 0 });
 
@@ -92,10 +93,9 @@ export function AdminLayout() {
       <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
           <div className="min-w-0">
-            {schools.length < 2 && <p className="text-label text-ink-3">{school?.name} · SafePass 관리자</p>}
-            <h1 className="truncate text-heading text-ink">{event?.name ?? '행사'}</h1>
+            <p className="text-label text-ink-3">{school?.name} · SafePass 관리자</p>
+            <h1 className="truncate text-heading text-ink">{event ? eventTitle(event) : '행사'}</h1>
           </div>
-          <SchoolSwitcher className="mr-auto shrink-0" />
           <div className="flex items-center gap-2">
             <Button
               variant="secondary"
@@ -122,6 +122,8 @@ export function AdminLayout() {
             />
           </div>
         </div>
+        {/* 학교·행사 고르기 (고를 것이 있을 때만) */}
+        <SchoolSwitcher className="mx-auto max-w-admin px-5 pb-3 md:px-8" />
         {/* 폰·태블릿: 가로 스크롤 메뉴 */}
         <nav aria-label="관리자 메뉴" className="flex gap-1 overflow-x-auto px-5 pb-3 [scrollbar-width:none] lg:hidden">
           {NAV.flatMap((g) => g.items).map((item) => (
