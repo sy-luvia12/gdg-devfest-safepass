@@ -186,7 +186,9 @@ export function TicketPage() {
             <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
               <p className="text-body text-ink">입장권을 취소할까요?</p>
               <p className="text-caption text-ink-2">
-                취소하면 되돌릴 수 없어요. 입장권은 학생회가 정한 방식으로 대기 명단의 다른 재학생에게 넘어가요
+                취소하면 되돌릴 수 없어요.
+                {event.allowReissueAfterCancel ? '' : ' 이 축제 입장권은 다시 받을 수 없어요.'} 입장권은 학생회가 정한
+                방식으로 대기 명단의 다른 재학생에게 넘어가요
               </p>
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" disabled={cancelling} onClick={() => setAskCancel(false)}>

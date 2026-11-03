@@ -57,6 +57,8 @@ export type Event = {
   theme: EventTheme;
   settings: EventSettings;
   reassignMode: ReassignMode;
+  /** 테스트용: 취소한 학생도 다시 받을 수 있음. 실제 행사는 false (노션 "요청 처리 방침") */
+  allowReissueAfterCancel: boolean;
   dataRetentionDays: number; // 행사 후 개인정보 보관 기간 (기술 설계 2.6)
 };
 
@@ -92,6 +94,7 @@ export type Reassignment = {
   ticketId: string;
   eventId: string;
   nftTokenId: string;
+  fromUid?: string;
   fromName: string;
   toName?: string; // released면 없음
   mode: ReassignMode;
@@ -161,6 +164,7 @@ export class ApiError extends Error {
     | 'not_in_roster'
     | 'invalid_state'
     | 'device_blocked' // 다른 기기에 등록된 계정
+    | 'cancelled_before' // 이 행사 입장권을 취소한 적이 있음
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);

@@ -74,20 +74,20 @@ export function DevicePage() {
           </div>
         ) : (
           <p className="w-full rounded-md bg-surface px-4 py-3 text-left text-label text-ink-2">
-            폰을 바꿨다면 학생회에 학생증과 함께 {user.email} 계정의 기기 초기화를 요청해 주세요. 초기화되면 이 폰이 새
-            기기로 등록돼요.
+            폰을 바꿨다면 아래 버튼으로 초기화를 요청하고, 학생회에 학생증을 보여 주세요. 초기화되면 이 폰이 새 기기로
+            등록돼요.
           </p>
         )}
         {request && (
           <p className="w-full rounded-md bg-warning-bg px-4 py-3 text-label text-warning">
-            {formatAgo(request.requestedAt)}에 초기화를 요청했어요. 학생회가 확인하면 이 기기로 다시 등록돼요
+            {formatAgo(request.requestedAt)} 초기화를 요청했어요. 학생회가 확인하면 이 기기로 다시 등록돼요
           </p>
         )}
         {USE_MOCK && <NextStepNote>기기 서명 QR은 다음 단계에서 적용돼요. 지금은 화면 흐름만 볼 수 있어요.</NextStepNote>}
       </main>
       <BottomBar>
         {error && <p role="alert" className="text-center text-caption text-danger">요청하지 못했어요. 다시 시도해 주세요</p>}
-        {request || !USE_MOCK ? (
+        {request ? (
           <Button variant="secondary" loading={busy} onClick={onCheck}>
             초기화됐는지 확인하기
           </Button>

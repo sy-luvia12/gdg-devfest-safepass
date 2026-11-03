@@ -11,7 +11,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { StateView } from '@/components/StateView';
 import { ThemeEditor } from '@/components/ThemeEditor';
 import { Toggle } from '@/components/Toggle';
-import { updateEventSettings, updateReassignMode } from '@/lib/api';
+import { updateAllowReissue, updateEventSettings, updateReassignMode } from '@/lib/api';
 import type { EventSettings, ReassignMode } from '@/types';
 
 const MODES: { value: ReassignMode; icon: typeof ListOrdered; title: string; text: string }[] = [
@@ -24,7 +24,7 @@ export function SettingsPage() {
   const { event, setEvent } = useAdmin();
   const { school } = useAuth();
   const { setThemeEvent } = useTheme();
-  const [saving, setSaving] = useState<keyof EventSettings | 'reassignMode' | null>(null);
+  const [saving, setSaving] = useState<keyof EventSettings | 'reassignMode' | 'allowReissue' | null>(null);
   const [error, setError] = useState(false);
 
   if (!event || !school) return <StateView kind="loading" />;
@@ -47,6 +47,18 @@ export function SettingsPage() {
     setError(false);
     try {
       setEvent(await updateReassignMode(event.id, mode));
+    } catch {
+      setError(true);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const toggleReissue = async (allow: boolean) => {
+    setSaving('allowReissue');
+    setError(false);
+    try {
+      setEvent(await updateAllowReissue(event.id, allow));
     } catch {
       setError(true);
     } finally {
@@ -109,6 +121,15 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+          <Card>
+            <Toggle
+              label="취소 후 다시 받기 허용 (테스트용)"
+              description="켜면 입장권을 취소한 학생도 다시 받을 수 있어요. 테스트할 때만 켜고, 실제 행사 전에는 꺼 주세요"
+              checked={event.allowReissueAfterCancel}
+              disabled={saving !== null}
+              onChange={toggleReissue}
+            />
+          </Card>
           {error && <p className="text-caption text-danger">저장하지 못했어요. 다시 시도해 주세요</p>}
         </Section>
 

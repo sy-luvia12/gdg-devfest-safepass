@@ -19,6 +19,7 @@ import type { Callables, UserProfile } from '../../../../functions/src/api';
 import {
   ApiError,
   type CancelResult,
+  type DeviceResetRequest,
   type Event,
   type EventStats,
   type ReassignMode,
@@ -47,6 +48,7 @@ function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e;
   if (e instanceof FunctionsError) {
     const code = e.code.replace('functions/', '');
+    if (deviceReason(e) === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
     if (code === 'permission-denied') return new ApiError('not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
     if (code === 'not-found') return new ApiError('not_found');
@@ -56,6 +58,7 @@ function toApiError(e: unknown): ApiError {
   return new ApiError('unknown');
 }
 
+/** 함수 오류의 details.reason (기기 확인 실패, 재발급 금지 등) */
 function deviceReason(e: unknown): string | undefined {
   if (!(e instanceof FunctionsError)) return undefined;
   const details = e.details as { reason?: string } | undefined;
@@ -96,6 +99,7 @@ function toEvent(id: string, d: DocumentData): Event {
     theme: { source: 'school', colors: [] },
     settings: { requireRoster: false },
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
+    allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };
 }
@@ -375,14 +379,16 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
   return Promise.all(
     snap.docs.map(async (d) => {
       const r = d.data();
-      const ticket = await getDoc(doc(db, 'tickets', r.ticketId));
+      // 새 기록은 표시용 값을 같이 저장한다. 예전 기록만 따로 찾아 붙인다
+      const ticket = r.nftNumber ? null : await getDoc(doc(db, 'tickets', r.ticketId));
       return {
         id: d.id,
         ticketId: r.ticketId,
-        eventId: (ticket.get('eventId') as string | undefined) ?? eventId,
-        nftTokenId: (ticket.get('nftNumber') as string | undefined) ?? '-',
-        fromName: (await userName(r.fromUid, names)) ?? '알 수 없음',
-        toName: await userName(r.toUid, names),
+        eventId: r.eventId ?? (ticket?.get('eventId') as string | undefined) ?? eventId,
+        nftTokenId: r.nftNumber ?? (ticket?.get('nftNumber') as string | undefined) ?? '-',
+        fromUid: r.fromUid,
+        fromName: r.fromName || ((await userName(r.fromUid, names)) ?? '알 수 없음'),
+        toName: r.toUid ? r.toName || (await userName(r.toUid, names)) : undefined,
         mode: r.mode === 'random' ? 'random' : 'queue',
         outcome: r.toUid ? 'reassigned' : 'released',
         createdAt: millis(r.createdAt),
@@ -428,4 +434,68 @@ export async function resetDeviceByEmail(email: string): Promise<string> {
     throw toApiError(e);
   }
   return (account.get('name') as string | undefined) ?? email;
+}
+
+export async function updateAllowReissue(eventId: string, allow: boolean): Promise<Event> {
+  try {
+    await call('setAllowReissue')({ eventId, allow });
+  } catch (e) {
+    throw toApiError(e);
+  }
+  return getEvent(eventId);
+}
+
+// ---------- 기기 초기화 요청 (deviceResets/{uid}) ----------
+
+function toDeviceReset(id: string, d: DocumentData): DeviceResetRequest {
+  return {
+    id,
+    uid: d.uid ?? id,
+    userName: d.name ?? '',
+    studentId: d.studentId ?? '',
+    deviceName: d.email ?? '',
+    requestedAt: millis(d.requestedAt) || Date.now(),
+    status: d.status === 'done' ? 'done' : 'pending',
+  };
+}
+
+export async function requestDeviceReset(): Promise<DeviceResetRequest> {
+  try {
+    await call('requestDeviceReset')();
+  } catch (e) {
+    throw toApiError(e);
+  }
+  const mine = await getMyDeviceReset();
+  if (!mine) throw new ApiError('unknown');
+  return mine;
+}
+
+export async function getMyDeviceReset(): Promise<DeviceResetRequest | null> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const snap = await getDoc(doc(db, 'deviceResets', uid));
+  const reset = snap.exists() ? toDeviceReset(snap.id, snap.data()) : null;
+  return reset?.status === 'pending' ? reset : null;
+}
+
+export async function listDeviceResets(): Promise<DeviceResetRequest[]> {
+  const snap = await getDocs(query(collection(db, 'deviceResets'), orderBy('requestedAt', 'desc'), limit(200)));
+  return snap.docs.map((d) => toDeviceReset(d.id, d.data()));
+}
+
+/** 요청 문서 id가 학생 uid라서 그대로 resetDevice에 넘긴다 */
+export async function resolveDeviceReset(id: string): Promise<void> {
+  try {
+    await call('resetDevice')({ uid: id });
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 스태프 본인 검표 기록. 규칙상 staffUid 조건이 있어야 읽을 수 있고, 복합 색인을 피하려고 정렬은 여기서 한다 */
+export async function getMyScanHistory(): Promise<ScanLog[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new ApiError('unauthenticated');
+  const snap = await getDocs(query(collection(db, 'scanLogs'), where('staffUid', '==', uid), limit(500)));
+  return snap.docs.map((d) => toScanLog(d.id, d.data())).sort((a, b) => b.at - a.at);
 }

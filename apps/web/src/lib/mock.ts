@@ -25,7 +25,7 @@ import {
   type WaitlistEntry,
 } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v4';
+const STATE_KEY = 'safepass-mock-v5';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
@@ -176,6 +176,7 @@ function seed(): MockState {
       theme: { source: 'school', colors: [] },
       settings: { requireRoster: false },
       reassignMode: 'queue',
+      allowReissueAfterCancel: false,
       dataRetentionDays: 7,
     });
     for (const p of ps) {
@@ -564,6 +565,9 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   if (!event.allowedDomains.includes(domainOf(user.email))) throw new ApiError('not_school_account');
   const existing = s.tickets.find((t) => t.eventId === eventId && t.ownerUid === user.uid);
   if (existing) return existing;
+  // 취소한 학생은 다시 받을 수 없다 (테스트 행사만 예외)
+  const cancelledBefore = s.reassignments.some((r) => r.eventId === eventId && r.fromUid === user.uid);
+  if (cancelledBefore && !event.allowReissueAfterCancel) throw new ApiError('cancelled_before');
   if (event.settings.requireRoster) {
     const inRoster = s.rosters[eventId]?.entries.some((r) => r.email.toLowerCase() === user.email.toLowerCase());
     if (!inRoster) throw new ApiError('not_in_roster');
@@ -667,6 +671,7 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
     ticketId,
     eventId: event.id,
     nftTokenId: ticket.nftTokenId,
+    fromUid: me.uid,
     fromName: me.name,
     toName: next?.name,
     mode: event.reassignMode,
@@ -773,6 +778,17 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
   const s = load();
   requireUser(s, ['admin']);
   return s.reassignments.filter((r) => r.eventId === eventId).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function updateAllowReissue(eventId: string, allow: boolean): Promise<Event> {
+  await wait();
+  const s = load();
+  const user = requireUser(s, ['admin']);
+  const event = findEvent(s, eventId);
+  if (user.schoolId !== event.schoolId) throw new ApiError('unauthenticated');
+  event.allowReissueAfterCancel = allow;
+  save(s);
+  return event;
 }
 
 export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {

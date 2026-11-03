@@ -114,7 +114,7 @@ export function DevicesPage() {
           </p>
         )}
       </Card>
-      {!USE_MOCK ? null : error ? (
+      {error ? (
         <StateView
           kind="error"
           title="요청을 불러오지 못했어요"
@@ -130,7 +130,7 @@ export function DevicesPage() {
           columns={[
             { header: '이름', cell: (r) => r.userName },
             { header: '학번', cell: (r) => <span className="text-ink-2 tabular">{r.studentId}</span> },
-            { header: '이전 기기', cell: (r) => <span className="text-ink-2">{r.deviceName}</span> },
+            { header: USE_MOCK ? '이전 기기' : '계정', cell: (r) => <span className="text-ink-2">{r.deviceName}</span> },
             { header: '요청', cell: (r) => <span className="text-caption text-ink-3">{formatAgo(r.requestedAt)}</span> },
             { header: '', className: 'text-right', cell: action },
           ]}
