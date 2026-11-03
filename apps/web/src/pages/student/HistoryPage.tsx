@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Sparkles } from 'lucide-react';
+import { CheckCircle2, ListOrdered, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useEventId } from '@/app/AuthProvider';
 import { formatDateTime } from '@/app/format';
@@ -13,14 +13,13 @@ import type { Event, Ticket, TicketHistoryItem } from '@/types';
 
 const kinds: Record<TicketHistoryItem['type'], { icon: LucideIcon; title: string; cls: string }> = {
   issued: { icon: Sparkles, title: '입장권 발급', cls: 'bg-lavender text-ink' },
-  transfer_out: { icon: ArrowUpRight, title: '양도 보냄', cls: 'bg-warning-bg text-warning' },
-  transfer_in: { icon: ArrowDownLeft, title: '양도 받음', cls: 'bg-sky text-ink' },
+  reassigned: { icon: ListOrdered, title: '취소표 배정', cls: 'bg-sky text-ink' },
   used: { icon: CheckCircle2, title: '입장 완료', cls: 'bg-success-bg text-success' },
 };
 
 const shortHash = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
 
-/** 입장권 발급·양도·입장 기록. 온체인 기록을 사람이 읽을 수 있게 보여준다 */
+/** 입장권 발급·재배정·입장 기록. 온체인 기록을 사람이 읽을 수 있게 보여준다 */
 export function HistoryPage() {
   const eventId = useEventId();
   const navigate = useNavigate();
@@ -37,7 +36,7 @@ export function HistoryPage() {
   }, [eventId]);
   useEffect(load, [load]);
 
-  const header = <AppHeader title="발급·양도 기록" back="/ticket" />;
+  const header = <AppHeader title="발급·입장 기록" back="/ticket" />;
 
   if (error)
     return (
@@ -109,8 +108,8 @@ export function HistoryPage() {
         </ol>
 
         <NextStepNote>
-          발급과 양도 기록은 학생회도 고칠 수 없게 블록체인에 남겨요. 프로토타입은 표시용 기록이고, 테스트넷 연동은 다음
-          단계예요.
+          입장권 번호와 발급·재배정·입장 기록은 학생회도 고칠 수 없게 블록체인에 남겨 진짜 입장권인지 확인할 수 있어요.
+          프로토타입은 표시용 기록이고, 테스트넷 연동은 다음 단계예요.
         </NextStepNote>
       </main>
     </>

@@ -4,8 +4,32 @@
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "apps/web", "--", "--port", "5173", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "apps/web",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
       "port": 5173
+    },
+    {
+      "name": "web-mock",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:mock",
+        "--prefix",
+        "apps/web",
+        "--",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
     }
   ]
 }

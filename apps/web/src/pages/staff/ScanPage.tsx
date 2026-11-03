@@ -10,7 +10,7 @@ import { IconButton } from '@/components/IconButton';
 import { ResultSheet, type SheetState } from '@/components/ResultSheet';
 import { ScanFrame } from '@/components/ScanFrame';
 import { StateView } from '@/components/StateView';
-import { confirmEntry, subscribeStaffStats, verifyEntry } from '@/lib/api';
+import { subscribeStaffStats, verifyEntry } from '@/lib/api';
 import type { StaffStats } from '@/types';
 
 const READER_ID = 'qr-reader';
@@ -24,7 +24,6 @@ export function ScanPage() {
   const busyRef = useRef(false);
   const [camera, setCamera] = useState<CameraState>('starting');
   const [sheet, setSheet] = useState<SheetState | null>(null);
-  const [confirming, setConfirming] = useState<boolean | null>(null);
   const [stats, setStats] = useState<StaffStats | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState(false);
@@ -40,11 +39,7 @@ export function ScanPage() {
     setVerifyError(false);
     try {
       const r = await verifyEntry(payload);
-      setSheet(
-        r.needsConfirm && r.user && r.ticketId
-          ? { step: 'confirm', ticketId: r.ticketId, user: r.user, nftTokenId: r.nftTokenId }
-          : { step: 'done', result: r.result, user: r.user, nftTokenId: r.nftTokenId, usedAt: r.usedAt },
-      );
+      setSheet({ result: r.result, user: r.user, nftTokenId: r.nftTokenId, usedAt: r.usedAt });
     } catch {
       setVerifyError(true);
       busyRef.current = false;
@@ -80,20 +75,6 @@ export function ScanPage() {
   }, [check]);
 
   useEffect(() => subscribeStaffStats(eventId, setStats), [eventId]);
-
-  const onConfirm = async (match: boolean) => {
-    if (sheet?.step !== 'confirm') return;
-    setConfirming(match);
-    try {
-      const { result } = await confirmEntry(sheet.ticketId, match);
-      setSheet({ step: 'done', result, user: sheet.user, nftTokenId: sheet.nftTokenId });
-    } catch {
-      setVerifyError(true);
-      onNext();
-    } finally {
-      setConfirming(null);
-    }
-  };
 
   const onNext = () => {
     setSheet(null);
@@ -174,7 +155,7 @@ export function ScanPage() {
         <ul className="flex flex-col gap-3">
           <Guide icon={Sun} text="학생에게 화면 밝기를 최대로 올려 달라고 해 주세요" />
           <Guide icon={ImageOff} text="캡처한 화면은 만료된 QR로 거부돼요" />
-          <Guide icon={UserCheck} text="사진과 얼굴을 대조한 뒤에 입장 처리해 주세요" />
+          <Guide icon={UserCheck} text="입장 처리되면 학생 사진이 떠요. 얼굴을 한 번 확인해 주세요" />
         </ul>
 
         <div className="border-t border-line pt-4">
@@ -191,7 +172,7 @@ export function ScanPage() {
               <input
                 value={manual}
                 onChange={(e) => setManual(e.target.value)}
-                placeholder="safepass:..."
+                placeholder="QR 내용 붙여넣기"
                 aria-label="QR 내용"
                 className="h-10 min-w-0 flex-1 rounded-md bg-surface px-4 text-label text-ink outline-none placeholder:text-ink-3 focus:bg-bg focus:ring-[1.5px] focus:ring-lavender"
               />
@@ -203,7 +184,7 @@ export function ScanPage() {
         </div>
       </main>
 
-      {sheet && <ResultSheet state={sheet} onNext={onNext} onConfirm={onConfirm} confirming={confirming} />}
+      {sheet && <ResultSheet state={sheet} onNext={onNext} />}
     </>
   );
 }

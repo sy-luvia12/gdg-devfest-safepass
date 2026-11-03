@@ -4,11 +4,14 @@
 
 import {
   ApiError,
+  type CancelResult,
   type DeviceResetRequest,
   type Event,
   type EventSettings,
   type EventStats,
   type EventTheme,
+  type Reassignment,
+  type ReassignMode,
   type RosterEntry,
   type ScanLog,
   type ScanResult,
@@ -17,13 +20,12 @@ import {
   type Ticket,
   type TicketHistoryItem,
   type TicketRow,
-  type Transfer,
-  type TransferView,
   type User,
   type VerifyResult,
+  type WaitlistEntry,
 } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v3';
+const STATE_KEY = 'safepass-mock-v4';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
@@ -38,7 +40,8 @@ type MockState = {
   tickets: Ticket[];
   /** 지난 QR 토큰. 캡처한 QR을 "만료"로 판정하기 위해 남겨 둔다. */
   pastTokens: Record<string, string>; // token → ticketId
-  transfers: Transfer[];
+  reassignments: Reassignment[];
+  waitlists: Record<string, WaitlistEntry[]>; // eventId → 대기 명단
   scanLogs: ScanLog[];
   rosters: Record<string, Roster>; // eventId → 명단
   deviceResets: DeviceResetRequest[];
@@ -153,13 +156,14 @@ function seed(): MockState {
     events: [],
     tickets: [],
     pastTokens: {},
-    transfers: [],
+    reassignments: [],
+    waitlists: {},
     scanLogs: [],
     rosters: {},
     deviceResets: [],
     seq: 100,
   };
-  const logResults: ScanResult[] = ['ok', 'ok', 'expired', 'ok', 'used', 'ok', 'mismatch', 'ok', 'invalid', 'ok'];
+  const logResults: ScanResult[] = ['ok', 'ok', 'expired', 'ok', 'used', 'ok', 'expired', 'ok', 'invalid', 'ok'];
 
   for (const { school, event, people: ps } of SEED) {
     const eventId = `${school.id}-2026-fall`;
@@ -170,7 +174,8 @@ function seed(): MockState {
       schoolId: school.id,
       allowedDomains: [school.domain],
       theme: { source: 'school', colors: [] },
-      settings: { requireRoster: false, twoStepCheck: true },
+      settings: { requireRoster: false },
+      reassignMode: 'queue',
       dataRetentionDays: 7,
     });
     for (const p of ps) {
@@ -202,22 +207,31 @@ function seed(): MockState {
           issuedAt: now - 2 * 86_400_000,
         };
         s.tickets.push(ticket);
-        // 웃돈 양도 시도가 막힌 기록 (관리자 "양도 기록" 데모)
-        const admin = `council@${school.domain}`;
-        [30000, 50000].forEach((extra, i) => {
-          s.transfers.push({
-            id: `seed-tr-${uid}-${i}`,
-            ticketId: ticket.id,
+        // 취소·재배정 기록 (관리자 "취소·재배정" 데모)
+        s.reassignments.push(
+          {
+            id: `seed-ra-${school.id}-1`,
+            ticketId: `seed-${school.id}-cancel-1`,
             eventId,
-            fromUid: uid,
-            toEmail: admin,
-            price: event.faceValue + extra,
-            result: 'rejected',
-            reason: 'over_face_value',
-            createdAt: now - (i + 1) * 5_400_000,
-            resolvedAt: now - (i + 1) * 5_400_000,
-          });
-        });
+            nftTokenId: `#${String(event.issuedCount - 40).padStart(4, '0')}`,
+            fromName: FAKE_NAMES[1],
+            toName: FAKE_NAMES[4],
+            mode: 'queue',
+            outcome: 'reassigned',
+            createdAt: now - 7_200_000,
+          },
+          {
+            id: `seed-ra-${school.id}-2`,
+            ticketId: `seed-${school.id}-cancel-2`,
+            eventId,
+            nftTokenId: `#${String(event.issuedCount - 12).padStart(4, '0')}`,
+            fromName: FAKE_NAMES[3],
+            mode: 'queue',
+            outcome: 'reassigned',
+            toName: FAKE_NAMES[5],
+            createdAt: now - 2_700_000,
+          },
+        );
       }
     }
     const staffUid = `${school.id}-staff`;
@@ -232,6 +246,14 @@ function seed(): MockState {
         at: now - (i + 1) * 47_000,
       });
     });
+    // 대기 명단: 앞의 두 명은 이미 배정받음. 승인 대기 학생도 줄 서 있다
+    s.waitlists[eventId] = [
+      { email: `wait1@${school.domain}`, name: FAKE_NAMES[4], order: 1, status: 'assigned' },
+      { email: `wait2@${school.domain}`, name: FAKE_NAMES[5], order: 2, status: 'assigned' },
+      { email: `wait3@${school.domain}`, name: FAKE_NAMES[7], order: 3, status: 'waiting' },
+      { email: `wait4@${school.domain}`, name: FAKE_NAMES[8], order: 4, status: 'waiting' },
+      { email: `wait5@${school.domain}`, name: FAKE_NAMES[9], order: 5, status: 'waiting' },
+    ];
     s.deviceResets.push({
       id: `seed-reset-${school.id}`,
       uid: `${school.id}-fake`,
@@ -343,17 +365,6 @@ function rotateToken(s: MockState, t: Ticket) {
 
 function userByEmail(s: MockState, email: string) {
   return s.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-}
-
-function toView(s: MockState, t: Transfer): TransferView {
-  const ticket = s.tickets.find((x) => x.id === t.ticketId);
-  return {
-    ...t,
-    fromName: s.users.find((u) => u.uid === t.fromUid)?.name ?? '알 수 없음',
-    toName: userByEmail(s, t.toEmail)?.name,
-    eventName: findEvent(s, t.eventId).name,
-    nftTokenId: ticket?.nftTokenId ?? '-',
-  };
 }
 
 function addLog(s: MockState, event: Event, staff: User, result: ScanResult, t?: Ticket) {
@@ -579,140 +590,88 @@ export async function refreshQrToken(ticketId: string): Promise<{ token: string;
   return { token: t.qrToken, expiresAt: t.qrExpiresAt };
 }
 
+/** QR 내용. 실제 백엔드는 TTV1: 접두사 (firebaseApi.ts) */
+export function formatQrPayload(ticketId: string, token: string): string {
+  return `safepass:${ticketId}:${token}`;
+}
+
 export async function getTicketHistory(ticketId: string): Promise<TicketHistoryItem[]> {
   await wait();
   const s = load();
   const user = requireUser(s);
   const t = s.tickets.find((x) => x.id === ticketId);
   if (!t) throw new ApiError('not_found');
-  const moves = s.transfers.filter((tr) => tr.ticketId === ticketId && tr.result === 'success');
-  // 처음 받은 사람: 양도가 있었다면 첫 양도의 보낸 사람, 없으면 지금 주인
-  const firstOwner = moves[0]?.fromUid ?? t.ownerUid;
-  const firstName = s.users.find((u) => u.uid === firstOwner)?.name ?? '';
+  const assigned = s.reassignments.find((r) => r.ticketId === ticketId && r.outcome === 'reassigned');
+  const owner = s.users.find((u) => u.uid === t.ownerUid)?.name ?? '';
   const items: TicketHistoryItem[] = [
-    { type: 'issued', at: t.issuedAt, detail: `${firstName}님에게 발급`, txHash: fakeTxHash(`${t.id}-mint`) },
+    {
+      type: 'issued',
+      at: t.issuedAt,
+      detail: assigned ? `${assigned.fromName}님에게 발급` : `${owner}님에게 발급`,
+      txHash: fakeTxHash(`${t.id}-mint`),
+    },
   ];
-  for (const m of moves) {
-    const from = s.users.find((u) => u.uid === m.fromUid)?.name ?? '';
-    const to = userByEmail(s, m.toEmail)?.name ?? m.toEmail;
+  if (assigned) {
     items.push({
-      type: m.fromUid === user.uid ? 'transfer_out' : 'transfer_in',
-      at: m.resolvedAt ?? m.createdAt,
-      detail: `${from} → ${to} · ${m.price === 0 ? '0원' : `${m.price.toLocaleString('ko-KR')}원`}`,
-      txHash: fakeTxHash(`${m.id}-buy`),
+      type: 'reassigned',
+      at: assigned.createdAt,
+      detail: `취소표를 대기 명단에서 ${user.name}님에게 배정`,
+      txHash: fakeTxHash(`${assigned.id}-reassign`),
     });
   }
   if (t.usedAt) items.push({ type: 'used', at: t.usedAt, detail: '입장 확인', txHash: fakeTxHash(`${t.id}-used`) });
   return items.sort((a, b) => a.at - b.at);
 }
 
-// ---------- 양도 (요청 → 수락) ----------
+// ---------- 입장권 취소 → 대기 명단 재배정 (양도 대체) ----------
 
-export async function transferTicket(ticketId: string, toEmail: string, price: number): Promise<Transfer> {
+function candidates(mode: ReassignMode, waiting: WaitlistEntry[]): WaitlistEntry[] {
+  const list = [...waiting];
+  if (mode === 'queue') return list.sort((a, b) => a.order - b.order);
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+/** 주인이 취소하면 운영진이 정한 방식(순서/무작위)으로 대기자에게 넘긴다. 받을 사람이 없으면 다시 발급 가능 */
+export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   await wait();
   const s = load();
-  const from = requireUser(s);
-  const ticket = s.tickets.find((t) => t.id === ticketId && t.ownerUid === from.uid);
-  if (!ticket || ticket.status !== 'issued') throw new ApiError('not_found');
+  const me = requireUser(s);
+  const ticket = s.tickets.find((t) => t.id === ticketId && t.ownerUid === me.uid);
+  if (!ticket) throw new ApiError('not_found');
+  if (ticket.status === 'used') return 'used';
   const event = findEvent(s, ticket.eventId);
-  if (s.transfers.some((t) => t.ticketId === ticketId && t.result === 'pending')) throw new ApiError('invalid_state');
-
-  const record = (result: Transfer['result'], reason?: Transfer['reason']): Transfer => {
-    const tr: Transfer = {
-      id: nextId(s, 'tr'),
-      ticketId,
-      eventId: event.id,
-      fromUid: from.uid,
-      toEmail: toEmail.trim(),
-      price,
-      result,
-      reason,
-      createdAt: Date.now(),
-      resolvedAt: result === 'pending' ? undefined : Date.now(),
-    };
-    s.transfers.push(tr);
-    save(s);
-    return tr;
+  const waiting = (s.waitlists[event.id] ?? []).filter((w) => w.status === 'waiting');
+  const next = candidates(event.reassignMode, waiting).find((w) => {
+    const account = userByEmail(s, w.email);
+    return !account || !s.tickets.some((t) => t.eventId === event.id && t.ownerUid === account.uid);
+  });
+  const record: Reassignment = {
+    id: nextId(s, 'ra'),
+    ticketId,
+    eventId: event.id,
+    nftTokenId: ticket.nftTokenId,
+    fromName: me.name,
+    toName: next?.name,
+    mode: event.reassignMode,
+    outcome: next ? 'reassigned' : 'released',
+    createdAt: Date.now(),
   };
-
-  if (price > event.faceValue) return record('rejected', 'over_face_value');
-  const to = userByEmail(s, toEmail);
-  if (!to || to.uid === from.uid || !event.allowedDomains.includes(domainOf(to.email))) {
-    return record('rejected', 'not_student');
+  s.reassignments.unshift(record);
+  if (next) {
+    // 대기자가 아직 가입 전이면 메일 주소로 자리를 잡아 둔다
+    ticket.ownerUid = userByEmail(s, next.email)?.uid ?? `waitlist:${next.email}`;
+    rotateToken(s, ticket);
+    next.status = 'assigned';
+  } else {
+    s.tickets = s.tickets.filter((t) => t.id !== ticketId);
+    event.issuedCount -= 1;
   }
-  if (s.tickets.some((t) => t.eventId === ticket.eventId && t.ownerUid === to.uid)) {
-    return record('rejected', 'already_has_ticket');
-  }
-  return record('pending');
-}
-
-export async function getMyTransfers(): Promise<{ incoming: TransferView[]; outgoing: TransferView[] }> {
-  await wait();
-  const s = load();
-  const me = requireUser(s);
-  const pending = s.transfers.filter((t) => t.result === 'pending');
-  return {
-    incoming: pending.filter((t) => t.toEmail.toLowerCase() === me.email.toLowerCase()).map((t) => toView(s, t)),
-    outgoing: pending.filter((t) => t.fromUid === me.uid).map((t) => toView(s, t)),
-  };
-}
-
-export async function getTransfer(transferId: string): Promise<TransferView> {
-  await wait();
-  const s = load();
-  const me = requireUser(s);
-  const t = s.transfers.find((x) => x.id === transferId);
-  if (!t || (t.fromUid !== me.uid && t.toEmail.toLowerCase() !== me.email.toLowerCase())) {
-    throw new ApiError('not_found');
-  }
-  return toView(s, t);
-}
-
-/** 받는 사람이 수락하면 입장권과 대금이 한 번에 이동 (실제는 컨트랙트 buy) */
-export async function acceptTransfer(transferId: string): Promise<Ticket> {
-  await wait();
-  const s = load();
-  const me = requireUser(s);
-  const tr = s.transfers.find((x) => x.id === transferId);
-  if (!tr || tr.toEmail.toLowerCase() !== me.email.toLowerCase()) throw new ApiError('not_found');
-  if (tr.result !== 'pending') throw new ApiError('invalid_state');
-  const ticket = s.tickets.find((t) => t.id === tr.ticketId);
-  if (!ticket || ticket.ownerUid !== tr.fromUid || ticket.status !== 'issued') throw new ApiError('invalid_state');
-  if (s.tickets.some((t) => t.eventId === ticket.eventId && t.ownerUid === me.uid)) {
-    tr.result = 'rejected';
-    tr.reason = 'already_has_ticket';
-    tr.resolvedAt = Date.now();
-    save(s);
-    throw new ApiError('invalid_state');
-  }
-  ticket.ownerUid = me.uid;
-  rotateToken(s, ticket);
-  tr.result = 'success';
-  tr.resolvedAt = Date.now();
   save(s);
-  return ticket;
-}
-
-export async function declineTransfer(transferId: string): Promise<void> {
-  await wait();
-  const s = load();
-  const me = requireUser(s);
-  const tr = s.transfers.find((x) => x.id === transferId && x.toEmail.toLowerCase() === me.email.toLowerCase());
-  if (!tr || tr.result !== 'pending') throw new ApiError('invalid_state');
-  tr.result = 'declined';
-  tr.resolvedAt = Date.now();
-  save(s);
-}
-
-export async function cancelTransfer(transferId: string): Promise<void> {
-  await wait();
-  const s = load();
-  const me = requireUser(s);
-  const tr = s.transfers.find((x) => x.id === transferId && x.fromUid === me.uid);
-  if (!tr || tr.result !== 'pending') throw new ApiError('invalid_state');
-  tr.result = 'cancelled';
-  tr.resolvedAt = Date.now();
-  save(s);
+  return record.outcome;
 }
 
 // ---------- 검표 ----------
@@ -747,38 +706,12 @@ export async function verifyEntry(qrPayload: string): Promise<VerifyResult> {
   if (!isCurrent && !isPast) return fail('invalid', ticket);
   if (isPast || Date.now() > ticket.qrExpiresAt) return fail('expired', ticket);
 
-  // 2단계 검표: 여기서는 확인만 하고, 스태프가 사진을 대조한 뒤 confirmEntry로 확정
-  if (event.settings.twoStepCheck) {
-    return { result: 'ok', user: userView, nftTokenId: ticket.nftTokenId, ticketId: ticket.id, needsConfirm: true };
-  }
   ticket.status = 'used';
   ticket.usedAt = Date.now();
   event.enteredCount += 1;
   addLog(s, event, staff, 'ok', ticket);
   save(s);
   return { result: 'ok', user: userView, nftTokenId: ticket.nftTokenId, ticketId: ticket.id };
-}
-
-/** 2단계 검표 확정. match=false면 얼굴 불일치로 거부 기록 */
-export async function confirmEntry(ticketId: string, match: boolean): Promise<{ result: 'ok' | 'mismatch' | 'used' }> {
-  await wait();
-  const s = load();
-  const staff = requireUser(s, ['staff', 'admin']);
-  const event = myEvent(s, staff);
-  const ticket = s.tickets.find((t) => t.id === ticketId && t.eventId === event.id);
-  if (!ticket) throw new ApiError('not_found');
-  if (ticket.status === 'used') return { result: 'used' };
-  if (!match) {
-    addLog(s, event, staff, 'mismatch', ticket);
-    save(s);
-    return { result: 'mismatch' };
-  }
-  ticket.status = 'used';
-  ticket.usedAt = Date.now();
-  event.enteredCount += 1;
-  addLog(s, event, staff, 'ok', ticket);
-  save(s);
-  return { result: 'ok' };
 }
 
 export function subscribeStaffStats(eventId: string, cb: (s: StaffStats) => void): () => void {
@@ -822,14 +755,29 @@ export async function listEntries(eventId: string): Promise<ScanLog[]> {
   return s.scanLogs.filter((l) => l.eventId === eventId);
 }
 
-export async function listTransfers(eventId: string): Promise<TransferView[]> {
+export async function listReassignments(eventId: string): Promise<Reassignment[]> {
   await wait();
   const s = load();
   requireUser(s, ['admin']);
-  return s.transfers
-    .filter((t) => t.eventId === eventId)
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map((t) => toView(s, t));
+  return s.reassignments.filter((r) => r.eventId === eventId).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
+  await wait();
+  const s = load();
+  requireUser(s, ['admin']);
+  return [...(s.waitlists[eventId] ?? [])].sort((a, b) => a.order - b.order);
+}
+
+export async function updateReassignMode(eventId: string, mode: ReassignMode): Promise<Event> {
+  await wait();
+  const s = load();
+  const user = requireUser(s, ['admin']);
+  const event = findEvent(s, eventId);
+  if (user.schoolId !== event.schoolId) throw new ApiError('unauthenticated');
+  event.reassignMode = mode;
+  save(s);
+  return event;
 }
 
 /** 실제 발급 입장권 + 시드 행사 규모에 맞춘 가짜 행 (프로토타입) */
@@ -842,7 +790,8 @@ export async function listTickets(eventId: string): Promise<TicketRow[]> {
     .filter((t) => t.eventId === eventId)
     .map((t) => {
       const owner = s.users.find((u) => u.uid === t.ownerUid);
-      return { ...t, ownerName: owner?.name ?? '-', ownerStudentId: owner?.studentId ?? '' };
+      const waiter = s.waitlists[eventId]?.find((w) => t.ownerUid === `waitlist:${w.email}`);
+      return { ...t, ownerName: owner?.name ?? waiter?.name ?? '-', ownerStudentId: owner?.studentId ?? '' };
     });
   const now = Date.now();
   const fake: TicketRow[] = Array.from({ length: 24 }, (_, i) => {

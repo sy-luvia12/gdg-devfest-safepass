@@ -1,23 +1,30 @@
 import { useState, type ReactNode } from 'react';
+import { ListOrdered, Shuffle } from 'lucide-react';
 import { useAdmin } from '@/app/AdminLayout';
 import { useAuth } from '@/app/AuthProvider';
-import { formatEventDate, formatWon } from '@/app/format';
+import { formatEventDate } from '@/app/format';
 import { useTheme } from '@/app/ThemeProvider';
 import { Card } from '@/components/Card';
+import { cx } from '@/components/cx';
 import { NextStepNote } from '@/components/NextStepNote';
 import { PageTitle } from '@/components/PageTitle';
 import { StateView } from '@/components/StateView';
 import { ThemeEditor } from '@/components/ThemeEditor';
 import { Toggle } from '@/components/Toggle';
-import { updateEventSettings } from '@/lib/api';
-import type { EventSettings } from '@/types';
+import { updateEventSettings, updateReassignMode, USE_MOCK } from '@/lib/api';
+import type { EventSettings, ReassignMode } from '@/types';
 
-/** 행사 정보 · 입장 규칙 · 개인정보 보관 · 테마 */
+const MODES: { value: ReassignMode; icon: typeof ListOrdered; title: string; text: string }[] = [
+  { value: 'queue', icon: ListOrdered, title: '대기 순서대로', text: '대기 명단에 먼저 등록한 학생부터 받아요' },
+  { value: 'random', icon: Shuffle, title: '무작위', text: '대기 명단 안에서 무작위로 한 명이 받아요' },
+];
+
+/** 행사 정보 · 입장 규칙 · 취소표 재배정 · 개인정보 보관 · 테마 */
 export function SettingsPage() {
   const { event, setEvent } = useAdmin();
   const { school } = useAuth();
   const { setThemeEvent } = useTheme();
-  const [saving, setSaving] = useState<keyof EventSettings | null>(null);
+  const [saving, setSaving] = useState<keyof EventSettings | 'reassignMode' | null>(null);
   const [error, setError] = useState(false);
 
   if (!event || !school) return <StateView kind="loading" />;
@@ -27,6 +34,19 @@ export function SettingsPage() {
     setError(false);
     try {
       setEvent(await updateEventSettings(event.id, { ...event.settings, [key]: value }));
+    } catch {
+      setError(true);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const changeMode = async (mode: ReassignMode) => {
+    if (mode === event.reassignMode) return;
+    setSaving('reassignMode');
+    setError(false);
+    try {
+      setEvent(await updateReassignMode(event.id, mode));
     } catch {
       setError(true);
     } finally {
@@ -46,7 +66,6 @@ export function SettingsPage() {
             <Row label="일시" value={formatEventDate(event.date)} />
             <Row label="장소" value={event.place} />
             <Row label="정원" value={`${event.capacity.toLocaleString('ko-KR')}명`} />
-            <Row label="정가" value={formatWon(event.faceValue)} />
             <Row label="발급 허용 도메인" value={event.allowedDomains.map((d) => `@${d}`).join(', ')} />
           </Card>
           <NextStepNote>행사 등록·수정은 다음 단계예요. 프로토타입은 미리 넣어 둔 행사 1개로 동작해요.</NextStepNote>
@@ -55,22 +74,43 @@ export function SettingsPage() {
         <Section title="입장 규칙">
           <Card className="flex flex-col gap-5">
             <Toggle
-              label="2단계 검표"
-              description="QR이 통과해도 스태프가 사진과 얼굴을 대조하고 승인해야 입장 처리돼요. 계정 대여를 막는 핵심 단계예요"
-              checked={event.settings.twoStepCheck}
-              disabled={saving !== null}
-              onChange={(v) => toggle('twoStepCheck', v)}
-            />
-            <div className="h-px bg-line" />
-            <Toggle
               label="명단에 있는 학생만 발급"
-              description="명단 연동에서 불러온 학생만 입장권을 받을 수 있어요. 유료 행사나 학과 행사에 써요"
+              description="명단 연동에서 불러온 학생만 입장권을 받을 수 있어요. 학과 행사처럼 대상이 정해진 행사에 써요"
               checked={event.settings.requireRoster}
               disabled={saving !== null}
               onChange={(v) => toggle('requireRoster', v)}
             />
             {error && <p className="text-caption text-danger">저장하지 못했어요. 다시 시도해 주세요</p>}
           </Card>
+        </Section>
+
+        <Section title="취소표 재배정">
+          <p className="text-caption text-ink-2">
+            학생이 입장권을 취소하면 대기 명단의 재학생에게 자동으로 넘어가요. 학생끼리 직접 넘기는 양도는 없어요
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {MODES.map(({ value, icon: Icon, title, text }) => (
+              <button
+                key={value}
+                type="button"
+                disabled={saving !== null || !USE_MOCK}
+                aria-pressed={event.reassignMode === value}
+                onClick={() => changeMode(value)}
+                className={cx(
+                  'flex items-start gap-3 rounded-lg border p-4 text-left transition duration-200',
+                  event.reassignMode === value ? 'border-ink bg-surface' : 'border-line',
+                )}
+              >
+                <Icon size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-ink-2" />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-body text-ink">{title}</span>
+                  <span className="text-caption text-ink-2">{text}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {!USE_MOCK && <NextStepNote>재배정 방식은 지금 백엔드 시드 데이터로 정해요. 화면에서 바꾸기는 다음 단계예요.</NextStepNote>}
+          {error && <p className="text-caption text-danger">저장하지 못했어요. 다시 시도해 주세요</p>}
         </Section>
 
         <Section title="개인정보 보관">

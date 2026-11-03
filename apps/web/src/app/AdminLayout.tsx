@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
-  ArrowLeftRight,
   ClipboardList,
+  ListOrdered,
   LayoutDashboard,
   LogOut,
   ScanLine,
@@ -11,6 +11,7 @@ import {
   Smartphone,
   Ticket,
   UserCheck,
+  UserRound,
   Users,
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
@@ -29,7 +30,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/admin', label: '실시간 현황', icon: LayoutDashboard },
       { to: '/admin/entries', label: '입장 기록', icon: ClipboardList },
       { to: '/admin/tickets', label: '발급 현황', icon: Ticket },
-      { to: '/admin/transfers', label: '양도 기록', icon: ArrowLeftRight },
+      { to: '/admin/reassignments', label: '취소·재배정', icon: ListOrdered },
     ],
   },
   {
@@ -93,6 +94,14 @@ export function AdminLayout() {
               onClick={() => navigate('/staff/scan')}
             >
               <span className="hidden md:inline">검표 화면</span>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<UserRound size={16} strokeWidth={1.75} />}
+              onClick={() => navigate('/ticket')}
+            >
+              <span className="hidden md:inline">학생 화면</span>
             </Button>
             <Button
               variant="ghost"
