@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 
 const projectId = process.env.GCLOUD_PROJECT ?? 'demo-ttv';
 if (!process.env.FIRESTORE_EMULATOR_HOST && projectId === 'demo-ttv') {
@@ -9,39 +9,37 @@ if (!process.env.FIRESTORE_EMULATOR_HOST && projectId === 'demo-ttv') {
 initializeApp({ projectId });
 const db = getFirestore();
 
-const profiles = [
-  { email: 'student1@example.ac.kr', name: '테스트 학생 1', studentId: '2024000001', role: 'student' },
-  { email: 'student2@example.ac.kr', name: '테스트 학생 2', studentId: '2024000002', role: 'student' },
-  { email: 'student3@example.ac.kr', name: '테스트 학생 3', studentId: '2024000003', role: 'student' },
-  { email: 'staff@example.ac.kr', name: '검표 스태프', studentId: '', role: 'staff' },
-  { email: 'admin@example.ac.kr', name: '관리자', studentId: '', role: 'admin' },
-];
+// Same values as the demo event entered by hand in the console.
+const event = {
+  name: '입실렌티',
+  place: '녹지운동장',
+  date: Timestamp.fromDate(new Date('2026-11-06T18:00:00+09:00')),
+  capacity: 10_000,
+  faceValue: 0,
+  allowedDomains: ['korea.ac.kr'],
+  issuedCount: 0,
+  enteredCount: 0,
+  reassignMode: 'queue',
+  requireDevice: false,
+};
 
-// Placeholder waitlist. The student council registers the real one from a Google Sheet.
-const waitlist = ['waitlist1@korea.ac.kr', 'waitlist2@yonsei.ac.kr'];
+// A profile only applies before the first sign-in. Add test accounts here first.
+const profiles = [{ email: 'tigerex91@gmail.com', name: '관리자', studentId: '', role: 'admin' }];
+
+// Only fills fields that are absent, so running this against a live project never overwrites counters or edited values.
+async function fillMissing(ref: DocumentReference, fields: Record<string, unknown>): Promise<number> {
+  const snap = await ref.get();
+  const missing = Object.entries(fields).filter(([key]) => snap.get(key) === undefined);
+  if (missing.length > 0) await ref.set(Object.fromEntries(missing), { merge: true });
+  return missing.length;
+}
 
 async function main() {
-  await db.doc('events/demo-festival').set({
-    name: '데모 축제',
-    date: Timestamp.fromDate(new Date('2026-11-06T18:00:00+09:00')),
-    capacity: 50,
-    faceValue: 10_000,
-    allowedDomains: ['korea.ac.kr', 'yonsei.ac.kr', 'skku.edu', 'kaist.ac.kr'],
-    issuedCount: 0,
-    nftSeq: 0,
-    enteredCount: 0,
-    reassignMode: 'queue',
-  });
-
-  for (const [i, email] of waitlist.entries()) {
-    await db.doc(`events/demo-festival/waitlist/${email}`).set({ order: i + 1, status: 'waiting', assignedTicketId: null });
+  const filled = await fillMissing(db.doc('events/demo-festival'), event);
+  for (const { email, ...profile } of profiles) {
+    await fillMissing(db.doc(`seedProfiles/${email}`), profile);
   }
-
-  for (const { email, ...p } of profiles) {
-    await db.doc(`seedProfiles/${email}`).set({ ...p, photoUrl: null });
-  }
-
-  console.log(`seeded events/demo-festival, ${waitlist.length} waitlist entries and ${profiles.length} seedProfiles in ${projectId}`);
+  console.log(`events/demo-festival: filled ${filled} missing fields. seedProfiles: ${profiles.length} checked in ${projectId}`);
 }
 
 main().catch((e) => {

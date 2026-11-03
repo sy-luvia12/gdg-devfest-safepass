@@ -1,7 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { onCall } from 'firebase-functions/v2/https';
 import type { VerifyEntryResponse } from '../api';
-import { decideEntry, parseQrPayload } from '../domain/ticket';
+import { decideEntry, parseQrPayload, scanResultFor } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readString, requireAuth, requireRole, ticketFromSnap } from './boundary';
 
@@ -10,35 +10,40 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
   const raw = readString(request.data, 'qrPayload');
 
   return db.runTransaction(async (tx): Promise<VerifyEntryResponse> => {
-    await requireRole(tx, caller.uid, ['staff', 'admin']);
+    const staff = await requireRole(tx, caller.uid, ['staff', 'admin']);
     const qr = parseQrPayload(raw);
-    if (!qr) return { ok: false, reason: 'INVALID_FORMAT' };
+    const ticket = qr ? ticketFromSnap(await tx.get(db.doc(`tickets/${qr.ticketId}`))) : null;
+    const decision = qr ? decideEntry(ticket, qr.token, Date.now()) : ({ ok: false, reason: 'INVALID_FORMAT' } as const);
+    const owner = ticket ? ((await tx.get(db.doc(`users/${ticket.ownerUid}`))).data() ?? null) : null;
+    const eventRef = decision.ok ? db.doc(`events/${decision.ticket.eventId}`) : null;
+    const event = eventRef ? eventFromSnap(await tx.get(eventRef))! : null;
 
-    const ticketRef = db.doc(`tickets/${qr.ticketId}`);
-    const ticket = ticketFromSnap(await tx.get(ticketRef));
-    const decision = decideEntry(ticket, qr.token, Date.now());
+    tx.create(db.collection('scanLogs').doc(), {
+      eventId: ticket?.eventId ?? null,
+      ticketId: ticket?.id ?? null,
+      studentName: owner?.name ?? null,
+      studentId: owner?.studentId ?? null,
+      staffUid: caller.uid,
+      staffName: staff.name ?? '',
+      result: decision.ok ? 'ok' : scanResultFor(decision.reason),
+      scannedAt: FieldValue.serverTimestamp(),
+    });
     if (!decision.ok) return decision;
-    const admitted = decision.ticket;
 
-    const eventRef = db.doc(`events/${admitted.eventId}`);
-    const [eventSnap, ownerSnap] = await Promise.all([tx.get(eventRef), tx.get(db.doc(`users/${admitted.ownerUid}`))]);
-    const event = eventFromSnap(eventSnap)!;
-    const owner = ownerSnap.data() ?? {};
-
-    tx.update(ticketRef, {
+    tx.update(db.doc(`tickets/${decision.ticket.id}`), {
       status: 'used',
       usedAt: FieldValue.serverTimestamp(),
       qrToken: null,
       qrExpiresAt: null,
     });
-    tx.update(eventRef, { enteredCount: FieldValue.increment(1) });
+    tx.update(eventRef!, { enteredCount: FieldValue.increment(1) });
 
     return {
       ok: true,
-      ticketId: admitted.id,
-      holder: { name: owner.name ?? '', studentId: owner.studentId ?? '', photoUrl: owner.photoUrl ?? null },
-      enteredCount: event.enteredCount + 1,
-      capacity: event.capacity,
+      ticketId: decision.ticket.id,
+      holder: { name: owner?.name ?? '', studentId: owner?.studentId ?? '', photoUrl: owner?.photoUrl ?? null },
+      enteredCount: event!.enteredCount + 1,
+      capacity: event!.capacity,
     };
   });
 });

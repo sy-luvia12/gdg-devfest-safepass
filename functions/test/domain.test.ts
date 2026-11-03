@@ -7,6 +7,7 @@ import {
   formatNftNumber,
   formatQrPayload,
   parseQrPayload,
+  scanResultFor,
   type Ticket,
 } from '../src/domain/ticket';
 
@@ -117,6 +118,16 @@ describe('isDomainAllowed', () => {
   it('rejects a personal gmail and a look-alike suffix', () => {
     expect(isDomainAllowed(event, 'kim@gmail.com')).toBe(false);
     expect(isDomainAllowed(event, 'kim@evilkorea.ac.kr')).toBe(false);
+  });
+});
+
+describe('scanResultFor', () => {
+  it('labels every verifyEntry rejection for the scan log', () => {
+    expect(scanResultFor('USED')).toBe('used');
+    expect(scanResultFor('EXPIRED')).toBe('expired');
+    expect(scanResultFor('TOKEN_MISMATCH')).toBe('expired');
+    expect(scanResultFor('INVALID_FORMAT')).toBe('invalid');
+    expect(scanResultFor('NOT_FOUND')).toBe('invalid');
   });
 });
 

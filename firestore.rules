@@ -3,6 +3,7 @@ service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
     function role() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role; }
+    function isAdmin() { return signedIn() && role() == 'admin'; }
 
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || role() == 'admin');
@@ -12,6 +13,15 @@ service cloud.firestore {
     }
     match /events/{eventId} {
       allow read: if signedIn();
+      match /waitlist/{email} {
+        allow read: if isAdmin();
+      }
+    }
+    match /scanLogs/{id} {
+      allow read: if isAdmin();
+    }
+    match /reassignments/{id} {
+      allow read: if isAdmin();
     }
     match /{document=**} {
       allow write: if false;   // 쓰기는 함수(Admin SDK)만

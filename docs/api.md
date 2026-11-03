@@ -221,11 +221,6 @@ service cloud.firestore {
 | --- | --- | --- | --- |
 | 2.1 | `issueTicket` 변경 | student | 발급 후 사용자 지갑으로 `mint`. `tickets`에 tokenId, mintTx 추가. 체인 실패 시 Firestore 발급은 유지하고 재시도 |
 | 2.1 | `cancelTicket` 변경 | 주인 | Firestore에서 재배정한 뒤 체인 모듈 `reassignTicket`으로 NFT 주인을 옮긴다. 서버 발급 지갑이 호출하므로 사용자 지갑 서명이 필요 없다. 체인 실패 시 Firestore 결과는 유지하고 재시도 |
-| 2.2 | `registerDevice` | 본인 | `{ publicKeyJwk }`. 이미 등록돼 있으면 `already-exists` |
-| 2.2 | `resetDevice` | admin | `{ uid }`. 기기 등록 초기화 |
-| 2.2 | `refreshQrToken` 제거 | | 클라이언트가 기기 키로 직접 서명해 QR 생성 |
-| 2.2 | `verifyEntry` 변경 | staff | 서명, ts 30초, nonce를 검증하고 정보만 반환. 사용됨 처리는 하지 않음 |
-| 2.2 | `confirmEntry` | staff | `{ ticketId, approved }`. 얼굴 대조 승인 시 사용됨 처리, `enteredCount+1`, `markUsed` |
 | 2.3 | `confirmSchoolEmail` | 본인 | 연결된 학교 메일을 확인해 `users.schoolEmail` 저장 |
 | 2.3 | `submitOnboarding` | 본인 | 사진 2장은 Storage에 직접 업로드하고, 경로를 제출하면 `verifyStatus=pending` |
 | 2.3 | `approveUser` | admin | `{ uid, approved }`. 학생증 대조 결과 |
@@ -279,3 +274,34 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 
 정해야 할 것:
 - eventId의 온체인 표현: Firestore 문서 ID(문자열)를 `keccak256`으로 바꾼 `bytes32` 사용 추천
+
+## 9. 검표 로그, 기기 묶기, 재배정 방식 [P]
+
+### `scanLogs/{id}`
+`verifyEntry`가 통과·거부 모두 한 건씩 기록한다. 관리자만 읽는다.
+
+| 필드 | 설명 |
+| --- | --- |
+| eventId, ticketId | 읽을 수 없는 QR이면 null |
+| studentName, studentId | 입장권 주인. 알 수 없으면 null |
+| staffUid, staffName | 검표한 사람 |
+| result | `ok`, `expired`(`EXPIRED`, `TOKEN_MISMATCH`), `used`, `invalid`(`INVALID_FORMAT`, `NOT_FOUND`) |
+| scannedAt | 서버 시각 |
+
+### 함수
+| 함수 | 호출자 | 요청 → 응답 |
+| --- | --- | --- |
+| `setReassignMode` | admin | `{ eventId, mode: 'queue' \| 'random' }` → `{ ok: true }` |
+| `registerDevice` | 본인 | `{ publicKeyJwk }` (EC P-256 공개키) → `{ ok: true }`. 이미 있으면 `already-exists` |
+| `resetDevice` | admin | `{ uid }` → `{ ok: true }`. 없어도 성공 |
+
+### 기기 확인 (`refreshQrToken`)
+- `events.requireDevice`가 `true`인 행사만 확인한다. 기본은 꺼져 있어서 기기 등록이 없는 프론트도 동작한다.
+- 요청에 `deviceProof: { signedAt, signature }`를 넣는다. 서명 대상은 `TTV1-REFRESH:{ticketId}:{signedAt}`, ECDSA P-256 SHA-256, IEEE P1363, base64url이다. `signedAt`은 서버 시각과 60초 안이어야 한다.
+- 실패하면 `failed-precondition`이고 `details.reason`이 `DEVICE_NOT_REGISTERED` 또는 `DEVICE_PROOF_INVALID`다.
+
+### 보안 규칙 추가
+관리자만 `scanLogs`, `reassignments`, `events/{id}/waitlist`를 읽는다. 쓰기는 여전히 함수만 한다.
+
+### 이벤트 문서 기본값
+콘솔에서 만든 문서에 없는 카운터는 0으로 읽는다. `nftSeq`가 없으면 `issuedCount`를 쓴다. 시드 스크립트는 비어 있는 필드만 채우고 기존 값은 덮어쓰지 않는다.

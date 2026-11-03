@@ -23,13 +23,36 @@ export interface IssueTicketResponse {
   nftNumber: string;
 }
 
+export const REASSIGN_MODES = ['queue', 'random'] as const;
+export type ReassignMode = (typeof REASSIGN_MODES)[number];
+
+// Device binding. The phone keeps a non-extractable ECDSA P-256 key and signs
+// `TTV1-REFRESH:{ticketId}:{signedAt}` (SHA-256, IEEE P1363, base64url) to prove it is the registered device.
+export interface DeviceProof {
+  signedAt: number;
+  signature: string;
+}
+export interface DeviceKey {
+  kty: 'EC';
+  crv: 'P-256';
+  x: string;
+  y: string;
+}
+export const DEVICE_REASONS = ['DEVICE_NOT_REGISTERED', 'DEVICE_PROOF_INVALID'] as const;
+export type DeviceReason = (typeof DEVICE_REASONS)[number];
+
 export interface RefreshQrTokenRequest {
   ticketId: string;
+  // Required only when the event sets requireDevice. The error is failed-precondition with details.reason a DeviceReason.
+  deviceProof?: DeviceProof;
 }
 export interface RefreshQrTokenResponse {
   qrPayload: string;
   expiresAt: number;
 }
+
+export const SCAN_RESULTS = ['ok', 'expired', 'used', 'invalid'] as const;
+export type ScanResult = (typeof SCAN_RESULTS)[number];
 
 export const VERIFY_ENTRY_REASONS = ['INVALID_FORMAT', 'NOT_FOUND', 'TOKEN_MISMATCH', 'EXPIRED', 'USED'] as const;
 export type VerifyEntryReason = (typeof VERIFY_ENTRY_REASONS)[number];
@@ -56,6 +79,28 @@ export interface CancelTicketRequest {
 // REASSIGNED: the ticket went to someone on the waitlist. RELEASED: nobody could take it, so it is issuable again.
 export type CancelTicketResponse = { ok: true; outcome: 'REASSIGNED' | 'RELEASED' } | { ok: false; reason: CancelReason };
 
+export interface RegisterDeviceRequest {
+  publicKeyJwk: DeviceKey;
+}
+export interface RegisterDeviceResponse {
+  ok: true;
+}
+
+export interface ResetDeviceRequest {
+  uid: string;
+}
+export interface ResetDeviceResponse {
+  ok: true;
+}
+
+export interface SetReassignModeRequest {
+  eventId: string;
+  mode: ReassignMode;
+}
+export interface SetReassignModeResponse {
+  ok: true;
+}
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -63,4 +108,7 @@ export interface Callables {
   refreshQrToken: [RefreshQrTokenRequest, RefreshQrTokenResponse];
   verifyEntry: [VerifyEntryRequest, VerifyEntryResponse];
   cancelTicket: [CancelTicketRequest, CancelTicketResponse];
+  registerDevice: [RegisterDeviceRequest, RegisterDeviceResponse];
+  resetDevice: [ResetDeviceRequest, ResetDeviceResponse];
+  setReassignMode: [SetReassignModeRequest, SetReassignModeResponse];
 }
