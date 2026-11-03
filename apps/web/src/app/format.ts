@@ -50,3 +50,8 @@ export function formatAgo(ms: number): string {
   if (h < 24) return `${h}시간 전`;
   return `${Math.floor(h / 24)}일 전`;
 }
+
+/** 화면에 쓰는 행사 이름. 묶음이 있으면 "고연전 · 농구" */
+export function eventTitle(e: { name: string; seriesName?: string }): string {
+  return e.seriesName ? `${e.seriesName} · ${e.name}` : e.name;
+}

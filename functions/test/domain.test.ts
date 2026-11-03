@@ -128,6 +128,7 @@ describe('scanResultFor', () => {
     expect(scanResultFor('TOKEN_MISMATCH')).toBe('expired');
     expect(scanResultFor('INVALID_FORMAT')).toBe('invalid');
     expect(scanResultFor('NOT_FOUND')).toBe('invalid');
+    expect(scanResultFor('WRONG_EVENT')).toBe('invalid');
   });
 });
 

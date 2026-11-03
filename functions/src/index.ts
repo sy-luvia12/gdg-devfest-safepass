@@ -7,4 +7,5 @@ export { registerDevice } from './handlers/registerDevice';
 export { resetDevice } from './handlers/resetDevice';
 export { setReassignMode } from './handlers/setReassignMode';
 export { setAllowReissue } from './handlers/setAllowReissue';
+export { setStaff } from './handlers/setStaff';
 export { requestDeviceReset } from './handlers/requestDeviceReset';

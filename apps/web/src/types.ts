@@ -7,7 +7,7 @@ export type School = {
   name: string; // 예: "한빛대학교"
   domain: string; // 학교 이메일 도메인
   brandColor: string; // 학교 상징색 hex. 테마 기본 시드
-  currentEventId: string; // 프로토타입은 학교당 행사 1개
+  currentEventId: string; // 처음 보여줄 행사. 학교의 행사 목록은 listEvents(schoolId)
 };
 
 /** 행사 테마. source가 'event'면 행사 디자인(포스터)에서 뽑은 색, 'school'이면 학교 상징색 */
@@ -45,7 +45,11 @@ export type ReassignMode = 'queue' | 'random';
 
 export type Event = {
   id: string;
-  schoolId: string;
+  schoolId: string; // 주최 학교
+  /** 참여 학교. 고연전처럼 두 학교가 함께하면 둘 다 */
+  schoolIds: string[];
+  /** 묶음 이름 (예: 고연전). 보는 사람 학교의 표기로 풀린 값. 있으면 name은 경기 이름 */
+  seriesName?: string;
   name: string;
   date: string; // ISO
   place: string;
@@ -125,8 +129,9 @@ export type ScanLog = {
   at: number;
 };
 
+/** wrong_event: 다른 학교 행사의 입장권. 기록에는 invalid로 남는다 */
 export type VerifyResult = {
-  result: ScanResult;
+  result: ScanResult | 'wrong_event';
   user?: Pick<User, 'name' | 'studentId' | 'photoUrl'>;
   nftTokenId?: string;
   usedAt?: number;

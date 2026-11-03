@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Calendar, ListOrdered, MapPin, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
+import { Calendar, LayoutList, ListOrdered, MapPin, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useEventId } from '@/app/AuthProvider';
-import { formatEventDate } from '@/app/format';
+import { eventTitle, formatEventDate } from '@/app/format';
 import { AppHeader } from '@/components/AppHeader';
 import { BottomBar, Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -17,7 +17,7 @@ type Data = { event: Event; ticket: Ticket | null };
 export function EventPage() {
   const eventId = useEventId();
   const navigate = useNavigate();
-  const { school } = useAuth();
+  const { school, events } = useAuth();
   const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -57,7 +57,15 @@ export function EventPage() {
   };
 
   const header = (
-    <AppHeader title="축제 정보" right={<IconButton icon={UserRound} label="내 정보" onClick={() => navigate('/me')} />} />
+    <AppHeader
+      title="축제 정보"
+      right={
+        <>
+          {events.length > 1 && <IconButton icon={LayoutList} label="축제 목록" onClick={() => navigate('/events')} />}
+          <IconButton icon={UserRound} label="내 정보" onClick={() => navigate('/me')} />
+        </>
+      }
+    />
   );
 
   if (loadError)
@@ -89,7 +97,7 @@ export function EventPage() {
       <main className="flex flex-col gap-6 px-5 pb-36 pt-2 md:pb-10">
         <section className="flex aspect-[4/3] flex-col justify-end gap-2 rounded-xl bg-grad-ticket p-6 shadow-float">
           <p className="text-label text-ink-2">{school?.name} 재학생 전용</p>
-          <h2 className="text-title text-ink">{event.name}</h2>
+          <h2 className="text-title text-ink">{eventTitle(event)}</h2>
           <div className="flex flex-col gap-1 text-body text-ink-2">
             <span className="flex items-center gap-2">
               <Calendar size={16} strokeWidth={1.75} />

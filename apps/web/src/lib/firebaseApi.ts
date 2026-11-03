@@ -28,16 +28,20 @@ import {
   type School,
   type StaffStats,
   type Ticket,
+  type TicketRow,
   type User,
   type VerifyResult,
   type WaitlistEntry,
 } from '@/types';
-import { getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
+import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
 
-/** 프로토타입은 행사 1개 (functions/seed.ts) */
+/** 학교에 행사가 없을 때 처음 보여줄 행사 */
 export const EVENT_ID = import.meta.env.VITE_EVENT_ID || 'demo-festival';
-const SCHOOL_ID = 'ttv';
+const DEFAULT_BRAND = '#9C8CFF';
+
+// 지금 보고 있는 학교. 고연전/연고전처럼 학교마다 다른 묶음 이름을 고를 때 쓴다
+let viewerSchoolId = '';
 
 function call<K extends keyof Callables>(name: K) {
   return httpsCallable<Callables[K][0], Callables[K][1]>(functions, name);
@@ -65,10 +69,11 @@ function deviceReason(e: unknown): string | undefined {
   return details?.reason;
 }
 
-function toUser(p: UserProfile, deviceStatus: User['deviceStatus'] = 'registered'): User {
+// schoolId: 메일 도메인으로 찾은 학교. 학교 메일이 아닌 운영 계정(gmail)은 빈 값
+function toUser(p: UserProfile, schoolId: string, deviceStatus: User['deviceStatus'] = 'registered'): User {
   return {
     uid: p.uid,
-    schoolId: SCHOOL_ID,
+    schoolId,
     name: p.name,
     studentId: p.studentId,
     email: p.email,
@@ -87,7 +92,9 @@ function millis(v: unknown): number {
 function toEvent(id: string, d: DocumentData): Event {
   return {
     id,
-    schoolId: SCHOOL_ID,
+    schoolId: (d.schoolIds as string[] | undefined)?.[0] ?? '',
+    schoolIds: d.schoolIds ?? [],
+    seriesName: (d.seriesName as Record<string, string> | undefined)?.[viewerSchoolId] ?? firstValue(d.seriesName),
     name: d.name ?? '',
     date: new Date(millis(d.date) || Date.now()).toISOString(),
     place: d.place ?? '',
@@ -123,20 +130,47 @@ function domainOf(email: string) {
   return email.split('@')[1]?.toLowerCase() ?? '';
 }
 
+function firstValue(v: unknown): string | undefined {
+  return v && typeof v === 'object' ? (Object.values(v)[0] as string | undefined) : undefined;
+}
+
+function toSchool(id: string, d: DocumentData): School {
+  return {
+    id,
+    name: d.name ?? '',
+    domain: (d.domains as string[] | undefined)?.[0] ?? '',
+    brandColor: d.brandColor ?? DEFAULT_BRAND,
+    // 처음 보여줄 행사는 AuthProvider가 listEvents로 정한다
+    currentEventId: EVENT_ID,
+  };
+}
+
+/** 메일 도메인이 속한 학교. 없으면 null */
+async function schoolIdForEmail(email: string): Promise<string | null> {
+  const snap = await getDocs(
+    query(collection(db, 'schools'), where('domains', 'array-contains', domainOf(email)), limit(1)),
+  );
+  return snap.docs[0]?.id ?? null;
+}
+
+/** 학생은 학교 메일이어야 한다. 스태프·관리자는 시드로 정해진 계정이라 학교 없이 들어와 학교를 고른다 */
+async function profileToUser(p: UserProfile): Promise<User | null> {
+  const schoolId = await schoolIdForEmail(p.email);
+  if (!schoolId && p.role === 'student') return null;
+  return withDevice(toUser(p, schoolId ?? ''));
+}
+
 // ---------- 로그인 · 학교 · 행사 ----------
 
 export async function signInWithSchoolAccount(): Promise<User> {
   try {
     await signInWithPopup(auth, new GoogleAuthProvider());
     const { data } = await call('ensureUser')();
-    const user = await withDevice(toUser(data));
-    // 학생은 행사에서 허용한 학교 도메인만 들어온다. 스태프·관리자는 시드로 정해진 계정이라 통과
-    if (user.role === 'student') {
-      const event = await getEvent(EVENT_ID);
-      if (!event.allowedDomains.includes(domainOf(user.email))) {
-        await fbSignOut(auth);
-        throw new ApiError('not_school_account');
-      }
+    const user = await profileToUser(data);
+    // 학생은 등록된 학교의 메일이어야 들어온다
+    if (!user) {
+      await fbSignOut(auth);
+      throw new ApiError('not_school_account');
     }
     return user;
   } catch (e) {
@@ -152,7 +186,7 @@ export async function getCurrentUser(): Promise<User | null> {
   await auth.authStateReady();
   if (!auth.currentUser) return null;
   const { data } = await call('ensureUser')();
-  return withDevice(toUser(data));
+  return profileToUser(data);
 }
 
 // ---------- 기기 묶기 (docs/api.md 9장) ----------
@@ -175,15 +209,33 @@ async function registerThisDevice(uid: string): Promise<User['deviceStatus']> {
 async function withDevice(user: User): Promise<User> {
   if (user.role !== 'student') return user;
   try {
-    return { ...user, deviceStatus: await registerThisDevice(user.uid) };
+    const deviceStatus = await registerThisDevice(user.uid);
+    // 서버는 기기 이름을 따로 두지 않는다. 이 기기가 등록 기기일 때만 이 기기 이름을 보여준다
+    return { ...user, deviceStatus, deviceName: deviceStatus === 'registered' ? `${describeThisDevice()} (이 기기)` : undefined };
   } catch {
     return user;
   }
 }
 
-export async function getSchool(_schoolId: string): Promise<School> {
-  // 학교 개념은 백엔드 다음 단계. 기본 보라 테마를 쓰도록 보라색을 넣는다
-  return { id: SCHOOL_ID, name: 'Tell the Vision', domain: '', brandColor: '#9C8CFF', currentEventId: EVENT_ID };
+/** 학교 이름·상징색 (schools/{id}). 이 학교가 보는 사람 학교가 된다 */
+export async function getSchool(schoolId: string): Promise<School> {
+  const snap = await getDoc(doc(db, 'schools', schoolId));
+  if (!snap.exists()) throw new ApiError('not_found');
+  viewerSchoolId = snap.id;
+  return toSchool(snap.id, snap.data());
+}
+
+/** 관리자·스태프가 고를 수 있는 학교 전체 */
+export async function listSchools(): Promise<School[]> {
+  const snap = await getDocs(collection(db, 'schools'));
+  return snap.docs.map((d) => toSchool(d.id, d.data())).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+/** 학교가 참여하는 행사들, 날짜순. 고연전처럼 두 학교가 함께하는 행사는 양쪽에 나온다 */
+export async function listEvents(schoolId: string): Promise<Event[]> {
+  viewerSchoolId = schoolId;
+  const snap = await getDocs(query(collection(db, 'events'), where('schoolIds', 'array-contains', schoolId)));
+  return snap.docs.map((d) => toEvent(d.id, d.data())).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getEvent(eventId: string): Promise<Event> {
@@ -272,15 +324,16 @@ let myOkCount = 0;
 const myCountListeners = new Set<() => void>();
 
 /** 찍는 순간 입장 처리한다. 사진은 확인용으로 보여주기만 한다 */
-export async function verifyEntry(qrPayload: string): Promise<VerifyResult> {
+export async function verifyEntry(qrPayload: string, eventId?: string): Promise<VerifyResult> {
   try {
-    const { data } = await call('verifyEntry')({ qrPayload });
+    const { data } = await call('verifyEntry')({ qrPayload, eventId });
     if (data.ok) {
       myOkCount += 1;
       myCountListeners.forEach((f) => f());
       return { result: 'ok', ticketId: data.ticketId, user: { ...data.holder, photoUrl: data.holder.photoUrl ?? '' } };
     }
     if (data.reason === 'USED') return { result: 'used' };
+    if (data.reason === 'WRONG_EVENT') return { result: 'wrong_event' };
     if (data.reason === 'EXPIRED' || data.reason === 'TOKEN_MISMATCH') return { result: 'expired' };
     return { result: 'invalid' };
   } catch (e) {
@@ -325,8 +378,9 @@ function toScanLog(id: string, d: DocumentData): ScanLog {
   };
 }
 
-// 행사가 하나라 eventId로 거르지 않는다 (같이 쓰면 복합 색인이 필요하다)
-const scanLogsQuery = (n: number) => query(collection(db, 'scanLogs'), orderBy('scannedAt', 'desc'), limit(n));
+// 행사별 최근 기록. eventId + scannedAt 복합 색인 (firestore.indexes.json)
+const scanLogsQuery = (eventId: string, n: number) =>
+  query(collection(db, 'scanLogs'), where('eventId', '==', eventId), orderBy('scannedAt', 'desc'), limit(n));
 
 /** 입장 인원(행사 문서) + 거부 수·최근 기록(scanLogs 최근 500건) */
 export function subscribeEventStats(eventId: string, cb: (s: EventStats) => void): () => void {
@@ -345,7 +399,7 @@ export function subscribeEventStats(eventId: string, cb: (s: EventStats) => void
     emit();
   });
   const offLogs = onSnapshot(
-    scanLogsQuery(500),
+    scanLogsQuery(eventId, 500),
     (snap) => {
       logs = snap.docs.map((d) => toScanLog(d.id, d.data()));
       emit();
@@ -358,8 +412,8 @@ export function subscribeEventStats(eventId: string, cb: (s: EventStats) => void
   };
 }
 
-export async function listEntries(_eventId: string): Promise<ScanLog[]> {
-  const snap = await getDocs(scanLogsQuery(500));
+export async function listEntries(eventId: string): Promise<ScanLog[]> {
+  const snap = await getDocs(scanLogsQuery(eventId, 500));
   return snap.docs.map((d) => toScanLog(d.id, d.data()));
 }
 
@@ -374,7 +428,10 @@ async function userName(uid: string | null | undefined, cache: Map<string, strin
 
 /** 취소·재배정 기록. 백엔드는 uid만 남기므로 이름과 입장권 번호를 붙인다 (관리자는 users·tickets를 읽을 수 있다) */
 export async function listReassignments(eventId: string): Promise<Reassignment[]> {
-  const snap = await getDocs(query(collection(db, 'reassignments'), orderBy('createdAt', 'desc'), limit(200)));
+  // eventId + createdAt 복합 색인 (firestore.indexes.json). eventId가 없는 아주 예전 기록은 빠진다
+  const snap = await getDocs(
+    query(collection(db, 'reassignments'), where('eventId', '==', eventId), orderBy('createdAt', 'desc'), limit(200)),
+  );
   const names = new Map<string, string>();
   return Promise.all(
     snap.docs.map(async (d) => {
@@ -395,6 +452,28 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
       } satisfies Reassignment;
     }),
   );
+}
+
+/** 발급 현황. 취소된 입장권은 빼고, 주인 이름·학번을 붙인다 (관리자는 users를 읽을 수 있다) */
+export async function listTickets(eventId: string): Promise<TicketRow[]> {
+  const snap = await getDocs(query(collection(db, 'tickets'), where('eventId', '==', eventId)));
+  const owners = new Map<string, DocumentData | undefined>();
+  const live = snap.docs.filter((d) => d.get('status') !== 'cancelled' && d.get('ownerUid'));
+  await Promise.all(
+    [...new Set(live.map((d) => d.get('ownerUid') as string))].map(async (uid) => {
+      owners.set(uid, (await getDoc(doc(db, 'users', uid))).data());
+    }),
+  );
+  return live
+    .map((d) => {
+      const owner = owners.get(d.get('ownerUid'));
+      return {
+        ...toTicket(d.id, d.data()),
+        ownerName: (owner?.name as string | undefined) ?? '알 수 없음',
+        ownerStudentId: (owner?.studentId as string | undefined) ?? '',
+      };
+    })
+    .sort((a, b) => b.issuedAt - a.issuedAt);
 }
 
 /** 대기 명단. 문서 id가 이메일이고, 가입한 사람이면 이름을 붙인다 */
@@ -498,4 +577,40 @@ export async function getMyScanHistory(): Promise<ScanLog[]> {
   if (!uid) throw new ApiError('unauthenticated');
   const snap = await getDocs(query(collection(db, 'scanLogs'), where('staffUid', '==', uid), limit(500)));
   return snap.docs.map((d) => toScanLog(d.id, d.data())).sort((a, b) => b.at - a.at);
+}
+
+// ---------- 스태프 관리 (setStaff) ----------
+
+/** 스태프와 학생회 계정. 학교 구분 없이 운영 계정 전체 */
+export async function listStaff(): Promise<User[]> {
+  const snap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['staff', 'admin'])));
+  return snap.docs
+    .map((d) => toUser({ ...(d.data() as Omit<UserProfile, 'uid'>), uid: d.id, photoUrl: d.get('photoUrl') ?? null }, ''))
+    .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name, 'ko') : a.role === 'admin' ? -1 : 1));
+}
+
+/** 이메일로 스태프 권한을 준다. 아직 로그인 전인 사람은 처음 로그인할 때 스태프가 된다 */
+export async function addStaff(email: string): Promise<User> {
+  const normalized = email.trim().toLowerCase();
+  try {
+    await call('setStaff')({ email: normalized, staff: true });
+  } catch (e) {
+    throw toApiError(e);
+  }
+  const found = await getDocs(query(collection(db, 'users'), where('email', '==', normalized), limit(1)));
+  const d = found.docs[0];
+  return d
+    ? toUser({ ...(d.data() as Omit<UserProfile, 'uid'>), uid: d.id, photoUrl: d.get('photoUrl') ?? null }, '')
+    : toUser({ uid: '', email: normalized, name: normalized, studentId: '', photoUrl: null, role: 'staff' }, '');
+}
+
+export async function removeStaff(uid: string): Promise<void> {
+  const snap = await getDoc(doc(db, 'users', uid));
+  const email = snap.get('email') as string | undefined;
+  if (!email) throw new ApiError('not_found');
+  try {
+    await call('setStaff')({ email, staff: false });
+  } catch (e) {
+    throw toApiError(e);
+  }
 }

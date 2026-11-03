@@ -17,6 +17,8 @@ import {
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
+import { eventTitle } from '@/app/format';
+import { SchoolSwitcher } from '@/components/SchoolSwitcher';
 import { getEvent, listDeviceResets, listPendingVerifications } from '@/lib/api';
 import type { Event } from '@/types';
 import { useAuth, useEventId } from './AuthProvider';
@@ -66,7 +68,15 @@ export function AdminLayout() {
   const [badges, setBadges] = useState({ approvals: 0, devices: 0 });
 
   useEffect(() => {
-    getEvent(eventId).then(setEvent).catch(() => {});
+    // 학교를 바꾸면 이전 행사 이름이 남지 않게 비운다
+    setEvent(null);
+    let cancelled = false;
+    getEvent(eventId)
+      .then((e) => !cancelled && setEvent(e))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [eventId]);
 
   const refreshBadges = useCallback(() => {
@@ -84,7 +94,7 @@ export function AdminLayout() {
         <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
           <div className="min-w-0">
             <p className="text-label text-ink-3">{school?.name} · SafePass 관리자</p>
-            <h1 className="truncate text-heading text-ink">{event?.name ?? '행사'}</h1>
+            <h1 className="truncate text-heading text-ink">{event ? eventTitle(event) : '행사'}</h1>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -112,6 +122,8 @@ export function AdminLayout() {
             />
           </div>
         </div>
+        {/* 학교·행사 고르기 (고를 것이 있을 때만) */}
+        <SchoolSwitcher className="mx-auto max-w-admin px-5 pb-3 md:px-8" />
         {/* 폰·태블릿: 가로 스크롤 메뉴 */}
         <nav aria-label="관리자 메뉴" className="flex gap-1 overflow-x-auto px-5 pb-3 [scrollbar-width:none] lg:hidden">
           {NAV.flatMap((g) => g.items).map((item) => (

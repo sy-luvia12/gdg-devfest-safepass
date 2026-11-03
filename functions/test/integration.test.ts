@@ -52,6 +52,7 @@ async function signIn(email: string): Promise<Client> {
     resetDevice: call('resetDevice'),
     setReassignMode: call('setReassignMode'),
     setAllowReissue: call('setAllowReissue'),
+    setStaff: call('setStaff'),
     requestDeviceReset: call('requestDeviceReset'),
     fs,
   };
@@ -185,6 +186,17 @@ describe('prototype demo scenario', () => {
     expect(await staff.verifyEntry({ qrPayload: current.qrPayload })).toEqual({ ok: false, reason: 'EXPIRED' });
     expect(await staff.verifyEntry({ qrPayload: 'not a ticket' })).toEqual({ ok: false, reason: 'INVALID_FORMAT' });
     expect(await staff.verifyEntry({ qrPayload: 'TTV1:nope:abc' })).toEqual({ ok: false, reason: 'NOT_FOUND' });
+  });
+
+  it('a scanner checking another event refuses the QR, keeps it unused and logs it under its own event', async () => {
+    const { qrPayload } = await bob.refreshQrToken({ ticketId: bobTicket });
+    expect(await staff.verifyEntry({ qrPayload, eventId: 'other-festival' })).toEqual({ ok: false, reason: 'WRONG_EVENT' });
+    expect((await db.doc(`tickets/${bobTicket}`).get()).get('status')).toBe('issued');
+    const logs = await db.collection('scanLogs').where('eventId', '==', 'other-festival').get();
+    expect(logs.docs.map((d) => d.data())).toEqual([
+      expect.objectContaining({ result: 'invalid', ticketId: null, studentName: null }),
+    ]);
+    await Promise.all(logs.docs.map((d) => d.ref.delete()));
   });
 
   it('a student calling verifyEntry is permission-denied', async () => {
@@ -411,6 +423,22 @@ describe('device binding', () => {
   it('an event that does not require a device still refreshes without a proof', async () => {
     await db.doc(`events/${DEVICE_EVENT}`).update({ requireDevice: false });
     expect((await frank.refreshQrToken({ ticketId })).qrPayload).toMatch(/^TTV1:/);
+  });
+});
+
+describe('staff management', () => {
+  it('an admin makes a signed-in student staff and back, and only an admin can', async () => {
+    expect(await chief.setStaff({ email: ERIN.toUpperCase(), staff: true })).toEqual({ ok: true, status: 'UPDATED' });
+    expect((await db.doc(`users/${await uidOf(ERIN)}`).get()).get('role')).toBe('staff');
+    expect(await chief.setStaff({ email: ERIN, staff: false })).toEqual({ ok: true, status: 'UPDATED' });
+    expect((await db.doc(`users/${await uidOf(ERIN)}`).get()).get('role')).toBe('student');
+    expect(await codeOf(staff.setStaff({ email: ERIN, staff: true }))).toBe('functions/permission-denied');
+    expect(await codeOf(chief.setStaff({ email: CHIEF, staff: false }))).toBe('functions/failed-precondition');
+  });
+
+  it('someone who has not signed in yet becomes staff on their first sign-in', async () => {
+    expect(await chief.setStaff({ email: 'gate2@gmail.com', staff: true })).toEqual({ ok: true, status: 'PENDING_SIGNUP' });
+    expect((await db.doc('seedProfiles/gate2@gmail.com').get()).get('role')).toBe('staff');
   });
 });
 
