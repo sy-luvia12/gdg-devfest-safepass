@@ -52,6 +52,7 @@ async function signIn(email: string): Promise<Client> {
     resetDevice: call('resetDevice'),
     setReassignMode: call('setReassignMode'),
     setAllowReissue: call('setAllowReissue'),
+    setStaff: call('setStaff'),
     requestDeviceReset: call('requestDeviceReset'),
     fs,
   };
@@ -422,6 +423,22 @@ describe('device binding', () => {
   it('an event that does not require a device still refreshes without a proof', async () => {
     await db.doc(`events/${DEVICE_EVENT}`).update({ requireDevice: false });
     expect((await frank.refreshQrToken({ ticketId })).qrPayload).toMatch(/^TTV1:/);
+  });
+});
+
+describe('staff management', () => {
+  it('an admin makes a signed-in student staff and back, and only an admin can', async () => {
+    expect(await chief.setStaff({ email: ERIN.toUpperCase(), staff: true })).toEqual({ ok: true, status: 'UPDATED' });
+    expect((await db.doc(`users/${await uidOf(ERIN)}`).get()).get('role')).toBe('staff');
+    expect(await chief.setStaff({ email: ERIN, staff: false })).toEqual({ ok: true, status: 'UPDATED' });
+    expect((await db.doc(`users/${await uidOf(ERIN)}`).get()).get('role')).toBe('student');
+    expect(await codeOf(staff.setStaff({ email: ERIN, staff: true }))).toBe('functions/permission-denied');
+    expect(await codeOf(chief.setStaff({ email: CHIEF, staff: false }))).toBe('functions/failed-precondition');
+  });
+
+  it('someone who has not signed in yet becomes staff on their first sign-in', async () => {
+    expect(await chief.setStaff({ email: 'gate2@gmail.com', staff: true })).toEqual({ ok: true, status: 'PENDING_SIGNUP' });
+    expect((await db.doc('seedProfiles/gate2@gmail.com').get()).get('role')).toBe('staff');
   });
 });
 

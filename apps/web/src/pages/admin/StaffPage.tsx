@@ -10,7 +10,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { ResponsiveTable } from '@/components/ResponsiveTable';
 import { StateView } from '@/components/StateView';
 import { TextField } from '@/components/TextField';
-import { addStaff, listStaff, removeStaff } from '@/lib/api';
+import { addStaff, listStaff, removeStaff, USE_MOCK } from '@/lib/api';
 import type { User } from '@/types';
 
 /** 검표 권한 관리. 같은 학교 계정만 스태프로 지정할 수 있다 */
@@ -38,7 +38,7 @@ export function StaffPage() {
       setEmail('');
       load();
     } catch {
-      setAddError(`${school?.name} 학교 계정을 찾지 못했어요. 한 번 이상 로그인한 학생만 추가할 수 있어요`);
+      setAddError(USE_MOCK ? `${school?.name} 학교 계정을 찾지 못했어요. 한 번 이상 로그인한 학생만 추가할 수 있어요` : '추가하지 못했어요. 이메일을 확인해 주세요');
     } finally {
       setAdding(false);
     }
@@ -69,9 +69,9 @@ export function StaffPage() {
         <form onSubmit={onAdd} className="flex flex-col gap-3 md:flex-row md:items-end">
           <TextField
             className="flex-1"
-            label="스태프로 추가할 학교 이메일"
+            label="스태프로 추가할 구글 계정 이메일"
             type="email"
-            placeholder={`name@${school?.domain ?? 'univ.ac.kr'}`}
+            placeholder={USE_MOCK ? `name@${school?.domain ?? 'univ.ac.kr'}` : 'name@gmail.com'}
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -83,6 +83,9 @@ export function StaffPage() {
             추가
           </Button>
         </form>
+        {!USE_MOCK && (
+          <p className="mt-2 text-caption text-ink-2">아직 로그인하지 않은 사람도 추가할 수 있어요. 처음 로그인할 때 스태프가 돼요</p>
+        )}
       </Card>
       {error ? (
         <StateView

@@ -121,6 +121,17 @@ export interface RequestDeviceResetResponse {
   ok: true;
 }
 
+// Admin only. Grants (staff: true) or removes the staff role by email.
+// PENDING_SIGNUP: the person has not signed in yet; the role applies on their first sign-in.
+export interface SetStaffRequest {
+  email: string;
+  staff: boolean;
+}
+export interface SetStaffResponse {
+  ok: true;
+  status: 'UPDATED' | 'PENDING_SIGNUP';
+}
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -133,4 +144,5 @@ export interface Callables {
   setReassignMode: [SetReassignModeRequest, SetReassignModeResponse];
   setAllowReissue: [SetAllowReissueRequest, SetAllowReissueResponse];
   requestDeviceReset: [void, RequestDeviceResetResponse];
+  setStaff: [SetStaffRequest, SetStaffResponse];
 }

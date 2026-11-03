@@ -28,6 +28,7 @@ import {
   type School,
   type StaffStats,
   type Ticket,
+  type TicketRow,
   type User,
   type VerifyResult,
   type WaitlistEntry,
@@ -453,6 +454,28 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
   );
 }
 
+/** 발급 현황. 취소된 입장권은 빼고, 주인 이름·학번을 붙인다 (관리자는 users를 읽을 수 있다) */
+export async function listTickets(eventId: string): Promise<TicketRow[]> {
+  const snap = await getDocs(query(collection(db, 'tickets'), where('eventId', '==', eventId)));
+  const owners = new Map<string, DocumentData | undefined>();
+  const live = snap.docs.filter((d) => d.get('status') !== 'cancelled' && d.get('ownerUid'));
+  await Promise.all(
+    [...new Set(live.map((d) => d.get('ownerUid') as string))].map(async (uid) => {
+      owners.set(uid, (await getDoc(doc(db, 'users', uid))).data());
+    }),
+  );
+  return live
+    .map((d) => {
+      const owner = owners.get(d.get('ownerUid'));
+      return {
+        ...toTicket(d.id, d.data()),
+        ownerName: (owner?.name as string | undefined) ?? '알 수 없음',
+        ownerStudentId: (owner?.studentId as string | undefined) ?? '',
+      };
+    })
+    .sort((a, b) => b.issuedAt - a.issuedAt);
+}
+
 /** 대기 명단. 문서 id가 이메일이고, 가입한 사람이면 이름을 붙인다 */
 export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
   const snap = await getDocs(collection(db, 'events', eventId, 'waitlist'));
@@ -554,4 +577,40 @@ export async function getMyScanHistory(): Promise<ScanLog[]> {
   if (!uid) throw new ApiError('unauthenticated');
   const snap = await getDocs(query(collection(db, 'scanLogs'), where('staffUid', '==', uid), limit(500)));
   return snap.docs.map((d) => toScanLog(d.id, d.data())).sort((a, b) => b.at - a.at);
+}
+
+// ---------- 스태프 관리 (setStaff) ----------
+
+/** 스태프와 학생회 계정. 학교 구분 없이 운영 계정 전체 */
+export async function listStaff(): Promise<User[]> {
+  const snap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['staff', 'admin'])));
+  return snap.docs
+    .map((d) => toUser({ ...(d.data() as Omit<UserProfile, 'uid'>), uid: d.id, photoUrl: d.get('photoUrl') ?? null }, ''))
+    .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name, 'ko') : a.role === 'admin' ? -1 : 1));
+}
+
+/** 이메일로 스태프 권한을 준다. 아직 로그인 전인 사람은 처음 로그인할 때 스태프가 된다 */
+export async function addStaff(email: string): Promise<User> {
+  const normalized = email.trim().toLowerCase();
+  try {
+    await call('setStaff')({ email: normalized, staff: true });
+  } catch (e) {
+    throw toApiError(e);
+  }
+  const found = await getDocs(query(collection(db, 'users'), where('email', '==', normalized), limit(1)));
+  const d = found.docs[0];
+  return d
+    ? toUser({ ...(d.data() as Omit<UserProfile, 'uid'>), uid: d.id, photoUrl: d.get('photoUrl') ?? null }, '')
+    : toUser({ uid: '', email: normalized, name: normalized, studentId: '', photoUrl: null, role: 'staff' }, '');
+}
+
+export async function removeStaff(uid: string): Promise<void> {
+  const snap = await getDoc(doc(db, 'users', uid));
+  const email = snap.get('email') as string | undefined;
+  if (!email) throw new ApiError('not_found');
+  try {
+    await call('setStaff')({ email, staff: false });
+  } catch (e) {
+    throw toApiError(e);
+  }
 }
