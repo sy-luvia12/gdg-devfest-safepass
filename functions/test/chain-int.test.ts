@@ -6,6 +6,7 @@ import { FESTIVAL_TICKET_ABI } from '../src/chain/abi';
 import { ChainError, createChainClient, type ChainClient } from '../src/chain/client';
 import { REASON, tokenIdOf } from '../src/chain/ids';
 import { processChainOp, walletAddressFor, WaitingForPrevious } from '../src/chain/process';
+import { preflightChain } from '../src/chain/preflight';
 import { deriveAddress } from '../src/chain/wallets';
 
 // Hardhat's default account 0 (deployer and minter in scripts/deploy.js). Public test key, local chain only.
@@ -133,4 +134,57 @@ describe('processChainOp with Firestore', () => {
     expect((await db.doc(`chainOps/${t}-1`).get()).get('status')).toBe('blocked');
     expect((await db.doc(`tickets/${t}`).get()).get('chain.status')).toBe('blocked');
   });
+});
+
+describe('go-live preflight on a local chain', () => {
+  const good = () => ({
+    rpcUrl: RPC,
+    contractAddress: CONTRACT,
+    minterPrivateKey: MINTER_KEY,
+    mnemonic: MNEMONIC,
+    expectedChainId: 31337,
+  });
+  const byName = (r: Awaited<ReturnType<typeof preflightChain>>) => Object.fromEntries(r.checks.map((c) => [c.name, c]));
+
+  it('passes every check with the deployed contract and the funded minter', async () => {
+    const r = await preflightChain(good());
+    expect(r.checks.filter((c) => !c.ok)).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.minter).toBe(new Wallet(MINTER_KEY).address);
+    expect(r.checks.map((c) => c.name).sort()).toEqual(['contract', 'erc5192', 'minterGas', 'minterRole', 'mnemonic', 'rpc']);
+  });
+
+  it('fails on the wrong chain id', async () => {
+    const r = await preflightChain({ ...good(), expectedChainId: 80002 });
+    expect(r.ok).toBe(false);
+    expect(byName(r).rpc.detail).toContain('expected 80002');
+  });
+
+  it('fails when the address has no contract', async () => {
+    const r = await preflightChain({ ...good(), contractAddress: Wallet.createRandom().address });
+    expect(r.ok).toBe(false);
+    expect(byName(r).contract.ok).toBe(false);
+  });
+
+  it('fails for a key without MINTER_ROLE and with no gas', async () => {
+    const r = await preflightChain({ ...good(), minterPrivateKey: Wallet.createRandom().privateKey });
+    expect(byName(r).minterRole.ok).toBe(false);
+    expect(byName(r).minterGas.ok).toBe(false);
+    expect(r.ok).toBe(false);
+  });
+
+  it('fails for a bad mnemonic and never echoes secrets', async () => {
+    const r = await preflightChain({ ...good(), mnemonic: 'not a real phrase' });
+    expect(byName(r).mnemonic.ok).toBe(false);
+    const text = JSON.stringify(r);
+    expect(text).not.toContain(MINTER_KEY.slice(2));
+    expect(text).not.toContain('not a real phrase');
+    expect(text).not.toContain(RPC);
+  });
+
+  it('reports an unreachable RPC without its URL', async () => {
+    const r = await preflightChain({ ...good(), rpcUrl: 'http://127.0.0.1:1/secret-key-path' });
+    expect(byName(r).rpc.ok).toBe(false);
+    expect(JSON.stringify(r)).not.toContain('secret-key-path');
+  }, 30_000);
 });
