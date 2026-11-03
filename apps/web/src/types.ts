@@ -125,8 +125,9 @@ export type ScanLog = {
   at: number;
 };
 
+/** wrong_event: 다른 학교 행사의 입장권. 기록에는 invalid로 남는다 */
 export type VerifyResult = {
-  result: ScanResult;
+  result: ScanResult | 'wrong_event';
   user?: Pick<User, 'name' | 'studentId' | 'photoUrl'>;
   nftTokenId?: string;
   usedAt?: number;

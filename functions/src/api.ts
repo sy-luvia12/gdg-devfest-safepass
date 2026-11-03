@@ -58,11 +58,14 @@ export interface RefreshQrTokenResponse {
 export const SCAN_RESULTS = ['ok', 'expired', 'used', 'invalid'] as const;
 export type ScanResult = (typeof SCAN_RESULTS)[number];
 
-export const VERIFY_ENTRY_REASONS = ['INVALID_FORMAT', 'NOT_FOUND', 'TOKEN_MISMATCH', 'EXPIRED', 'USED'] as const;
+// WRONG_EVENT: the ticket belongs to another event than the one the scanner is checking.
+export const VERIFY_ENTRY_REASONS = ['INVALID_FORMAT', 'NOT_FOUND', 'WRONG_EVENT', 'TOKEN_MISMATCH', 'EXPIRED', 'USED'] as const;
 export type VerifyEntryReason = (typeof VERIFY_ENTRY_REASONS)[number];
 
 export interface VerifyEntryRequest {
   qrPayload: string;
+  /** The event the scanner is checking. Omitted means any event (older clients). */
+  eventId?: string;
 }
 export type VerifyEntryResponse =
   | {

@@ -428,6 +428,14 @@ export async function getSchool(schoolId: string): Promise<School> {
   return school;
 }
 
+/** 관리자·스태프가 고를 수 있는 학교(행사). mock은 자기 학교만 */
+export async function listSchools(): Promise<School[]> {
+  const s = load();
+  const uid = currentUid();
+  const user = s.users.find((u) => u.uid === uid);
+  return s.schools.filter((sc) => sc.id === user?.schoolId);
+}
+
 export async function getEvent(eventId: string): Promise<Event> {
   await wait();
   return findEvent(load(), eventId);
@@ -694,21 +702,23 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
 
 // ---------- 검표 ----------
 
-export async function verifyEntry(qrPayload: string): Promise<VerifyResult> {
+export async function verifyEntry(qrPayload: string, _eventId?: string): Promise<VerifyResult> {
   await wait();
   const s = load();
   const staff = requireUser(s, ['staff', 'admin']);
   const event = myEvent(s, staff);
 
   const match = /^safepass:([^:]+):([^:]+)$/.exec(qrPayload.trim());
-  // 다른 학교 행사 입장권도 확인 불가로 처리한다
-  const ticket = match ? s.tickets.find((t) => t.id === match[1] && t.eventId === event.id) : undefined;
+  const found = match ? s.tickets.find((t) => t.id === match[1]) : undefined;
   const fail = (result: VerifyResult['result'], t?: Ticket): VerifyResult => {
-    addLog(s, event, staff, result, t);
+    addLog(s, event, staff, result === 'wrong_event' ? 'invalid' : result, t);
     save(s);
     return { result };
   };
-  if (!match || !ticket) return fail('invalid');
+  if (!match || !found) return fail('invalid');
+  // 다른 학교 행사 입장권은 기록에 그 학생 정보를 남기지 않는다
+  if (found.eventId !== event.id) return fail('wrong_event');
+  const ticket = found;
 
   const owner = s.users.find((u) => u.uid === ticket.ownerUid);
   const userView = owner && { name: owner.name, studentId: owner.studentId, photoUrl: owner.photoUrl };

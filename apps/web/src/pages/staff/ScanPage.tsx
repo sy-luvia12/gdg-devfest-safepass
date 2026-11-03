@@ -9,6 +9,7 @@ import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { ResultSheet, type SheetState } from '@/components/ResultSheet';
 import { ScanFrame } from '@/components/ScanFrame';
+import { SchoolSwitcher } from '@/components/SchoolSwitcher';
 import { StateView } from '@/components/StateView';
 import { subscribeStaffStats, verifyEntry } from '@/lib/api';
 import type { StaffStats } from '@/types';
@@ -38,7 +39,7 @@ export function ScanPage() {
     setVerifying(true);
     setVerifyError(false);
     try {
-      const r = await verifyEntry(payload);
+      const r = await verifyEntry(payload, eventId);
       setSheet({ result: r.result, user: r.user, nftTokenId: r.nftTokenId, usedAt: r.usedAt });
     } catch {
       setVerifyError(true);
@@ -47,7 +48,7 @@ export function ScanPage() {
     } finally {
       setVerifying(false);
     }
-  }, []);
+  }, [eventId]);
 
   useEffect(() => {
     const scanner = new Html5Qrcode(READER_ID, {
@@ -103,6 +104,7 @@ export function ScanPage() {
     <>
       <AppHeader title="검표" right={right} />
       <main className="flex flex-col gap-5 px-5 pb-10 pt-2">
+        <SchoolSwitcher className="self-center" />
         <div className="grid grid-cols-2 divide-x divide-line rounded-lg border border-line">
           <div className="flex flex-col items-center gap-0.5 py-3">
             <span className="text-caption text-ink-2">전체 입장</span>

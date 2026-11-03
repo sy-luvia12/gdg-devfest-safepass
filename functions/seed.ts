@@ -9,20 +9,25 @@ if (!process.env.FIRESTORE_EMULATOR_HOST && projectId === 'demo-ttv') {
 initializeApp({ projectId });
 const db = getFirestore();
 
-// Same values as the demo event entered by hand in the console.
-const event = {
-  name: '입실렌티',
-  place: '녹지운동장',
-  date: Timestamp.fromDate(new Date('2026-11-06T18:00:00+09:00')),
-  capacity: 10_000,
-  faceValue: 0,
-  allowedDomains: ['korea.ac.kr'],
-  issuedCount: 0,
-  enteredCount: 0,
-  reassignMode: 'queue',
-  requireDevice: false,
-  // Test event: a student who cancelled may take a ticket again. Real events keep this false.
-  allowReissueAfterCancel: true,
+// One event per school. schoolName and brandColor are what the app shows as the school and its theme color.
+// The first is the demo event entered by hand in the console. Add the other demo-day events here.
+const events: Record<string, Record<string, unknown>> = {
+  'demo-festival': {
+    name: '입실렌티',
+    schoolName: '고려대학교',
+    brandColor: '#8B0029',
+    place: '녹지운동장',
+    date: Timestamp.fromDate(new Date('2026-11-06T18:00:00+09:00')),
+    capacity: 10_000,
+    faceValue: 0,
+    allowedDomains: ['korea.ac.kr'],
+    issuedCount: 0,
+    enteredCount: 0,
+    reassignMode: 'queue',
+    requireDevice: false,
+    // Test event: a student who cancelled may take a ticket again. Real events keep this false.
+    allowReissueAfterCancel: true,
+  },
 };
 
 // A profile only applies before the first sign-in. Add test accounts here first.
@@ -37,11 +42,14 @@ async function fillMissing(ref: DocumentReference, fields: Record<string, unknow
 }
 
 async function main() {
-  const filled = await fillMissing(db.doc('events/demo-festival'), event);
+  for (const [id, fields] of Object.entries(events)) {
+    const filled = await fillMissing(db.doc(`events/${id}`), fields);
+    console.log(`events/${id}: filled ${filled} missing fields`);
+  }
   for (const { email, ...profile } of profiles) {
     await fillMissing(db.doc(`seedProfiles/${email}`), profile);
   }
-  console.log(`events/demo-festival: filled ${filled} missing fields. seedProfiles: ${profiles.length} checked in ${projectId}`);
+  console.log(`seedProfiles: ${profiles.length} checked in ${projectId}`);
 }
 
 main().catch((e) => {

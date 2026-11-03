@@ -1,20 +1,21 @@
 import { Check, X } from 'lucide-react';
 import { formatTime } from '@/app/format';
-import type { ScanResult, User } from '@/types';
+import type { User, VerifyResult } from '@/types';
 import { Avatar } from './Avatar';
 import { Button } from './Button';
 import { Orb } from './Orb';
 
 type Person = Pick<User, 'name' | 'studentId' | 'photoUrl'>;
 
-export type SheetState = { result: ScanResult; user?: Person; nftTokenId?: string; usedAt?: number };
+export type SheetState = { result: VerifyResult['result']; user?: Person; nftTokenId?: string; usedAt?: number };
 
 type Props = { state: SheetState; onNext: () => void };
 
-const reasons: Record<Exclude<ScanResult, 'ok'>, string> = {
+const reasons: Record<Exclude<VerifyResult['result'], 'ok'>, string> = {
   expired: '만료된 QR이에요. 입장권 화면을 새로고침해 주세요',
   used: '이미 사용된 입장권이에요',
   invalid: '확인할 수 없는 QR이에요',
+  wrong_event: '다른 행사 입장권이에요',
 };
 
 /** 검표 결과 바텀시트. 떠 있는 동안 스캔은 멈춘다 (DESIGN.md 5장) */
@@ -52,7 +53,7 @@ export function ResultSheet({ state, onNext }: Props) {
           </>
         ) : (
           <div className="text-center">
-            <p className="text-body text-ink">{reasons[state.result as Exclude<ScanResult, 'ok'>]}</p>
+            <p className="text-body text-ink">{reasons[state.result as Exclude<VerifyResult['result'], 'ok'>]}</p>
             {state.result === 'used' && state.usedAt && (
               <p className="mt-1 text-caption text-ink-2">{formatTime(state.usedAt)}에 이미 입장했어요</p>
             )}

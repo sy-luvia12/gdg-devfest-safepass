@@ -24,6 +24,7 @@ export const signInWithSchoolAccount: typeof mock.signInWithSchoolAccount = real
 export const signOut: typeof mock.signOut = real ? fb.signOut : mock.signOut;
 export const getCurrentUser: typeof mock.getCurrentUser = real ? fb.getCurrentUser : mock.getCurrentUser;
 export const getSchool: typeof mock.getSchool = real ? fb.getSchool : mock.getSchool;
+export const listSchools: typeof mock.listSchools = real ? fb.listSchools : mock.listSchools;
 export const getEvent: typeof mock.getEvent = real ? fb.getEvent : mock.getEvent;
 export const updateEventTheme: typeof mock.updateEventTheme = real ? notYet : mock.updateEventTheme;
 export const updateEventSettings: typeof mock.updateEventSettings = real ? notYet : mock.updateEventSettings;

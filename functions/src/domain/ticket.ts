@@ -55,6 +55,7 @@ export function parseQrPayload(raw: string): { ticketId: string; token: string }
 const scanResults: Record<VerifyEntryReason, ScanResult> = {
   INVALID_FORMAT: 'invalid',
   NOT_FOUND: 'invalid',
+  WRONG_EVENT: 'invalid',
   TOKEN_MISMATCH: 'expired',
   EXPIRED: 'expired',
   USED: 'used',
@@ -66,7 +67,7 @@ export function scanResultFor(reason: VerifyEntryReason): ScanResult {
 
 export type Decision<R> = { ok: true } | { ok: false; reason: R };
 
-type EntryRejection = Exclude<VerifyEntryReason, 'INVALID_FORMAT'>;
+type EntryRejection = Exclude<VerifyEntryReason, 'INVALID_FORMAT' | 'WRONG_EVENT'>;
 
 // Order is the priority from docs/api.md 2.4: the first matching rule wins.
 const entryRules: ReadonlyArray<[EntryRejection, (t: Ticket | null, token: string, nowMs: number) => boolean]> = [

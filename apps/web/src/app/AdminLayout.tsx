@@ -17,6 +17,7 @@ import {
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
+import { SchoolSwitcher } from '@/components/SchoolSwitcher';
 import { getEvent, listDeviceResets, listPendingVerifications } from '@/lib/api';
 import type { Event } from '@/types';
 import { useAuth, useEventId } from './AuthProvider';
@@ -61,12 +62,20 @@ export function AdminLayout() {
   const eventId = useEventId();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { school, signOut } = useAuth();
+  const { school, schools, signOut } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [badges, setBadges] = useState({ approvals: 0, devices: 0 });
 
   useEffect(() => {
-    getEvent(eventId).then(setEvent).catch(() => {});
+    // 학교를 바꾸면 이전 행사 이름이 남지 않게 비운다
+    setEvent(null);
+    let cancelled = false;
+    getEvent(eventId)
+      .then((e) => !cancelled && setEvent(e))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [eventId]);
 
   const refreshBadges = useCallback(() => {
@@ -83,9 +92,10 @@ export function AdminLayout() {
       <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
           <div className="min-w-0">
-            <p className="text-label text-ink-3">{school?.name} · SafePass 관리자</p>
+            {schools.length < 2 && <p className="text-label text-ink-3">{school?.name} · SafePass 관리자</p>}
             <h1 className="truncate text-heading text-ink">{event?.name ?? '행사'}</h1>
           </div>
+          <SchoolSwitcher className="mr-auto shrink-0" />
           <div className="flex items-center gap-2">
             <Button
               variant="secondary"

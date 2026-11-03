@@ -187,6 +187,17 @@ describe('prototype demo scenario', () => {
     expect(await staff.verifyEntry({ qrPayload: 'TTV1:nope:abc' })).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
 
+  it('a scanner checking another event refuses the QR, keeps it unused and logs it under its own event', async () => {
+    const { qrPayload } = await bob.refreshQrToken({ ticketId: bobTicket });
+    expect(await staff.verifyEntry({ qrPayload, eventId: 'other-festival' })).toEqual({ ok: false, reason: 'WRONG_EVENT' });
+    expect((await db.doc(`tickets/${bobTicket}`).get()).get('status')).toBe('issued');
+    const logs = await db.collection('scanLogs').where('eventId', '==', 'other-festival').get();
+    expect(logs.docs.map((d) => d.data())).toEqual([
+      expect.objectContaining({ result: 'invalid', ticketId: null, studentName: null }),
+    ]);
+    await Promise.all(logs.docs.map((d) => d.ref.delete()));
+  });
+
   it('a student calling verifyEntry is permission-denied', async () => {
     const { qrPayload } = await bob.refreshQrToken({ ticketId: bobTicket });
     expect(await codeOf(bob.verifyEntry({ qrPayload }))).toBe('functions/permission-denied');

@@ -130,14 +130,15 @@
 
 ### 2.4 `verifyEntry`
 - **호출자**: staff, admin
-- **요청**: `{ qrPayload: string }`
+- **요청**: `{ qrPayload: string; eventId?: string }` (`eventId`: 검표 화면이 보고 있는 행사. 없으면 행사를 확인하지 않는다)
 - **응답**
   ```ts
   | { ok: true; ticketId: string; holder: { name: string; studentId: string; photoUrl: string | null }; enteredCount: number; capacity: number }
-  | { ok: false; reason: 'INVALID_FORMAT' | 'NOT_FOUND' | 'TOKEN_MISMATCH' | 'EXPIRED' | 'USED' }
+  | { ok: false; reason: 'INVALID_FORMAT' | 'NOT_FOUND' | 'WRONG_EVENT' | 'TOKEN_MISMATCH' | 'EXPIRED' | 'USED' }
   ```
 - **처리** (트랜잭션)
   1. 형식이 `TTV1:…:…`가 아니면 `INVALID_FORMAT`, 입장권이 없으면 `NOT_FOUND`
+  1-1. `eventId`를 보냈는데 다른 행사 입장권이면 `WRONG_EVENT`. 입장 처리하지 않고, 기록에는 그 학생 정보를 남기지 않는다
   2. status가 `used`면 `USED` (같은 QR 재스캔)
   3. 토큰이 다르면 `TOKEN_MISMATCH` (이미 교체된 예전 QR)
   4. 만료 시각이 지났으면 `EXPIRED` (캡처한 QR)
@@ -243,6 +244,7 @@ service cloud.firestore {
 | `TOKEN_MISMATCH`, `EXPIRED` | 만료된 QR이에요. 화면의 최신 QR을 보여 주세요 |
 | `USED` | 이미 입장한 입장권이에요 |
 | `INVALID_FORMAT`, `NOT_FOUND` | 인식할 수 없는 QR이에요 |
+| `WRONG_EVENT` | 다른 행사 입장권이에요 |
 | `TICKET_USED` | 이미 사용된 입장권은 취소할 수 없어요 |
 
 | outcome | 문구 예시 |
@@ -282,10 +284,10 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 
 | 필드 | 설명 |
 | --- | --- |
-| eventId, ticketId | 읽을 수 없는 QR이면 null |
+| eventId, ticketId | eventId는 검표 화면의 행사(보냈을 때), 아니면 입장권의 행사. 읽을 수 없는 QR이면 null. `WRONG_EVENT`면 ticketId는 null |
 | studentName, studentId | 입장권 주인. 알 수 없으면 null |
 | staffUid, staffName | 검표한 사람 |
-| result | `ok`, `expired`(`EXPIRED`, `TOKEN_MISMATCH`), `used`, `invalid`(`INVALID_FORMAT`, `NOT_FOUND`) |
+| result | `ok`, `expired`(`EXPIRED`, `TOKEN_MISMATCH`), `used`, `invalid`(`INVALID_FORMAT`, `NOT_FOUND`, `WRONG_EVENT`) |
 | scannedAt | 서버 시각 |
 
 ### 함수
