@@ -11,7 +11,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { StateView } from '@/components/StateView';
 import { ThemeEditor } from '@/components/ThemeEditor';
 import { Toggle } from '@/components/Toggle';
-import { updateEventSettings, updateReassignMode, USE_MOCK } from '@/lib/api';
+import { updateEventSettings, updateReassignMode } from '@/lib/api';
 import type { EventSettings, ReassignMode } from '@/types';
 
 const MODES: { value: ReassignMode; icon: typeof ListOrdered; title: string; text: string }[] = [
@@ -93,7 +93,7 @@ export function SettingsPage() {
               <button
                 key={value}
                 type="button"
-                disabled={saving !== null || !USE_MOCK}
+                disabled={saving !== null}
                 aria-pressed={event.reassignMode === value}
                 onClick={() => changeMode(value)}
                 className={cx(
@@ -109,7 +109,6 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
-          {!USE_MOCK && <NextStepNote>재배정 방식은 지금 백엔드 시드 데이터로 정해요. 화면에서 바꾸기는 다음 단계예요.</NextStepNote>}
           {error && <p className="text-caption text-danger">저장하지 못했어요. 다시 시도해 주세요</p>}
         </Section>
 

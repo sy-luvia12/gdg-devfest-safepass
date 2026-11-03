@@ -38,6 +38,8 @@ export const requestDeviceReset: typeof mock.requestDeviceReset = real ? notYet 
 export const getMyDeviceReset: typeof mock.getMyDeviceReset = real ? empty(null) : mock.getMyDeviceReset;
 export const listDeviceResets: typeof mock.listDeviceResets = real ? empty([]) : mock.listDeviceResets;
 export const resolveDeviceReset: typeof mock.resolveDeviceReset = real ? notYet : mock.resolveDeviceReset;
+/** 관리자가 학생 이메일로 기기 등록을 지운다 (백엔드 resetDevice) */
+export const resetDeviceByEmail: typeof mock.resetDeviceByEmail = real ? fb.resetDeviceByEmail : mock.resetDeviceByEmail;
 
 // 입장권
 export const issueTicket: typeof mock.issueTicket = real ? fb.issueTicket : mock.issueTicket;
@@ -60,11 +62,10 @@ export const getMyScanHistory: typeof mock.getMyScanHistory = real ? empty([]) :
 export const subscribeEventStats: typeof mock.subscribeEventStats = real
   ? fb.subscribeEventStats
   : mock.subscribeEventStats;
-export const listEntries: typeof mock.listEntries = real ? empty([]) : mock.listEntries;
-export const listReassignments: typeof mock.listReassignments = real ? empty([]) : mock.listReassignments;
-export const getWaitlist: typeof mock.getWaitlist = real ? empty([]) : mock.getWaitlist;
-/** 재배정 방식은 백엔드에서 시드로 정한다 (변경 함수는 다음 단계) */
-export const updateReassignMode: typeof mock.updateReassignMode = real ? notYet : mock.updateReassignMode;
+export const listEntries: typeof mock.listEntries = real ? fb.listEntries : mock.listEntries;
+export const listReassignments: typeof mock.listReassignments = real ? fb.listReassignments : mock.listReassignments;
+export const getWaitlist: typeof mock.getWaitlist = real ? fb.getWaitlist : mock.getWaitlist;
+export const updateReassignMode: typeof mock.updateReassignMode = real ? fb.updateReassignMode : mock.updateReassignMode;
 export const listTickets: typeof mock.listTickets = real ? empty([]) : mock.listTickets;
 export const getRoster: typeof mock.getRoster = real ? empty(null) : mock.getRoster;
 export const importRoster: typeof mock.importRoster = real ? notYet : mock.importRoster;

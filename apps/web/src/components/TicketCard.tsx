@@ -32,9 +32,14 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
 
       <div className="flex flex-col items-center gap-3">
         <div className={cx('rounded-lg bg-bg p-4 transition duration-200', used && 'opacity-30 grayscale')}>
-          <div key={payload} className="animate-fade-in">
-            <QRCodeSVG value={payload} size={208} fgColor="#1F2328" bgColor="#FFFFFF" level="M" />
-          </div>
+          {used || ticket.qrToken ? (
+            <div key={payload} className="animate-fade-in">
+              <QRCodeSVG value={payload} size={208} fgColor="#1F2328" bgColor="#FFFFFF" level="M" />
+            </div>
+          ) : (
+            // 서버에서 QR을 받기 전 (기기 확인 중)
+            <div className="h-[208px] w-[208px] animate-pulse rounded-md bg-surface" aria-label="QR을 받는 중" />
+          )}
         </div>
         {used ? (
           <p className="text-caption text-ink-2">

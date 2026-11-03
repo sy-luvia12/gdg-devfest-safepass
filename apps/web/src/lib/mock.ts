@@ -541,6 +541,19 @@ export async function resolveDeviceReset(id: string): Promise<void> {
   save(s);
 }
 
+/** 학생 이메일로 기기 등록을 지운다 (관리자 직접 초기화) */
+export async function resetDeviceByEmail(email: string): Promise<string> {
+  await wait();
+  const s = load();
+  requireUser(s, ['admin']);
+  const user = userByEmail(s, email);
+  if (!user) throw new ApiError('not_found');
+  user.deviceStatus = 'registered';
+  s.deviceResets.filter((r) => r.uid === user.uid).forEach((r) => (r.status = 'done'));
+  save(s);
+  return user.name;
+}
+
 // ---------- 입장권 ----------
 
 export async function issueTicket(eventId: string): Promise<Ticket> {

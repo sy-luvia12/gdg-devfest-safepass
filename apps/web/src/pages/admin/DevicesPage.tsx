@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { useAdmin } from '@/app/AdminLayout';
 import { formatAgo } from '@/app/format';
 import { Badge } from '@/components/Badge';
+import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { ListItem } from '@/components/ListItem';
 import { NextStepNote } from '@/components/NextStepNote';
 import { PageTitle } from '@/components/PageTitle';
 import { ResponsiveTable } from '@/components/ResponsiveTable';
 import { StateView } from '@/components/StateView';
-import { listDeviceResets, resolveDeviceReset } from '@/lib/api';
+import { listDeviceResets, resetDeviceByEmail, resolveDeviceReset, USE_MOCK } from '@/lib/api';
+import { ApiError } from '@/types';
 import type { DeviceResetRequest } from '@/types';
 
 /** 폰을 바꾼 학생의 기기 초기화 요청 (기술 설계 2.2 resetDevice) */
@@ -18,6 +20,30 @@ export function DevicesPage() {
   const [rows, setRows] = useState<DeviceResetRequest[] | null>(null);
   const [error, setError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const onResetByEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      const name = await resetDeviceByEmail(email);
+      setResetMsg({ ok: true, text: `${name}님의 기기 등록을 지웠어요. 다음에 로그인한 폰이 새 기기로 등록돼요` });
+      setEmail('');
+      load();
+      refreshBadges();
+    } catch (err) {
+      setResetMsg({
+        ok: false,
+        text: err instanceof ApiError && err.code === 'not_found' ? '이 이메일로 가입한 학생이 없어요' : '초기화하지 못했어요. 다시 시도해 주세요',
+      });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const load = useCallback(() => {
     setError(false);
@@ -59,7 +85,36 @@ export function DevicesPage() {
         title="기기 초기화"
         description="입장권은 처음 등록한 폰에서만 열려요. 폰을 바꾼 학생이 요청하면 본인인지 확인하고 초기화해 주세요"
       />
-      {error ? (
+      <Card className="mb-6 flex flex-col gap-3">
+        <p className="text-heading text-ink">학생 이메일로 초기화</p>
+        <p className="text-caption text-ink-2">학생증으로 본인인지 확인한 뒤, 학생의 학교 이메일을 입력해 주세요</p>
+        <form onSubmit={onResetByEmail} className="flex gap-2">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="학번@korea.ac.kr"
+            aria-label="학생 이메일"
+            className="h-10 min-w-0 flex-1 rounded-md bg-surface px-4 text-label text-ink outline-none placeholder:text-ink-3 focus:bg-bg focus:ring-[1.5px] focus:ring-lavender"
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            size="sm"
+            loading={resetting}
+            disabled={!email.trim()}
+            icon={<RotateCcw size={16} strokeWidth={1.75} />}
+          >
+            초기화
+          </Button>
+        </form>
+        {resetMsg && (
+          <p role="status" className={resetMsg.ok ? 'text-caption text-success' : 'text-caption text-danger'}>
+            {resetMsg.text}
+          </p>
+        )}
+      </Card>
+      {!USE_MOCK ? null : error ? (
         <StateView
           kind="error"
           title="요청을 불러오지 못했어요"

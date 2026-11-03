@@ -117,6 +117,7 @@ export type ScanLog = {
   userPhotoUrl?: string;
   studentId?: string;
   staffUid?: string;
+  staffName?: string;
   result: ScanResult;
   at: number;
 };
@@ -159,6 +160,7 @@ export class ApiError extends Error {
     | 'unauthenticated'
     | 'not_in_roster'
     | 'invalid_state'
+    | 'device_blocked' // 다른 기기에 등록된 계정
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);

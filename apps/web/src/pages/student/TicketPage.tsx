@@ -8,7 +8,7 @@ import { IconButton } from '@/components/IconButton';
 import { StateView } from '@/components/StateView';
 import { TicketCard } from '@/components/TicketCard';
 import { cancelTicket, formatQrPayload, getEvent, getMyTicket, refreshQrToken } from '@/lib/api';
-import type { CancelResult, Event, Ticket } from '@/types';
+import { ApiError, type CancelResult, type Event, type Ticket } from '@/types';
 
 const REFRESH_BEFORE_MS = 5_000;
 
@@ -20,7 +20,7 @@ const CANCEL_DONE: Record<Exclude<CancelResult, 'used'>, { title: string; descri
 export function TicketPage() {
   const eventId = useEventId();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [ticket, setTicket] = useState<Ticket | null | undefined>(undefined);
   const [error, setError] = useState(false);
@@ -55,15 +55,18 @@ export function TicketPage() {
         if (!latest || latest.status !== 'issued') return setTicket(latest);
         const { token, expiresAt: next } = await refreshQrToken(latest.id);
         if (!stop) setTicket({ ...latest, qrToken: token, qrExpiresAt: next });
-      } catch {
-        if (!stop) setError(true);
+      } catch (e) {
+        if (stop) return;
+        // 다른 기기에 등록된 계정이면 내 정보를 다시 읽어 기기 확인 화면으로 보낸다
+        if (e instanceof ApiError && e.code === 'device_blocked') void refreshUser();
+        else setError(true);
       }
     }, delay);
     return () => {
       stop = true;
       clearTimeout(timer);
     };
-  }, [eventId, ticketId, issued, expiresAt, cancelled]);
+  }, [eventId, ticketId, issued, expiresAt, cancelled, refreshUser]);
 
   const onCancel = async () => {
     if (!ticket) return;
