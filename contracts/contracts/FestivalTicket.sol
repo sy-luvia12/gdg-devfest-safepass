@@ -3,12 +3,15 @@ pragma solidity 0.8.28;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IERC5192} from "./interfaces/IERC5192.sol";
 
 /// @title SafePass festival ticket
 /// @notice One NFT per ticket. Only the server minter moves tickets, so students cannot trade them.
 /// Every operator move is an event with a reason code, so a move cannot be hidden.
 /// The contract has no proxy and no setter for capacity: the rules are fixed once deployed.
-contract FestivalTicket is ERC721, AccessControl {
+/// ERC-5192: every ticket is locked for its whole life, so wallets and explorers show it as
+/// non-transferable. Only the minter's reassign (with a reason code) moves a ticket.
+contract FestivalTicket is ERC721, AccessControl, IERC5192 {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
     // Reason codes for reassign and release. Kept in sync with functions/src/chain/reasons.ts.
@@ -66,6 +69,7 @@ contract FestivalTicket is ERC721, AccessControl {
         e.active += 1;
         eventOf[tokenId] = eventKey;
         _mint(to, tokenId);
+        emit Locked(tokenId);
         emit Issued(tokenId, eventKey, to);
     }
 
@@ -95,6 +99,13 @@ contract FestivalTicket is ERC721, AccessControl {
         emit Used(tokenId);
     }
 
+    /// @inheritdoc IERC5192
+    /// @dev Always true for an existing ticket; reverts for one that does not exist.
+    function locked(uint256 tokenId) external view returns (bool) {
+        _requireOwned(tokenId);
+        return true;
+    }
+
     /// @dev Every mint, transfer and burn passes here. Only the minter may move a ticket.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         if (!hasRole(MINTER_ROLE, _msgSender())) revert TransferNotAllowed();
@@ -111,6 +122,6 @@ contract FestivalTicket is ERC721, AccessControl {
     }
 
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
-        return super.supportsInterface(interfaceId);
+        return interfaceId == type(IERC5192).interfaceId || super.supportsInterface(interfaceId);
     }
 }
