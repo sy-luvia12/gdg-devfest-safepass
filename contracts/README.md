@@ -25,6 +25,29 @@ npm --prefix contracts ci
 npm --prefix contracts test               # 컨트랙트 테스트
 npm --prefix contracts run node           # 로컬 체인 (chainId 31337, http://127.0.0.1:8545)
 npm --prefix contracts run deploy:local   # 로컬 배포 → deployments/localhost.json (커밋 안 함)
-AMOY_RPC_URL=... MINTER_PRIVATE_KEY=... npm --prefix contracts run deploy:amoy   # → deployments/amoy.json
 ```
-키는 환경 변수로만 넘기고 커밋하지 않는다. 백엔드가 부르는 체인 모듈 약속은 `docs/api.md` 8장.
+
+## Amoy 배포 런북
+키는 저장소 밖 JSON 파일(`{"address","privateKey"}`, 권한 600)에 두고 `MINTER_KEY_FILE`로 경로만 넘긴다. `scripts/amoy.sh`가 키를 환경 변수로만 옮기므로 명령줄, 셸 기록, 출력, `bash -x` trace 어디에도 키가 찍히지 않는다. RPC 기본값은 `https://polygon-amoy-bor-rpc.publicnode.com`이고 `AMOY_RPC_URL`로 바꿀 수 있다.
+
+```bash
+export MINTER_KEY_FILE=/path/outside/repo/minter.json
+contracts/scripts/amoy.sh preflight   # 읽기 전용: 잔고, 가스 가격, 배포비, 감당 가능한 티켓 수. 배포비가 모자라면 exit 1
+contracts/scripts/amoy.sh deploy      # preflight 통과 후 배포 → deployments/amoy.json (커밋한다)
+contracts/scripts/amoy.sh verify      # 소스 검증. 기본은 Sourcify(키 불필요), ETHERSCAN_API_KEY가 있으면 Polygonscan도
+```
+
+가스 예산(`scripts/budget.js`, Hardhat에서 측정한 가스 단위):
+
+| 작업 | 가스 | 30 gwei일 때 POL |
+|---|---|---|
+| 배포 | 1,671,939 | 0.0502 |
+| createEvent | 48,572 | 0.0015 |
+| mint | 102,881 | 0.0031 |
+| markUsed | 49,649 | 0.0015 |
+| reassign | 62,001 | 0.0019 |
+| release | 41,419 | 0.0012 |
+
+티켓 1장(발급+입장)은 약 0.0046 POL이다. 0.1 POL이면 배포와 행사 1개 생성 후 약 10장을 처리한다. `test/budget.test.js`가 가스를 다시 재서 5% 넘게 달라지면 실패하므로, 컨트랙트를 고치면 표와 `GAS` 상수를 같이 고친다.
+
+키는 커밋하지 않는다. 백엔드가 부르는 체인 모듈 약속은 `docs/api.md` 8장.
