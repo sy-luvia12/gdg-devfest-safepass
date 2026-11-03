@@ -38,8 +38,10 @@ export type User = {
 
 export type EventSettings = {
   requireRoster: boolean; // 명단에 있는 학생만 발급
-  twoStepCheck: boolean; // 검표 2단계: 사진 대조 후 스태프가 승인해야 입장 처리
 };
+
+/** 취소표 재배정 방식. queue: 대기 순서대로 / random: 대기 명단에서 무작위 (운영진이 행사별로 정함) */
+export type ReassignMode = 'queue' | 'random';
 
 export type Event = {
   id: string;
@@ -54,6 +56,7 @@ export type Event = {
   allowedDomains: string[];
   theme: EventTheme;
   settings: EventSettings;
+  reassignMode: ReassignMode;
   dataRetentionDays: number; // 행사 후 개인정보 보관 기간 (기술 설계 2.6)
 };
 
@@ -74,37 +77,37 @@ export type TicketRow = Ticket & { ownerName: string; ownerStudentId: string };
 
 /** 입장권 기록 타임라인 (온체인 기록은 11/4 이후 실제 tx로 교체) */
 export type TicketHistoryItem = {
-  type: 'issued' | 'transfer_out' | 'transfer_in' | 'used';
+  type: 'issued' | 'reassigned' | 'used';
   at: number;
   detail: string;
   txHash: string;
 };
 
-export type TransferReason = 'over_face_value' | 'not_student' | 'already_has_ticket';
+/** 입장권 취소 결과. reassigned: 대기자에게 넘어감 / released: 대기자가 없어 다시 발급 가능 / used: 이미 사용돼 취소 불가 */
+export type CancelResult = 'reassigned' | 'released' | 'used';
 
-/** 양도는 보낸 쪽 요청(pending) → 받는 쪽 수락(success)으로 끝난다 (기술 설계 2.1 list/buy) */
-export type Transfer = {
+/** 취소·재배정 기록 (관리자) */
+export type Reassignment = {
   id: string;
   ticketId: string;
   eventId: string;
-  fromUid: string;
-  toEmail: string;
-  price: number;
-  result: 'pending' | 'success' | 'rejected' | 'declined' | 'cancelled';
-  reason?: TransferReason;
-  createdAt: number;
-  resolvedAt?: number;
-};
-
-/** 화면 표시용으로 이름·NFT 번호를 붙인 양도 */
-export type TransferView = Transfer & {
-  fromName: string;
-  toName?: string;
-  eventName: string;
   nftTokenId: string;
+  fromName: string;
+  toName?: string; // released면 없음
+  mode: ReassignMode;
+  outcome: 'reassigned' | 'released';
+  createdAt: number;
 };
 
-export type ScanResult = 'ok' | 'expired' | 'used' | 'invalid' | 'mismatch';
+/** 대기 명단 (학생회가 구글 시트로 등록, 프로토타입은 시드) */
+export type WaitlistEntry = {
+  email: string;
+  name: string;
+  order: number;
+  status: 'waiting' | 'assigned';
+};
+
+export type ScanResult = 'ok' | 'expired' | 'used' | 'invalid';
 
 export type ScanLog = {
   id: string;
@@ -114,18 +117,16 @@ export type ScanLog = {
   userPhotoUrl?: string;
   studentId?: string;
   staffUid?: string;
-  result: ScanResult; // mismatch: 2단계 검표에서 얼굴 불일치
+  result: ScanResult;
   at: number;
 };
 
 export type VerifyResult = {
-  result: Exclude<ScanResult, 'mismatch'>;
+  result: ScanResult;
   user?: Pick<User, 'name' | 'studentId' | 'photoUrl'>;
   nftTokenId?: string;
   usedAt?: number;
   ticketId?: string;
-  /** true면 아직 입장 처리 전. 스태프가 confirmEntry로 확정한다 */
-  needsConfirm?: boolean;
 };
 
 export type EventStats = {

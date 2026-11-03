@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check, Smartphone } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { studentGatePath } from '@/app/config';
@@ -125,7 +125,7 @@ export function OnboardingPage() {
           <section className="flex flex-col gap-5">
             <div>
               <h2 className="text-title text-ink">본인 사진을 올려 주세요</h2>
-              <p className="mt-1 text-body text-ink-2">검표할 때 스태프가 이 사진과 얼굴을 대조해요</p>
+              <p className="mt-1 text-body text-ink-2">입장할 때 검표 화면에 이 사진이 함께 떠요</p>
             </div>
             <ImagePicker label="본인 사진" hint="정면 얼굴이 잘 보이는 사진" value={photo} onChange={setPhoto} shape="face" />
             <ul className="flex flex-col gap-1 text-caption text-ink-2">
@@ -158,6 +158,11 @@ export function OnboardingPage() {
               </div>
             </div>
             {idCard && <img src={idCard} alt="학생증" className="w-full rounded-lg border border-line object-cover" />}
+            <p className="flex items-start gap-2 rounded-md bg-surface px-4 py-3 text-caption text-ink-2">
+              <Smartphone size={16} strokeWidth={1.75} className="mt-px shrink-0" />
+              지금 쓰는 이 기기가 입장권 기기로 등록돼요. 입장권 QR은 이 기기에서만 떠요. 기기를 바꾸면 학생회에
+              초기화를 요청하면 돼요.
+            </p>
             <p className="text-caption text-ink-2">학생회 확인은 보통 하루 안에 끝나요. 승인되면 입장권을 받을 수 있어요.</p>
           </section>
         )}

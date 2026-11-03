@@ -1,15 +1,14 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  ArrowLeftRight,
   BadgeCheck,
   CalendarCog,
   Fingerprint,
+  ListOrdered,
   Lock,
   QrCode,
-  ScanFace,
   Sheet,
   ShieldCheck,
-  Ticket,
+  Smartphone,
   UserCog,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -18,21 +17,21 @@ import { Card } from '@/components/Card';
 import { Orb } from '@/components/Orb';
 
 const PROBLEMS = [
-  { value: '10만~50만 원', text: '재학생존 입장을 위해 학생증을 빌려주고 빌리는 가격' },
-  { value: '암표 여전', text: '모바일 티켓으로 바꾼 학교도 산 사람과 들어오는 사람을 확인하지 못해요' },
-  { value: '수작업', text: '학생회는 줄 세우기, 학생증 확인, 팔찌 배부, 구글폼·계좌이체 명단 관리까지' },
+  { value: '수작업', text: '학생회는 줄 세우기, 학생증 확인, 팔찌 배부, 구글폼·계좌이체 명단 관리까지 손으로 해요' },
+  { value: '불투명', text: '취소표가 누구에게 갔는지, 몇 명이 들어왔는지 학생들이 확인할 길이 없어요' },
+  { value: '대여·거래', text: '학생증과 계정을 빌려주고 표를 사고파는 일이 반복돼요' },
 ];
 
 const SOLUTIONS: { icon: LucideIcon; title: string; text: string }[] = [
-  { icon: Ticket, title: '재학생 인증 입장권', text: '학교 계정으로 로그인하고 학생회 승인을 받은 재학생에게 1인 1매만 발급해요' },
-  { icon: ScanFace, title: '본인 확인 검표', text: '30초마다 바뀌는 QR과 본인 사진을 함께 띄워요. 스태프는 얼굴만 대조하면 돼요' },
-  { icon: ArrowLeftRight, title: '정가 양도', text: '못 가게 되면 다른 재학생에게 정가 이하로만 넘길 수 있어요. 웃돈 거래는 자동으로 막아요' },
+  { icon: Smartphone, title: '기기에 묶인 입장권', text: '학교 계정으로 1인 1매를 받고, 받은 기기에서만 30초마다 바뀌는 QR이 떠요' },
+  { icon: ShieldCheck, title: '위조할 수 없는 기록', text: '입장권 번호와 발급·입장 기록을 블록체인에 남겨 진짜 표인지 누구나 확인할 수 있어요' },
+  { icon: ListOrdered, title: '규칙대로 취소표 재배정', text: '양도 대신 취소만 있어요. 취소표는 학생회가 정한 순서나 추첨으로 대기자에게 가요' },
 ];
 
 const STAGES: { icon: LucideIcon; stage: string; blocks: string }[] = [
-  { icon: Fingerprint, stage: '발급', blocks: '외부인, 매크로 사재기 → 학교 계정 + 학생회 승인 + 1인 1매' },
-  { icon: ArrowLeftRight, stage: '거래', blocks: '웃돈 거래 → 정가 초과 양도는 시스템이 거부' },
-  { icon: QrCode, stage: '입장', blocks: '캡처 화면, 학생증·계정 대여, 중복 입장 → 30초 QR + 사진 대조 + 1회용' },
+  { icon: Fingerprint, stage: '발급', blocks: '학교 계정 + 1인 1매 + 기기 등록. 발급 기록은 블록체인에 남아요' },
+  { icon: ListOrdered, stage: '취소', blocks: '개인 간 양도 없음. 취소표는 대기 명단 순서 또는 추첨으로만 재배정' },
+  { icon: QrCode, stage: '입장', blocks: '30초 QR + 1회용. 캡처 화면과 중복 입장은 거부되고, 입장 인원은 실시간으로 집계' },
 ];
 
 const ONBOARDING: { icon: LucideIcon; title: string; text: string }[] = [
@@ -42,7 +41,7 @@ const ONBOARDING: { icon: LucideIcon; title: string; text: string }[] = [
   { icon: UserCog, title: '검표 스태프 지정', text: '당일 검표할 학생회원의 계정에 검표 권한을 줘요' },
 ];
 
-/** 학생회(구매 고객)와 심사위원을 위한 서비스 소개 */
+/** 학생회(고객)와 심사위원을 위한 서비스 소개. 핵심 메시지는 운영 투명성과 신뢰성 */
 export function AboutPage() {
   const navigate = useNavigate();
   return (
@@ -62,12 +61,12 @@ export function AboutPage() {
         <section className="flex flex-col items-center gap-8 text-center">
           <Orb size={180} />
           <div className="flex flex-col gap-3">
-            <p className="text-label text-ink-2">대학 축제 재학생 인증 입장권</p>
+            <p className="text-label text-ink-2">대학 축제 재학생 입장권</p>
             <h1 className="text-display text-ink md:text-[36px] md:leading-[46px]">
-              학생증은 빌려줄 수 있어도,
-              <br />내 계정과 내 얼굴은 빌려줄 수 없어요
+              학생회의 축제 운영을
+              <br />투명하고 믿을 수 있게
             </h1>
-            <p className="text-body text-ink-2">산 사람과 들어오는 사람이 같은지, SafePass가 확인해요</p>
+            <p className="text-body text-ink-2">발급부터 취소표 재배정, 입장까지 모든 과정이 규칙대로 기록돼요</p>
           </div>
           <div className="w-full max-w-[320px]">
             <Button onClick={() => navigate('/')}>데모 시작하기</Button>
@@ -75,7 +74,7 @@ export function AboutPage() {
         </section>
 
         <section className="flex flex-col gap-4">
-          <h2 className="text-title text-ink">축제 입장 자격이 거래되고 있어요</h2>
+          <h2 className="text-title text-ink">축제 운영, 믿고 맡길 수 있나요?</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {PROBLEMS.map((p) => (
               <Card key={p.value} className="flex flex-col gap-2">
@@ -85,8 +84,9 @@ export function AboutPage() {
             ))}
           </div>
           <p className="text-body text-ink-2">
-            문제는 티켓의 모양이 아니라, <span className="text-ink">산 사람과 들어오는 사람이 같은지 확인하지 못하는 것</span>
-            이에요.
+            필요한 건 거래를 완벽히 막는 기술이 아니라,{' '}
+            <span className="text-ink">학생들이 운영을 믿을 수 있게 과정을 보여주는 것</span>이에요. 암표가 줄어드는 건 그
+            결과예요.
           </p>
         </section>
 
@@ -106,7 +106,7 @@ export function AboutPage() {
         </section>
 
         <section className="flex flex-col gap-4">
-          <h2 className="text-title text-ink">단계마다 막는 것</h2>
+          <h2 className="text-title text-ink">단계마다 남는 것</h2>
           <Card padded={false} className="divide-y divide-line">
             {STAGES.map(({ icon: Icon, stage, blocks }) => (
               <div key={stage} className="flex items-start gap-4 px-5 py-4">
@@ -151,7 +151,7 @@ export function AboutPage() {
             </p>
             <ul className="flex flex-col gap-1 text-caption text-ink-2">
               <li>· 이름, 학번, 학교 이메일, 사진만 수집</li>
-              <li>· 얼굴 자동 인식 없이 스태프가 눈으로만 대조</li>
+              <li>· 사진은 입장할 때 화면에 보여주기만 하고, 얼굴 자동 인식은 하지 않음</li>
               <li>· 블록체인에는 입장권 번호만, 개인정보는 올리지 않음</li>
               <li>· 행사 종료 7일 뒤 사진·입장 기록 자동 삭제</li>
             </ul>

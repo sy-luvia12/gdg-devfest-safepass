@@ -30,7 +30,7 @@ export function maskStudentId(id?: string): string {
   return `${id.slice(0, 4)}${'*'.repeat(id.length - 6)}${id.slice(-2)}`;
 }
 
-/** 양도 가격처럼 0원도 숫자로 보여줄 때: 0원, 5,000원 */
+/** 0원도 숫자로 보여줄 때: 0원, 5,000원 */
 export function formatPrice(n: number): string {
   return `${n.toLocaleString('ko-KR')}원`;
 }

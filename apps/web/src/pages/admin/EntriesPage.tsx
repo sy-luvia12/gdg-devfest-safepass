@@ -22,7 +22,6 @@ const RESULT_LABEL: Record<ScanResult, string> = {
   ok: '입장',
   expired: '만료',
   used: '중복',
-  mismatch: '얼굴 불일치',
   invalid: '확인 불가',
 };
 

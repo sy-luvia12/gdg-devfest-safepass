@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatTime } from '@/app/format';
+import { formatQrPayload } from '@/lib/api';
 import type { Ticket, User } from '@/types';
 import { Avatar } from './Avatar';
 import { cx } from './cx';
@@ -20,7 +21,7 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
   const now = useNow(used ? null : 250);
   const leftMs = Math.max(0, ticket.qrExpiresAt - now);
   const leftSec = Math.ceil(leftMs / 1000);
-  const payload = `safepass:${ticket.id}:${ticket.qrToken}`;
+  const payload = formatQrPayload(ticket.id, ticket.qrToken);
 
   return (
     <article className="flex flex-col gap-5 rounded-xl bg-grad-ticket p-5 shadow-float">

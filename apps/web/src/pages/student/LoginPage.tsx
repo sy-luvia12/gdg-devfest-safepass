@@ -7,12 +7,12 @@ import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
 import { Orb } from '@/components/Orb';
 import { StateView } from '@/components/StateView';
-import { getMyTicket } from '@/lib/api';
+import { getMyTicket, USE_MOCK } from '@/lib/api';
 import { MOCK_OUTSIDER, MOCK_SCHOOL_ACCOUNTS, mockReset, mockSelectAccount, mockSelectedAccount } from '@/lib/mock';
 import { ApiError, type School, type User } from '@/types';
 
-// 백엔드 연결 전 데모용 계정 전환 패널. 배포본에서 숨기려면 VITE_DEMO_PANEL=off
-const SHOW_DEMO_PANEL = import.meta.env.VITE_DEMO_PANEL !== 'off';
+// mock일 때만 쓰는 데모 계정 전환 패널. 숨기려면 VITE_DEMO_PANEL=off
+const SHOW_DEMO_PANEL = USE_MOCK && import.meta.env.VITE_DEMO_PANEL !== 'off';
 
 export function LoginPage() {
   const { user, loading, signIn } = useAuth();
