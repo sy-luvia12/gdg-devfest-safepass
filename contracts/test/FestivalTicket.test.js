@@ -177,3 +177,36 @@ describe('FestivalTicket', () => {
     expect(await ticket.supportsInterface('0x7965db0b')).to.equal(true); // AccessControl
   });
 });
+
+describe('FestivalTicket.ticketStatus', () => {
+  const EVENT = key('lookup-festival');
+  let ticket, minter, alice, bob, outsider;
+
+  beforeEach(async () => {
+    let admin;
+    [admin, minter, alice, bob, outsider] = await ethers.getSigners();
+    ticket = await ethers.deployContract('FestivalTicket', [admin.address, minter.address]);
+    await ticket.connect(minter).createEvent(EVENT, 5);
+  });
+
+  it('reports a ticket that was never issued without reverting', async () => {
+    expect(await ticket.connect(outsider).ticketStatus(tokenOf('fake'))).to.deep.equal([0n, ethers.ZeroAddress, ethers.ZeroHash]);
+  });
+
+  it('follows a ticket through issue, reassign and gate entry', async () => {
+    const t = tokenOf('lookup-1');
+    await ticket.connect(minter).mint(alice.address, t, EVENT);
+    expect(await ticket.ticketStatus(t)).to.deep.equal([1n, alice.address, EVENT]);
+    await ticket.connect(minter).reassign(t, bob.address, R.QUEUE);
+    expect(await ticket.ticketStatus(t)).to.deep.equal([1n, bob.address, EVENT]);
+    await ticket.connect(minter).markUsed(t);
+    expect(await ticket.ticketStatus(t)).to.deep.equal([2n, bob.address, EVENT]);
+  });
+
+  it('tells a released ticket apart from one never issued', async () => {
+    const t = tokenOf('lookup-2');
+    await ticket.connect(minter).mint(alice.address, t, EVENT);
+    await ticket.connect(minter).release(t, R.RELEASED);
+    expect(await ticket.ticketStatus(t)).to.deep.equal([3n, ethers.ZeroAddress, EVENT]);
+  });
+});

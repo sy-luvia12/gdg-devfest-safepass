@@ -99,6 +99,17 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
         emit Used(tokenId);
     }
 
+    /// @notice Public lookup for anyone holding a ticket id: never reverts.
+    /// @return status 0 never issued, 1 active (issued, not used), 2 used at the gate, 3 released (burned)
+    /// @return owner current holder, or address(0) when not active or used
+    /// @return eventKey the event the ticket was issued for, or 0 when never issued
+    function ticketStatus(uint256 tokenId) external view returns (uint8 status, address owner, bytes32 eventKey) {
+        eventKey = eventOf[tokenId];
+        owner = _ownerOf(tokenId);
+        if (owner != address(0)) return (isUsed[tokenId] ? 2 : 1, owner, eventKey);
+        return (eventKey == bytes32(0) ? 0 : 3, address(0), eventKey);
+    }
+
     /// @inheritdoc IERC5192
     /// @dev Always true for an existing ticket; reverts for one that does not exist.
     function locked(uint256 tokenId) external view returns (bool) {
