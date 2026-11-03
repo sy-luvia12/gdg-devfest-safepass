@@ -14,7 +14,7 @@ const db = getFirestore();
 const schools: Record<string, Record<string, unknown>> = {
   korea: { name: '고려대학교', brandColor: '#8B0029', domains: ['korea.ac.kr'] },
   yonsei: { name: '연세대학교', brandColor: '#003876', domains: ['yonsei.ac.kr'] },
-  skku: { name: '성균관대학교', brandColor: '#8DC63F', domains: ['skku.edu'] },
+  skku: { name: '성균관대학교', brandColor: '#8DC63F', domains: ['skku.edu', 'g.skku.edu'] },
   kaist: { name: 'KAIST', brandColor: '#004191', domains: ['kaist.ac.kr'] },
 };
 
@@ -66,7 +66,7 @@ const events: Record<string, Record<string, unknown>> = {
     ...base,
     name: '대동제',
     schoolIds: ['skku'],
-    allowedDomains: ['skku.edu'],
+    allowedDomains: ['skku.edu', 'g.skku.edu'],
     place: '금잔디광장',
     date: at('2026-11-21T18:00:00+09:00'),
     capacity: 8_000,
