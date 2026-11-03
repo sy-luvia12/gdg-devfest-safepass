@@ -28,6 +28,9 @@ describe('gas budget constants', () => {
     within(await used(c.markUsed(1n)), GAS.markUsed);
     await used(c.mint(a.address, 2n, ev));
     within(await used(c.release(2n, 3)), GAS.release);
+    within(await used(c.commitDraw(ev, 1, ethers.id('snap'))), GAS.commitDraw);
+    await ethers.provider.send('hardhat_mine', ['0x6']);
+    within(await used(c.seedDraw(ev, 1)), GAS.seedDraw);
   });
 });
 
@@ -37,8 +40,8 @@ describe('budget()', () => {
     expect(r.setupCost).to.equal((GAS.deploy + GAS.createEvent) * gwei(30));
     expect(r.perTicket).to.equal(TICKET_GAS * gwei(30));
     expect(r.canSetup).to.equal(true);
-    // (0.1 - 0.0528) / 0.00458 = 10.3
-    expect(r.ticketsCovered).to.equal(10);
+    // (0.1 - 0.0594) / 0.00458 = 8.9
+    expect(r.ticketsCovered).to.equal(8);
   });
 
   it('skips the deploy cost once the contract exists', () => {

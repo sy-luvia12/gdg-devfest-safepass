@@ -30,11 +30,28 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
     mapping(uint256 tokenId => bytes32 eventKey) public eventOf;
     mapping(uint256 tokenId => bool) public isUsed;
 
+    /// @notice Commit-reveal for the cancelled-ticket lottery.
+    /// The server takes a private snapshot of the waitlist and the freed tickets at a secret draw time,
+    /// commits its hash here, and the winners follow from a block hash that did not exist at commit time.
+    /// Neither the server nor anyone else can pick the seed after seeing the snapshot.
+    struct Draw {
+        bytes32 commitment; // keccak256 of the snapshot (format in functions/src/lottery)
+        uint64 seedBlock; // block whose hash becomes the seed
+        bytes32 seed; // 0 until seedDraw stores blockhash(seedBlock)
+    }
+
+    /// Blocks between a commit and its seed block. Polygon PoS makes about one block every 2 s.
+    uint64 public constant SEED_DELAY = 5;
+
+    mapping(bytes32 eventKey => mapping(uint32 round => Draw)) public draws;
+
     event EventCreated(bytes32 indexed eventKey, uint32 capacity);
     event Issued(uint256 indexed tokenId, bytes32 indexed eventKey, address to);
     event Reassigned(uint256 indexed tokenId, address from, address to, uint8 reason);
     event Released(uint256 indexed tokenId, uint8 reason);
     event Used(uint256 indexed tokenId);
+    event DrawCommitted(bytes32 indexed eventKey, uint32 indexed round, bytes32 commitment, uint64 seedBlock);
+    event DrawSeeded(bytes32 indexed eventKey, uint32 indexed round, bytes32 seed);
 
     error EventExists(bytes32 eventKey);
     error UnknownEvent(bytes32 eventKey);
@@ -43,6 +60,12 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
     error TicketUsed(uint256 tokenId);
     error InvalidReason(uint8 reason);
     error TransferNotAllowed();
+    error DrawAlreadyCommitted(bytes32 eventKey, uint32 round);
+    error DrawNotCommitted(bytes32 eventKey, uint32 round);
+    error DrawAlreadySeeded(bytes32 eventKey, uint32 round);
+    error SeedNotReady(uint64 seedBlock);
+    error SeedExpired(uint64 seedBlock);
+    error EmptyCommitment();
 
     constructor(address admin, address minter) ERC721("SafePass Festival Ticket", "SPASS") {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -97,6 +120,36 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
         if (isUsed[tokenId]) revert TicketUsed(tokenId);
         isUsed[tokenId] = true;
         emit Used(tokenId);
+    }
+
+    /// @notice Commits a lottery round's snapshot hash. The seed block is fixed SEED_DELAY blocks ahead.
+    /// A round can be committed again only when its seed block hash expired unseeded (older than
+    /// 256 blocks); the second DrawCommitted event stays on-chain, so a retry is always visible.
+    function commitDraw(bytes32 eventKey, uint32 round, bytes32 commitment) external onlyRole(MINTER_ROLE) {
+        if (!_events[eventKey].exists) revert UnknownEvent(eventKey);
+        if (commitment == bytes32(0)) revert EmptyCommitment();
+        Draw storage d = draws[eventKey][round];
+        if (d.seed != bytes32(0)) revert DrawAlreadySeeded(eventKey, round);
+        if (d.commitment != bytes32(0) && block.number <= d.seedBlock + 256) {
+            revert DrawAlreadyCommitted(eventKey, round);
+        }
+        uint64 seedBlock = uint64(block.number) + SEED_DELAY;
+        d.commitment = commitment;
+        d.seedBlock = seedBlock;
+        emit DrawCommitted(eventKey, round, commitment, seedBlock);
+    }
+
+    /// @notice Stores the seed once the seed block exists. Anyone may call it.
+    /// The EVM keeps only the last 256 block hashes, so this must run within about 8 minutes on Polygon.
+    function seedDraw(bytes32 eventKey, uint32 round) external returns (bytes32 seed) {
+        Draw storage d = draws[eventKey][round];
+        if (d.commitment == bytes32(0)) revert DrawNotCommitted(eventKey, round);
+        if (d.seed != bytes32(0)) revert DrawAlreadySeeded(eventKey, round);
+        if (block.number <= d.seedBlock) revert SeedNotReady(d.seedBlock);
+        seed = blockhash(d.seedBlock);
+        if (seed == bytes32(0)) revert SeedExpired(d.seedBlock);
+        d.seed = seed;
+        emit DrawSeeded(eventKey, round, seed);
     }
 
     /// @notice Public lookup for anyone holding a ticket id: never reverts.
