@@ -290,6 +290,43 @@ describe('prototype demo scenario', () => {
     const log = await db.collection('reassignments').where('ticketId', '==', carolTicket).get();
     expect(log.docs.map((d) => d.get('mode'))).toEqual(['random']);
   });
+
+  it('every ticket change queues its chain op in order, in the same transaction (docs/api.md 8)', async () => {
+    const opsOf = async (ticketId: string) =>
+      (await db.collection('chainOps').where('ticketId', '==', ticketId).get()).docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Record<string, unknown>)
+        .sort((a, b) => (a.seq as number) - (b.seq as number));
+
+    // Issued, then admitted.
+    expect((await opsOf(aliceTicket)).map((o) => [o.id, o.kind, o.status])).toEqual([
+      [`${aliceTicket}-1`, 'mint', 'pending'],
+      [`${aliceTicket}-2`, 'markUsed', 'pending'],
+    ]);
+    expect((await db.doc(`tickets/${aliceTicket}`).get()).data()).toMatchObject({ chainSeq: 2, chain: { status: 'pending' } });
+
+    // Issued, reassigned to the waitlist in queue mode, then released with nobody eligible.
+    const bobOps = await opsOf(bobTicket);
+    const reassignments = await db.collection('reassignments').where('ticketId', '==', bobTicket).get();
+    const idFor = (toUid: string | null) => reassignments.docs.find((d) => d.get('toUid') === toUid)!.id;
+    expect(bobOps).toMatchObject([
+      { kind: 'mint', toUid: await uidOf(BOB), seq: 1 },
+      { kind: 'reassign', toUid: await uidOf(CAROL), reason: 1, reassignmentId: idFor(await uidOf(CAROL)), seq: 2 },
+      { kind: 'release', reason: 3, reassignmentId: idFor(null), seq: 3 },
+    ]);
+    // The chain is off in this emulator run, so nothing reached the chain and the ops wait.
+    expect(bobOps.every((o) => o.status === 'pending' && o.txHash === null)).toBe(true);
+  });
+
+  it('a ticket issued before the chain existed gets its mint queued ahead of its next op', async () => {
+    const ref = db.collection('tickets').doc();
+    await ref.set({ eventId: EVENT, ownerUid: await uidOf(DAVE), nftNumber: '#0999', status: 'issued', qrToken: null, qrExpiresAt: null });
+    expect((await dave.cancelTicket({ ticketId: ref.id })).ok).toBe(true);
+    const ops = (await db.collection('chainOps').where('ticketId', '==', ref.id).get()).docs.map((d) => d.data());
+    const [first, second, ...rest] = ops.sort((a, b) => a.seq - b.seq);
+    expect(first).toMatchObject({ seq: 1, kind: 'mint', toUid: await uidOf(DAVE) });
+    expect(second).toMatchObject({ seq: 2, kind: expect.stringMatching(/^(reassign|release)$/) });
+    expect(rest).toEqual([]);
+  });
 });
 
 describe('hand-made event documents', () => {

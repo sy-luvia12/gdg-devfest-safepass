@@ -132,6 +132,23 @@ export interface SetStaffResponse {
   status: 'UPDATED' | 'PENDING_SIGNUP';
 }
 
+// Admin only. Replays chain ops that are not on chain yet (chain was off, or the minter ran out of gas).
+export interface RetryChainOpsResponse {
+  ok: true;
+  done: number;
+  blocked: number;
+  failed: number;
+}
+
+// On-chain record of a ticket, written by processChainOp (docs/api.md 8장). Absent until the first op is queued.
+export interface TicketChainState {
+  status: 'pending' | 'done' | 'blocked';
+  tokenId?: string;
+  mintTx?: string;
+  lastTx?: string;
+  contractOwner?: string | null;
+}
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -145,4 +162,5 @@ export interface Callables {
   setAllowReissue: [SetAllowReissueRequest, SetAllowReissueResponse];
   requestDeviceReset: [void, RequestDeviceResetResponse];
   setStaff: [SetStaffRequest, SetStaffResponse];
+  retryChainOps: [void, RetryChainOpsResponse];
 }
