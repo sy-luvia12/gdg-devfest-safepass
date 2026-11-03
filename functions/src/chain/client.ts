@@ -92,12 +92,22 @@ export function createChainClient(cfg: ChainConfig): ChainClient {
   };
 }
 
-function toChainError(e: unknown): ChainError {
+// RPC URLs carry the provider API key (e.g. Alchemy's /v2/<key>), and ethers puts the request URL in
+// its messages. Chain errors are stored in chainOps and logged, so every URL is cut out first.
+export function redact(message: string): string {
+  return message.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)]+/gi, '[url]').slice(0, 500);
+}
+
+export function toChainError(e: unknown): ChainError {
   if (e instanceof ChainError) return e;
+  const full = e instanceof Error ? e.message : String(e);
   // geth-style nodes give INSUFFICIENT_FUNDS; Hardhat and some RPC gateways only say it in the message.
-  const message = e instanceof Error ? e.message : String(e);
-  if (isError(e, 'INSUFFICIENT_FUNDS') || /insufficient funds|enough funds/i.test(message)) {
+  if (isError(e, 'INSUFFICIENT_FUNDS') || /insufficient funds|enough funds/i.test(full)) {
     return new ChainError('INSUFFICIENT_FUNDS', 'minter wallet has no gas');
   }
-  return new ChainError('TX_FAILED', message);
+  // ethers' shortMessage leaves out the request and response payloads.
+  const short = (e as { shortMessage?: unknown })?.shortMessage;
+  const code = (e as { code?: unknown })?.code;
+  const message = typeof short === 'string' ? `${typeof code === 'string' ? `${code}: ` : ''}${short}` : full;
+  return new ChainError('TX_FAILED', redact(message));
 }
