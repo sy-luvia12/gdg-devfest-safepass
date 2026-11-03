@@ -3,3 +3,6 @@ export { issueTicket } from './handlers/issueTicket';
 export { refreshQrToken } from './handlers/refreshQrToken';
 export { verifyEntry } from './handlers/verifyEntry';
 export { cancelTicket } from './handlers/cancelTicket';
+export { registerDevice } from './handlers/registerDevice';
+export { resetDevice } from './handlers/resetDevice';
+export { setReassignMode } from './handlers/setReassignMode';

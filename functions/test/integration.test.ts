@@ -1,10 +1,13 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { deleteApp, initializeApp as initAdmin } from 'firebase-admin/app';
 import { getFirestore as adminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { deleteApp as deleteClientApp, initializeApp, type FirebaseApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { collection, connectFirestoreEmulator, doc as clientDoc, getDocs, getFirestore, setDoc, type Firestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Callables } from '../src/api';
+import type { Callables, DeviceKey } from '../src/api';
+import { refreshProofMessage } from '../src/domain/device';
 
 const PROJECT = process.env.GCLOUD_PROJECT ?? 'demo-ttv';
 const EVENT = 'demo-festival';
@@ -12,7 +15,7 @@ const admin = initAdmin({ projectId: PROJECT }, 'integration-admin');
 const db = adminFirestore(admin);
 const apps: FirebaseApp[] = [];
 
-type Client = { [K in keyof Callables]: (req: Callables[K][0]) => Promise<Callables[K][1]> };
+type Client = { [K in keyof Callables]: (req: Callables[K][0]) => Promise<Callables[K][1]> } & { fs: Firestore };
 
 async function signIn(email: string): Promise<Client> {
   const app = initializeApp({ projectId: PROJECT, apiKey: 'fake-api-key' }, email);
@@ -24,6 +27,8 @@ async function signIn(email: string): Promise<Client> {
   await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
   const functions = getFunctions(app, 'asia-northeast3');
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+  const fs = getFirestore(app);
+  connectFirestoreEmulator(fs, '127.0.0.1', 8080);
   const call = <K extends keyof Callables>(name: K) => async (req: Callables[K][0]) =>
     (await httpsCallable<Callables[K][0], Callables[K][1]>(functions, name)(req)).data;
   return {
@@ -32,6 +37,10 @@ async function signIn(email: string): Promise<Client> {
     refreshQrToken: call('refreshQrToken'),
     verifyEntry: call('verifyEntry'),
     cancelTicket: call('cancelTicket'),
+    registerDevice: call('registerDevice'),
+    resetDevice: call('resetDevice'),
+    setReassignMode: call('setReassignMode'),
+    fs,
   };
 }
 
@@ -47,9 +56,11 @@ const STAFF = 'staff@korea.ac.kr';
 const DAVE = 'dave@korea.ac.kr';
 const ERIN = 'erin@yonsei.ac.kr';
 const GHOST = 'ghost@korea.ac.kr';
+const CHIEF = 'chief@korea.ac.kr';
+const FRANK = 'frank@korea.ac.kr';
 const OUTSIDER = 'outsider@gmail.com';
 
-let alice: Client, bob: Client, carol: Client, dave: Client, erin: Client, staff: Client, outsider: Client;
+let alice: Client, bob: Client, carol: Client, dave: Client, erin: Client, staff: Client, outsider: Client, chief: Client, frank: Client;
 
 beforeAll(async () => {
   await clearEmulators();
@@ -66,7 +77,11 @@ beforeAll(async () => {
   });
   await db.doc(`seedProfiles/${ALICE}`).set({ name: 'Alice Kim', studentId: '2024000001', photoUrl: 'https://example.com/a.png', role: 'student' });
   await db.doc(`seedProfiles/${STAFF}`).set({ name: 'Gate Staff', studentId: '', photoUrl: null, role: 'staff' });
-  [alice, bob, carol, dave, erin, staff, outsider] = await Promise.all([ALICE, BOB, CAROL, DAVE, ERIN, STAFF, OUTSIDER].map(signIn));
+  await db.doc(`seedProfiles/${CHIEF}`).set({ name: 'Chief Admin', studentId: '', photoUrl: null, role: 'admin' });
+  [alice, bob, carol, dave, erin, staff, outsider, chief, frank] = await Promise.all(
+    [ALICE, BOB, CAROL, DAVE, ERIN, STAFF, OUTSIDER, CHIEF, FRANK].map(signIn),
+  );
+  await chief.ensureUser();
 });
 
 afterAll(async () => {
@@ -143,6 +158,28 @@ describe('prototype demo scenario', () => {
     expect(await codeOf(bob.verifyEntry({ qrPayload }))).toBe('functions/permission-denied');
   });
 
+  it('every scan is logged with its result, and a call rejected for its role logs nothing', async () => {
+    const logs = (await db.collection('scanLogs').get()).docs.map((d) => d.data());
+    const count = (result: string) => logs.filter((l) => l.result === result).length;
+    expect({ ok: count('ok'), used: count('used'), expired: count('expired'), invalid: count('invalid') }).toEqual({
+      ok: 1,
+      used: 1,
+      expired: 2,
+      invalid: 2,
+    });
+    expect(logs).toHaveLength(6);
+    expect(logs.find((l) => l.result === 'ok')).toMatchObject({
+      eventId: EVENT,
+      ticketId: aliceTicket,
+      studentName: 'Alice Kim',
+      studentId: '2024000001',
+      staffUid: await uidOf(STAFF),
+      staffName: 'Gate Staff',
+    });
+    expect(logs.filter((l) => l.ticketId === null && l.studentName === null)).toHaveLength(2);
+    expect(logs.every((l) => l.scannedAt)).toBe(true);
+  });
+
   const onWaitlist = (email: string, order: number) =>
     db.doc(`events/${EVENT}/waitlist/${email}`).set({ order, status: 'waiting', assignedTicketId: null });
   const waitlistDoc = async (email: string) => (await db.doc(`events/${EVENT}/waitlist/${email}`).get()).data();
@@ -196,6 +233,123 @@ describe('prototype demo scenario', () => {
     expect((await Promise.all(statuses)).sort()).toEqual(['assigned', 'waiting']);
     const log = await db.collection('reassignments').where('ticketId', '==', carolTicket).get();
     expect(log.docs.map((d) => d.get('mode'))).toEqual(['random']);
+  });
+});
+
+const reasonOf = (p: Promise<unknown>) =>
+  p.then(
+    () => 'resolved',
+    (e: { details?: { reason?: string } }) => e.details?.reason,
+  );
+
+describe('hand-made event documents', () => {
+  it('an event without counters still issues #0001 and creates them', async () => {
+    await db.doc('events/bare-event').set({ name: 'Bare', capacity: 5, allowedDomains: ['korea.ac.kr'] });
+    expect((await alice.issueTicket({ eventId: 'bare-event' })).nftNumber).toBe('#0001');
+    expect((await db.doc('events/bare-event').get()).data()).toMatchObject({ issuedCount: 1, nftSeq: 1 });
+  });
+});
+
+describe('admin features and security rules', () => {
+  it('admin reads scanLogs, reassignments and the waitlist; a student cannot', async () => {
+    expect(await codeOf(getDocs(collection(chief.fs, 'scanLogs')))).toBe('resolved');
+    expect(await codeOf(getDocs(collection(chief.fs, 'reassignments')))).toBe('resolved');
+    expect(await codeOf(getDocs(collection(chief.fs, 'events', EVENT, 'waitlist')))).toBe('resolved');
+    expect((await getDocs(collection(chief.fs, 'scanLogs'))).size).toBe(6);
+
+    expect(await codeOf(getDocs(collection(bob.fs, 'scanLogs')))).toBe('permission-denied');
+    expect(await codeOf(getDocs(collection(bob.fs, 'reassignments')))).toBe('permission-denied');
+    expect(await codeOf(getDocs(collection(bob.fs, 'events', EVENT, 'waitlist')))).toBe('permission-denied');
+    expect(await codeOf(getDocs(collection(staff.fs, 'scanLogs')))).toBe('permission-denied');
+  });
+
+  it('no client can write, not even an admin', async () => {
+    expect(await codeOf(setDoc(clientDoc(chief.fs, 'events', EVENT), { name: 'hacked' }))).toBe('permission-denied');
+    expect(await codeOf(setDoc(clientDoc(chief.fs, 'scanLogs', 'x'), { result: 'ok' }))).toBe('permission-denied');
+  });
+
+  it('admin sets the reassign mode; others and bad input are rejected', async () => {
+    expect(await chief.setReassignMode({ eventId: EVENT, mode: 'queue' })).toEqual({ ok: true });
+    expect((await db.doc(`events/${EVENT}`).get()).get('reassignMode')).toBe('queue');
+    expect(await codeOf(carol.setReassignMode({ eventId: EVENT, mode: 'random' }))).toBe('functions/permission-denied');
+    expect(await codeOf(chief.setReassignMode({ eventId: EVENT, mode: 'fifo' as 'queue' }))).toBe('functions/invalid-argument');
+    expect(await codeOf(chief.setReassignMode({ eventId: 'nope', mode: 'random' }))).toBe('functions/not-found');
+  });
+});
+
+describe('device binding', () => {
+  const DEVICE_EVENT = 'device-event';
+  const newDevice = () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    return {
+      key: publicKey.export({ format: 'jwk' }) as unknown as DeviceKey,
+      proof: (ticketId: string, signedAt = Date.now()) => ({
+        signedAt,
+        signature: sign('sha256', Buffer.from(refreshProofMessage(ticketId, signedAt)), {
+          key: privateKey,
+          dsaEncoding: 'ieee-p1363',
+        }).toString('base64url'),
+      }),
+    };
+  };
+  let ticketId: string;
+
+  it('registerDevice stores one key per account, rejects bad keys, and only an admin can reset', async () => {
+    await db.doc(`events/${DEVICE_EVENT}`).set({
+      name: 'Device Event',
+      capacity: 5,
+      faceValue: 0,
+      allowedDomains: ['korea.ac.kr'],
+      issuedCount: 0,
+      nftSeq: 0,
+      enteredCount: 0,
+      requireDevice: true,
+    });
+    await frank.ensureUser();
+    ticketId = (await frank.issueTicket({ eventId: DEVICE_EVENT })).ticketId;
+
+    const first = newDevice();
+    expect(await frank.registerDevice({ publicKeyJwk: first.key })).toEqual({ ok: true });
+    expect(await codeOf(frank.registerDevice({ publicKeyJwk: newDevice().key }))).toBe('functions/already-exists');
+    expect(await codeOf(erin.registerDevice({ publicKeyJwk: { kty: 'EC', crv: 'P-256', x: 'AAAA', y: 'AAAA' } }))).toBe(
+      'functions/invalid-argument',
+    );
+    expect(await codeOf(frank.resetDevice({ uid: await uidOf(FRANK) }))).toBe('functions/permission-denied');
+    expect(await chief.resetDevice({ uid: await uidOf(FRANK) })).toEqual({ ok: true });
+    expect(await chief.resetDevice({ uid: await uidOf(FRANK) })).toEqual({ ok: true });
+  });
+
+  it('refreshQrToken demands a proof from the registered device when the event requires one', async () => {
+    expect(await reasonOf(frank.refreshQrToken({ ticketId }))).toBe('DEVICE_NOT_REGISTERED');
+
+    const device = newDevice();
+    await frank.registerDevice({ publicKeyJwk: device.key });
+    expect(await reasonOf(frank.refreshQrToken({ ticketId }))).toBe('DEVICE_PROOF_INVALID');
+    expect((await frank.refreshQrToken({ ticketId, deviceProof: device.proof(ticketId) })).qrPayload).toMatch(/^TTV1:/);
+
+    expect(await reasonOf(frank.refreshQrToken({ ticketId, deviceProof: newDevice().proof(ticketId) }))).toBe('DEVICE_PROOF_INVALID');
+    expect(await reasonOf(frank.refreshQrToken({ ticketId, deviceProof: device.proof(ticketId, Date.now() - 120_000) }))).toBe(
+      'DEVICE_PROOF_INVALID',
+    );
+    expect(await reasonOf(frank.refreshQrToken({ ticketId, deviceProof: device.proof('other-ticket') }))).toBe('DEVICE_PROOF_INVALID');
+    expect(await codeOf(frank.refreshQrToken({ ticketId, deviceProof: { signedAt: 'now' } as never }))).toBe('functions/invalid-argument');
+  });
+
+  it('after an admin reset the old phone is rejected and a new phone can register', async () => {
+    const old = newDevice();
+    await chief.resetDevice({ uid: await uidOf(FRANK) });
+    await frank.registerDevice({ publicKeyJwk: old.key });
+    await chief.resetDevice({ uid: await uidOf(FRANK) });
+    expect(await reasonOf(frank.refreshQrToken({ ticketId, deviceProof: old.proof(ticketId) }))).toBe('DEVICE_NOT_REGISTERED');
+
+    const fresh = newDevice();
+    await frank.registerDevice({ publicKeyJwk: fresh.key });
+    expect((await frank.refreshQrToken({ ticketId, deviceProof: fresh.proof(ticketId) })).expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it('an event that does not require a device still refreshes without a proof', async () => {
+    await db.doc(`events/${DEVICE_EVENT}`).update({ requireDevice: false });
+    expect((await frank.refreshQrToken({ ticketId })).qrPayload).toMatch(/^TTV1:/);
   });
 });
 

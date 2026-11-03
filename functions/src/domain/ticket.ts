@@ -1,4 +1,4 @@
-import type { VerifyEntryReason } from '../api';
+import type { ReassignMode, ScanResult, VerifyEntryReason } from '../api';
 
 export interface QrToken {
   token: string;
@@ -29,9 +29,8 @@ export interface FestivalEvent {
   nftSeq: number;
   enteredCount: number;
   reassignMode: ReassignMode;
+  requireDevice: boolean;
 }
-
-export type ReassignMode = 'queue' | 'random';
 
 export const QR_PREFIX = 'TTV1';
 export const QR_TTL_MS = 30_000;
@@ -48,6 +47,19 @@ export function parseQrPayload(raw: string): { ticketId: string; token: string }
   const [prefix, ticketId, token] = parts;
   if (prefix !== QR_PREFIX || !ID_PATTERN.test(ticketId) || !ID_PATTERN.test(token)) return null;
   return { ticketId, token };
+}
+
+// Admin-facing label for a verifyEntry outcome. The token mismatch is shown as expired, like the scanner screen does.
+const scanResults: Record<VerifyEntryReason, ScanResult> = {
+  INVALID_FORMAT: 'invalid',
+  NOT_FOUND: 'invalid',
+  TOKEN_MISMATCH: 'expired',
+  EXPIRED: 'expired',
+  USED: 'used',
+};
+
+export function scanResultFor(reason: VerifyEntryReason): ScanResult {
+  return scanResults[reason];
 }
 
 export type Decision<R> = { ok: true } | { ok: false; reason: R };

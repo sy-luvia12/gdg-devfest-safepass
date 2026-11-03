@@ -1,6 +1,7 @@
 import type { DocumentData, DocumentSnapshot, Timestamp, Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import type { Role } from '../api';
+import { REASSIGN_MODES, type DeviceKey, type DeviceProof, type ReassignMode, type Role } from '../api';
+import { parseDeviceKey } from '../domain/device';
 import type { FestivalEvent, Ticket } from '../domain/ticket';
 import { db } from '../firebase';
 
@@ -24,10 +25,11 @@ export function requireAuth(request: CallableRequest<unknown>): Caller {
   };
 }
 
-export async function requireRole(tx: Transaction, uid: string, allowed: readonly Role[]): Promise<void> {
+export async function requireRole(tx: Transaction, uid: string, allowed: readonly Role[]): Promise<DocumentData> {
   const snap = await tx.get(db.doc(`users/${uid}`));
   if (!snap.exists) throw new HttpsError('not-found', 'User profile missing. Call ensureUser first.');
   if (!allowed.includes(snap.get('role'))) throw new HttpsError('permission-denied', 'Role not allowed.');
+  return snap.data()!;
 }
 
 function record(data: unknown): Record<string, unknown> {
@@ -45,6 +47,30 @@ export function readDocId(data: unknown, field: string): string {
   const value = readString(data, field);
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new HttpsError('invalid-argument', `${field} is not a valid id.`);
   return value;
+}
+
+export function readReassignMode(data: unknown): ReassignMode {
+  const value = record(data).mode;
+  if (!REASSIGN_MODES.includes(value as ReassignMode)) {
+    throw new HttpsError('invalid-argument', `mode must be one of ${REASSIGN_MODES.join(', ')}.`);
+  }
+  return value as ReassignMode;
+}
+
+export function readDeviceKey(data: unknown): DeviceKey {
+  const key = parseDeviceKey(record(data).publicKeyJwk);
+  if (!key) throw new HttpsError('invalid-argument', 'publicKeyJwk must be an EC P-256 public key.');
+  return key;
+}
+
+export function readDeviceProof(data: unknown): DeviceProof | null {
+  const proof = record(data).deviceProof;
+  if (proof === undefined) return null;
+  const { signedAt, signature } = (typeof proof === 'object' && proof !== null ? proof : {}) as Record<string, unknown>;
+  if (typeof signedAt !== 'number' || typeof signature !== 'string') {
+    throw new HttpsError('invalid-argument', 'deviceProof must be { signedAt: number, signature: string }.');
+  }
+  return { signedAt, signature };
 }
 
 const ms = (t: Timestamp) => t.toMillis();
@@ -66,12 +92,14 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
   return {
     id: snap.id,
     name: d.name,
-    capacity: d.capacity,
-    faceValue: d.faceValue,
-    allowedDomains: d.allowedDomains,
-    issuedCount: d.issuedCount,
-    nftSeq: d.nftSeq,
-    enteredCount: d.enteredCount,
+    // Event documents can be created by hand in the console, so absent counters read as zero.
+    capacity: d.capacity ?? 0,
+    faceValue: d.faceValue ?? 0,
+    allowedDomains: d.allowedDomains ?? [],
+    issuedCount: d.issuedCount ?? 0,
+    nftSeq: d.nftSeq ?? d.issuedCount ?? 0,
+    enteredCount: d.enteredCount ?? 0,
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
+    requireDevice: d.requireDevice === true,
   };
 }
