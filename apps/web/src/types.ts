@@ -76,6 +76,15 @@ export type Ticket = {
   qrExpiresAt: number; // epoch ms
   issuedAt: number;
   usedAt?: number;
+  /** 온체인 기록 (functions TicketChainState). 체인 연동 전 입장권과 mock에는 없다 */
+  chain?: TicketChain;
+};
+
+/** pending: 체인에 기록 중 / done: 기록 끝 / blocked: 서버 지갑 가스 부족으로 대기 */
+export type TicketChain = {
+  status: 'pending' | 'done' | 'blocked';
+  tokenId?: string;
+  lastTx?: string;
 };
 
 /** 발급 현황 표용 */
