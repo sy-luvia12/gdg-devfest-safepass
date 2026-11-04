@@ -21,12 +21,15 @@ async function main() {
   console.log('ensureUser ->', JSON.stringify({ role: me.role, operator: me.operator, adminSchoolId: me.adminSchoolId ?? null }));
   for (const id of ['korea', 'yonsei', 'skku', 'kaist']) {
     const r = await call('opsListRoster', { kind: 'school', id });
-    console.log(`school ${id} ->`, (r.rows as unknown[]).length, 'rows');
+    console.log(`school ${id} ->`, (r.rows as unknown[]).length, 'rows, roster summary', JSON.stringify((r.summary as { count: number }).count));
   }
   for (const id of ['demo-festival', 'korea-koyon', 'korea-seoktap', 'yonsei-akaraka', 'yonsei-yonko', 'skku-daedongje', 'kaist-taeul']) {
     const r = await call('opsListRoster', { kind: 'event', id });
-    const rows = r.rows as { match: string }[];
-    console.log(`event ${id} ->`, rows.length, 'rows,', rows.filter((x) => x.match === 'OK').length, 'match');
+    const edit = await call('opsEditRoster', { kind: 'event', id, upserts: [], deletes: [] }).then(
+      () => 'allowed',
+      (e: { details?: { reason?: string } }) => e.details?.reason,
+    );
+    console.log(`event ${id} ->`, (r.rows as unknown[]).length, 'rows, editable', r.editable, ', edit before sheet:', edit);
   }
   process.exit(0);
 }

@@ -35,45 +35,32 @@ const base = {
 };
 
 // Each school runs its own events. 고연전 (고려대) and 연고전 (연세대) are the same games, but each school issues
-// and checks its own tickets, so they are two events. Every event issues only to students on its event roster.
-const event = (schoolId: string, fields: Record<string, unknown>) => ({
+// and checks its own tickets, so they are two events.
+// Who can take a ticket (requireRoster): 'roster' events issue only to students on the event roster, which the event
+// admin loads from a sheet. 'all' events issue to every student who signed up against the school roster, with no
+// event roster. The event admin can switch it later in 행사 설정.
+const event = (schoolId: string, who: 'roster' | 'all', fields: Record<string, unknown>) => ({
   ...base,
   schoolIds: [schoolId],
   allowedDomains: schools[schoolId].domains,
-  requireRoster: true,
+  requireRoster: who === 'roster',
   ...fields,
 });
 
 // Dates, places and capacities are demo values.
 const events: Record<string, Record<string, unknown>> = {
   // The first demo event, entered by hand in the console. Its id stays as it is.
-  'demo-festival': event('korea', { name: '입실렌티', place: '녹지운동장', date: at('2026-11-06T18:00:00+09:00'), capacity: 10_000 }),
-  'korea-koyon': event('korea', { name: '고연전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
-  'korea-seoktap': event('korea', { name: '석탑대동제', place: '민주광장', date: at('2026-11-20T18:00:00+09:00'), capacity: 8_000 }),
-  'yonsei-akaraka': event('yonsei', { name: '아카라카', place: '노천극장', date: at('2026-11-20T18:00:00+09:00'), capacity: 12_000 }),
-  'yonsei-yonko': event('yonsei', { name: '연고전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
-  'skku-daedongje': event('skku', { name: '대동제', place: '금잔디광장', date: at('2026-11-21T18:00:00+09:00'), capacity: 8_000 }),
-  'kaist-taeul': event('kaist', { name: '태울석림제', place: '대운동장', date: at('2026-11-27T18:00:00+09:00'), capacity: 5_000 }),
+  'demo-festival': event('korea', 'roster', { name: '입실렌티', place: '녹지운동장', date: at('2026-11-06T18:00:00+09:00'), capacity: 10_000 }),
+  'korea-koyon': event('korea', 'roster', { name: '고연전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
+  'korea-seoktap': event('korea', 'all', { name: '석탑대동제', place: '민주광장', date: at('2026-11-20T18:00:00+09:00'), capacity: 8_000 }),
+  'yonsei-akaraka': event('yonsei', 'roster', { name: '아카라카', place: '노천극장', date: at('2026-11-20T18:00:00+09:00'), capacity: 12_000 }),
+  'yonsei-yonko': event('yonsei', 'roster', { name: '연고전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
+  'skku-daedongje': event('skku', 'all', { name: '대동제', place: '금잔디광장', date: at('2026-11-21T18:00:00+09:00'), capacity: 8_000 }),
+  'kaist-taeul': event('kaist', 'all', { name: '태울석림제', place: '대운동장', date: at('2026-11-27T18:00:00+09:00'), capacity: 5_000 }),
 };
 
 // Events an earlier seed made. Listed so a run warns about them; SEED_PRUNE=1 deletes them.
 const retiredEvents = ['test-reassign', 'koyon-basketball', 'koyon-icehockey', 'koyon-football'];
-
-// Demo student rosters: made-up students with clearly fake addresses. The team adds its real school accounts in the
-// operator console (/ops), so nothing here needs to change for a rehearsal.
-const FAMILY = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권'];
-const GIVEN = ['하늘', '도윤', '서연', '민준', '지우', '하윤', '예린', '현우', '소율', '지안', '태윤', '유나', '다온', '민재', '지민', '서준'];
-const ROSTER_SIZE = 30;
-function demoRoster(schoolId: string, domain: string) {
-  return Array.from({ length: ROSTER_SIZE }, (_, i) => ({
-    name: `${FAMILY[(i * 7 + schoolId.length) % FAMILY.length]}${GIVEN[(i * 5 + schoolId.length) % GIVEN.length]}`,
-    studentId: `2024${String(i + 1).padStart(6, '0')}`,
-    email: `safepass.demo${String(i + 1).padStart(2, '0')}@${domain}`,
-  }));
-}
-// An event roster takes the first two thirds of its school's demo roster, so the rest show "not on the roster".
-const eventRosterOf = (rows: { name: string; studentId: string }[]) =>
-  rows.slice(0, Math.ceil((rows.length * 2) / 3)).map(({ name, studentId }) => ({ name, studentId }));
 
 // The operator account (/ops): signs in with an id and password, no Google. OPS_PASSWORD creates or updates it.
 const OPS_ID = process.env.OPS_ID ?? 'ops';
@@ -109,33 +96,14 @@ async function main() {
     console.log(`events/${id}: filled ${filled} missing fields`);
   }
 
-  // Rosters are written only when there is none yet, so edits made in /ops are never overwritten.
-  const rosters: Record<string, { name: string; studentId: string; email: string }[]> = {};
-  for (const [id, fields] of Object.entries(schools)) {
-    rosters[id] = demoRoster(id, (fields.domains as string[])[0]);
+  // No students are seeded. Each school starts with an empty student roster, so sign-up checks it from the start;
+  // team members add their own school accounts in the operator console (/ops). Event rosters come from the event
+  // admin's sheet. An existing roster is never touched.
+  for (const id of Object.keys(schools)) {
     const ref = db.doc(`schools/${id}`);
-    if ((await ref.get()).get('studentRoster')) {
-      console.log(`schools/${id}/roster: kept (edit it in /ops)`);
-      continue;
-    }
-    const writer = db.bulkWriter();
-    for (const row of rosters[id]) void writer.set(db.doc(`schools/${id}/roster/${row.studentId}`), row);
-    await writer.close();
-    await ref.update({ studentRoster: { sheetUrl: '', importedAt: FieldValue.serverTimestamp(), count: rosters[id].length } });
-    console.log(`schools/${id}/roster: ${rosters[id].length} demo students`);
-  }
-  for (const [id, fields] of Object.entries(events)) {
-    const ref = db.doc(`events/${id}`);
-    if ((await ref.get()).get('roster')) {
-      console.log(`events/${id}/roster: kept (edit it in /ops)`);
-      continue;
-    }
-    const rows = eventRosterOf(rosters[(fields.schoolIds as string[])[0]]);
-    const writer = db.bulkWriter();
-    for (const row of rows) void writer.set(db.doc(`events/${id}/roster/${row.studentId}`), row);
-    await writer.close();
-    await ref.update({ roster: { sheetUrl: '', importedAt: FieldValue.serverTimestamp(), count: rows.length } });
-    console.log(`events/${id}/roster: ${rows.length} students`);
+    if ((await ref.get()).get('studentRoster')) continue;
+    await ref.update({ studentRoster: { sheetUrl: '', importedAt: FieldValue.serverTimestamp(), count: 0 } });
+    console.log(`schools/${id}: empty student roster (add students in /ops)`);
   }
 
   for (const { email, ...profile } of profiles) {
