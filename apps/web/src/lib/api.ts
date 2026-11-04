@@ -47,6 +47,15 @@ export const verifyStudentRoster: typeof mock.verifyStudentRoster = real
   ? fb.verifyStudentRoster
   : mock.verifyStudentRoster;
 
+// 학생 가입·로그인: 메일 링크 (docs/student-auth.md). 운영진은 signInWithSchoolAccount(구글)
+export const listOpenSchools: typeof mock.listOpenSchools = real ? fb.listOpenSchools : mock.listOpenSchools;
+export const precheckStudent: typeof mock.precheckStudent = real ? fb.precheckStudent : mock.precheckStudent;
+export const sendSignInLink: typeof mock.sendSignInLink = real ? fb.sendSignInLink : mock.sendSignInLink;
+export const isSignInLink: typeof mock.isSignInLink = real ? fb.isSignInLink : mock.isSignInLink;
+export const pendingSignInEmail: typeof mock.pendingSignInEmail = real ? fb.pendingSignInEmail : mock.pendingSignInEmail;
+export const completeSignInLink: typeof mock.completeSignInLink = real ? fb.completeSignInLink : mock.completeSignInLink;
+export const submitProfilePhoto: typeof mock.submitProfilePhoto = real ? fb.submitProfilePhoto : mock.submitProfilePhoto;
+
 // 재학생 승인 · 기기 (백엔드 다음 단계 2.2, 2.3)
 export const submitVerification: typeof mock.submitVerification = real ? notYet : mock.submitVerification;
 export const listPendingVerifications: typeof mock.listPendingVerifications = real

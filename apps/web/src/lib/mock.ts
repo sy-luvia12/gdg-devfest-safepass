@@ -12,6 +12,8 @@ import {
   type EventSettings,
   type EventStats,
   type EventTheme,
+  type OpenSchool,
+  type PrecheckResult,
   type QrRefresh,
   type Reassignment,
   type ReassignMode,
@@ -22,6 +24,7 @@ import {
   type ScanResult,
   type School,
   type SchoolInput,
+  type SignupInfo,
   type StaffStats,
   type Ticket,
   type TicketHistoryItem,
@@ -643,7 +646,8 @@ export async function verifyStudentRoster(schoolId: string, name: string, studen
   if (row.email.toLowerCase() !== user.email.toLowerCase()) throw new ApiError('email_mismatch');
   const taken = s.users.some((u) => u.uid !== user.uid && u.schoolId === schoolId && u.studentId === row.studentId);
   if (taken) throw new ApiError('student_id_taken');
-  Object.assign(user, { schoolId, name: row.name, studentId: row.studentId, verifyStatus: 'approved' });
+  // 사진까지 내야 가입 완료 (submitProfilePhoto). 사진이 없으면 /onboarding으로 간다
+  Object.assign(user, { schoolId, name: row.name, studentId: row.studentId, verifyStatus: user.photoUrl ? 'approved' : 'none' });
   save(s);
   return user;
 }
@@ -668,6 +672,120 @@ export async function updateEventSettings(eventId: string, settings: EventSettin
   event.settings = { ...settings };
   save(s);
   return event;
+}
+
+// ---------- 학생 가입·로그인: 메일 링크 (docs/student-auth.md) ----------
+// mock은 메일을 보내지 않는다. sendSignInLink 뒤에 mockSignInLinkFor(email)로 받은 주소를 열면 메일의 링크를 누른 것과 같다
+
+const LINK_KEY = 'safepass-mock-link';
+type PendingLink = { email: string; signup?: SignupInfo };
+
+function pendingLinks(): Record<string, PendingLink> {
+  try {
+    return JSON.parse(localStorage.getItem(LINK_KEY) ?? '{}') as Record<string, PendingLink>;
+  } catch {
+    return {};
+  }
+}
+
+/** 학번 줄을 이미 가입한 계정이 쓰고 있는지 */
+const claimedBy = (s: MockState, schoolId: string, studentId: string) =>
+  s.users.find((u) => u.schoolId === schoolId && u.studentId === studentId && u.role === 'student');
+
+export async function listOpenSchools(): Promise<OpenSchool[]> {
+  await wait();
+  const s = load();
+  return s.schools
+    .filter((sc) => s.studentRosters[sc.id])
+    .map((sc) => ({ id: sc.id, name: sc.name, domain: sc.domain }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+export async function precheckStudent(input: { email: string; studentId: string; name?: string }): Promise<PrecheckResult> {
+  await wait();
+  const s = load();
+  const email = input.email.trim().toLowerCase();
+  const school = s.schools.find((sc) => sc.domain === domainOf(email) && s.studentRosters[sc.id]);
+  if (!school) throw new ApiError('not_school_account');
+  const row = s.studentRosters[school.id].entries.find((r) => r.studentId === input.studentId.trim());
+  const owner = row && claimedBy(s, school.id, row.studentId);
+  if (input.name !== undefined) {
+    if (!row || row.name.replace(/\s+/g, '') !== input.name.replace(/\s+/g, '')) throw new ApiError('not_in_roster');
+    if (row.email.toLowerCase() !== email) throw new ApiError('email_mismatch');
+    if (owner) throw new ApiError('student_id_taken');
+  } else {
+    if (!row) throw new ApiError('not_in_roster');
+    if (row.email.toLowerCase() !== email) throw new ApiError('email_mismatch');
+    if (!owner) throw new ApiError('not_registered');
+  }
+  return { schoolId: school.id, schoolName: school.name };
+}
+
+export async function sendSignInLink(email: string, signup?: SignupInfo): Promise<void> {
+  await wait();
+  const normalized = email.trim().toLowerCase();
+  localStorage.setItem(LINK_KEY, JSON.stringify({ ...pendingLinks(), [normalized]: { email: normalized, signup } }));
+}
+
+/** mock 전용: 메일 대신 열 링크 주소 */
+export function mockSignInLinkFor(email: string): string {
+  return `/auth/finish?mockEmail=${encodeURIComponent(email.trim().toLowerCase())}`;
+}
+
+export function isSignInLink(href: string): boolean {
+  return new URL(href, location.origin).searchParams.has('mockEmail');
+}
+
+export function pendingSignInEmail(): string | null {
+  return new URL(location.href).searchParams.get('mockEmail');
+}
+
+export async function completeSignInLink(href: string, email?: string): Promise<User> {
+  await wait();
+  const s = load();
+  const address = (email ?? new URL(href, location.origin).searchParams.get('mockEmail') ?? '').trim().toLowerCase();
+  if (!address) throw new ApiError('invalid_state');
+  const links = pendingLinks();
+  const pending = links[address];
+  if (!pending) throw new ApiError('invalid_state');
+  delete links[address];
+  localStorage.setItem(LINK_KEY, JSON.stringify(links));
+  let user = userByEmail(s, address);
+  if (pending.signup) {
+    const { schoolId, name, studentId } = pending.signup;
+    if (!user) {
+      user = {
+        uid: nextId(s, 'u'),
+        // 학번은 명단 대조(verifyStudentRoster)가 통과하면 채운다
+        schoolId,
+        name,
+        studentId: '',
+        email: address,
+        photoUrl: '',
+        role: 'student',
+        verifyStatus: 'none',
+        deviceStatus: 'registered',
+        deviceName: 'iPhone 15',
+      };
+      s.users.push(user);
+      save(s);
+    }
+    sessionStorage.setItem(SESSION_KEY, user.uid);
+    return verifyStudentRoster(schoolId, name, studentId);
+  }
+  if (!user) throw new ApiError('not_registered');
+  sessionStorage.setItem(SESSION_KEY, user.uid);
+  return user;
+}
+
+export async function submitProfilePhoto(photoDataUrl: string): Promise<User> {
+  await wait();
+  const s = load();
+  const user = requireUser(s, ['student']);
+  user.photoUrl = photoDataUrl;
+  user.verifyStatus = 'approved';
+  save(s);
+  return user;
 }
 
 // ---------- 재학생 승인 · 기기 (기술 설계 2.2~2.3) ----------
@@ -778,6 +896,7 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   const user = requireUser(s);
   const event = findEvent(s, eventId);
   if (!event.allowedDomains.includes(domainOf(user.email))) throw new ApiError('not_school_account');
+  if (user.role === 'student' && user.verifyStatus !== 'approved') throw new ApiError('not_registered');
   const existing = s.tickets.find((t) => t.eventId === eventId && t.ownerUid === user.uid);
   if (existing) return existing;
   // 취소한 학생은 다시 받을 수 없다 (테스트 행사만 예외)

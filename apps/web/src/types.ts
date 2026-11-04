@@ -194,6 +194,15 @@ export type RosterSkipReason = 'MISSING_FIELD' | 'BAD_STUDENT_ID' | 'BAD_DOMAIN'
 /** 시트 불러오기 결과. skipped: 쓰지 못한 줄 (시트의 줄 번호) */
 export type RosterImport = { summary: RosterSummary; skipped: { row: number; reason: RosterSkipReason }[] };
 
+/** 가입 화면의 학교 고르기 (재학생 명단을 불러온 학교) */
+export type OpenSchool = { id: string; name: string; domain: string };
+
+/** 가입할 때 입력한 값. 메일 링크를 열면 이 값으로 재학생 명단 대조를 한다 */
+export type SignupInfo = { schoolId: string; name: string; studentId: string };
+
+/** 메일을 보내기 전 명단 확인 결과 */
+export type PrecheckResult = { schoolId: string; schoolName: string };
+
 /** 스페이스 만들기·수정 */
 export type SchoolInput = { name: string; domain: string; brandColor: string };
 
@@ -230,7 +239,8 @@ export class ApiError extends Error {
     | 'wrong_role' // 학생이 아닌 계정(스태프·학생회)으로 입장권을 받으려 함
     | 'device_blocked' // 다른 기기에 등록된 계정
     | 'cancelled_before' // 이 행사 입장권을 취소한 적이 있음
-    | 'email_mismatch' // 회원가입: 그 학번 줄의 메일이 로그인한 메일과 다름
+    | 'email_mismatch' // 회원가입·학번 로그인: 그 학번 줄의 메일이 입력한 메일과 다름
+    | 'not_registered' // 아직 가입(명단 대조·사진)을 마치지 않은 학생, 또는 명단에서 빠진 학생
     | 'student_id_taken' // 회원가입: 그 학번으로 이미 가입한 계정이 있음
     | 'domain_taken' // 스페이스: 다른 학교가 쓰는 메일 도메인
     | 'sheet_bad_url' // 구글 시트 주소가 아님

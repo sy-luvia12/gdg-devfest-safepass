@@ -237,8 +237,10 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 - 색 생성 규칙은 `DESIGN.md` 2.1장. 컴포넌트에서 테마 색 hex를 직접 쓰지 않는다.
 
 ### 로그인 규칙
-- 구글 로그인만으로는 개인 Gmail도 들어온다. 이메일 도메인이 `allowedDomains`에 없으면 "학교 계정으로만 이용할 수 있어요" 에러.
-- 학교 메일이 Google Workspace가 아닌 학교는 이후 이메일 링크 로그인으로 보완한다(이번 범위 아님).
+- **학생**: 학교 메일 링크(Firebase 이메일 링크, 비밀번호 없음). 가입 = 학교·이름·학번 → `precheckStudent` → 메일 링크 → `completeSignInLink`(명단 대조) → 본인 사진 `submitProfilePhoto`. 로그인 = 메일(+학번) → 메일 링크. 화면 연결은 `docs/student-auth.md`.
+- **운영진(스태프·학생회)**: 구글 로그인(`signInWithSchoolAccount`).
+- 재학생 명단을 불러온 학교는 가입을 마친 학생만 들어오고 발급받는다(`not_registered`). 명단이 없는 학교는 예전처럼 구글 로그인으로 들어온다.
+- 로그인할 때마다 서버가 명단을 다시 본다. 명단에서 빠진 학생은 다시 가입해야 한다.
 
 ### QR · 검표 규칙
 - QR 내용: `TTV1:{ticketId}:{qrToken}`(mock도 같은 형식). 기기 키가 있으면 폰이 `TTV2:{ticketId}:{qrToken}:{signedAt}:{signature}`로 서명해 보여 준다(`docs/api.md` 12장). 검표 화면은 스캔한 문자열을 해석하지 않고 그대로 `verifyEntry`에 넘긴다.

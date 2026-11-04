@@ -1,7 +1,14 @@
 // 백엔드(functions/, docs/api.md)에 연결한 데이터 함수.
 // 백엔드 응답을 화면이 쓰는 types.ts 모양으로 바꿔서 돌려준다.
 // 백엔드에 아직 없는 값(학교, 승인 상태, 행사 테마)은 기본값을 채운다.
-import { GoogleAuthProvider, signInWithPopup, signOut as fbSignOut } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  isSignInWithEmailLink,
+  sendSignInLinkToEmail,
+  signInWithEmailLink,
+  signInWithPopup,
+  signOut as fbSignOut,
+} from 'firebase/auth';
 import {
   collection,
   doc,
@@ -15,7 +22,15 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { FunctionsError, httpsCallable } from 'firebase/functions';
-import type { Callables, GetRosterResponse, ImportRosterResponse, RosterSummary as ApiRosterSummary, SheetReason, UserProfile } from '../../../../functions/src/api';
+import type {
+  Callables,
+  GetRosterResponse,
+  ImportRosterResponse,
+  PrecheckReason,
+  RosterSummary as ApiRosterSummary,
+  SheetReason,
+  UserProfile,
+} from '../../../../functions/src/api';
 import {
   ApiError,
   type CancelResult,
@@ -32,8 +47,11 @@ import {
   type RosterSummary,
   type RosterView,
   type ScanLog,
+  type OpenSchool,
+  type PrecheckResult,
   type School,
   type SchoolInput,
+  type SignupInfo,
   type StaffStats,
   type Ticket,
   type TicketRow,
@@ -63,6 +81,7 @@ function toApiError(e: unknown): ApiError {
     const reason = deviceReason(e);
     if (reason === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
     if (reason === 'NOT_IN_ROSTER') return new ApiError('not_in_roster');
+    if (reason === 'NOT_REGISTERED') return new ApiError('not_registered');
     if (reason && reason in SHEET_ERRORS) return new ApiError(SHEET_ERRORS[reason as SheetReason]);
     if (code === 'permission-denied') return new ApiError(reason === 'ROLE' ? 'wrong_role' : 'not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
@@ -89,7 +108,12 @@ function deviceReason(e: unknown): string | undefined {
 }
 
 // schoolId: 메일 도메인으로 찾은 학교. 학교 메일이 아닌 운영 계정(gmail)은 빈 값
-function toUser(p: UserProfile, schoolId: string, deviceStatus: User['deviceStatus'] = 'registered'): User {
+function toUser(
+  p: UserProfile,
+  schoolId: string,
+  deviceStatus: User['deviceStatus'] = 'registered',
+  verifyStatus: User['verifyStatus'] = 'approved',
+): User {
   return {
     uid: p.uid,
     schoolId,
@@ -99,8 +123,8 @@ function toUser(p: UserProfile, schoolId: string, deviceStatus: User['deviceStat
     photoUrl: p.photoUrl ?? '',
     role: p.role,
     adminSchoolId: p.adminSchoolId,
-    // 재학생 승인은 백엔드 다음 단계(2.3). 지금은 통과한 것으로 본다
-    verifyStatus: 'approved',
+    // 재학생 명단이 있는 학교의 학생만 가입 단계를 본다 (profileToUser). 그 밖에는 통과로 본다
+    verifyStatus,
     deviceStatus,
   };
 }
@@ -186,28 +210,40 @@ function rosterSummary(v: unknown): RosterSummary | undefined {
   return { sheetUrl: r.sheetUrl ?? '', importedAt: millis(r.importedAt), count: r.count ?? 0 };
 }
 
-/** 메일 도메인이 속한 학교. 없으면 null */
-async function schoolIdForEmail(email: string): Promise<string | null> {
+/** 메일 도메인이 속한 학교와 재학생 명단이 있는지. 없으면 null */
+async function schoolForEmail(email: string): Promise<{ id: string; hasRoster: boolean } | null> {
   const snap = await getDocs(
     query(collection(db, 'schools'), where('domains', 'array-contains', domainOf(email)), limit(1)),
   );
-  return snap.docs[0]?.id ?? null;
+  const d = snap.docs[0];
+  return d ? { id: d.id, hasRoster: !!d.get('studentRoster') } : null;
 }
 
-/** 학생은 학교 메일이어야 한다. 스태프·관리자는 시드로 정해진 계정이라 학교 없이 들어와 학교를 고른다 */
+/**
+ * 학생은 학교 메일이어야 한다. 스태프·관리자는 시드로 정해진 계정이라 학교 없이 들어와 학교를 고른다.
+ * 재학생 명단이 있는 학교의 학생은 가입(명단 대조)을 마쳐야 들어오고, 사진을 안 냈으면 verifyStatus 'none'(→ /onboarding).
+ */
 async function profileToUser(p: UserProfile): Promise<User | null> {
-  const schoolId = await schoolIdForEmail(p.email);
-  if (!schoolId && p.role === 'student') return null;
-  return withDevice(toUser(p, schoolId ?? ''));
+  const school = await schoolForEmail(p.email);
+  if (!school && p.role === 'student') return null;
+  if (p.role === 'student' && school?.hasRoster) {
+    if (!p.rosterVerified) throw new ApiError('not_registered');
+    return withDevice(toUser(p, school.id, 'registered', p.photoSubmitted ? 'approved' : 'none'));
+  }
+  return withDevice(toUser(p, school?.id ?? ''));
 }
 
 // ---------- 로그인 · 학교 · 행사 ----------
 
+/** 구글 로그인. 운영진(스태프·학생회)용. 학생은 메일 링크(sendSignInLink)로 들어온다 */
 export async function signInWithSchoolAccount(): Promise<User> {
   try {
     await signInWithPopup(auth, new GoogleAuthProvider());
     const { data } = await call('ensureUser')();
-    const user = await profileToUser(data);
+    const user = await profileToUser(data).catch(async (e) => {
+      await fbSignOut(auth);
+      throw e;
+    });
     // 학생은 등록된 학교의 메일이어야 들어온다
     if (!user) {
       await fbSignOut(auth);
@@ -227,7 +263,106 @@ export async function getCurrentUser(): Promise<User | null> {
   await auth.authStateReady();
   if (!auth.currentUser) return null;
   const { data } = await call('ensureUser')();
-  return profileToUser(data);
+  // 명단에서 빠진 학생(졸업·휴학)은 로그인이 풀린 것으로 본다
+  return profileToUser(data).catch(() => null);
+}
+
+// ---------- 학생 가입·로그인: 메일 링크 (docs/student-auth.md) ----------
+
+const LINK_KEY = 'safepass-email-link';
+type PendingLink = { email: string; signup?: SignupInfo };
+
+function storeLink(v: PendingLink | null) {
+  try {
+    if (v) localStorage.setItem(LINK_KEY, JSON.stringify(v));
+    else localStorage.removeItem(LINK_KEY);
+  } catch {
+    // 저장이 막힌 브라우저는 링크를 열 때 메일을 다시 묻는다
+  }
+}
+
+function storedLink(): PendingLink | null {
+  try {
+    return JSON.parse(localStorage.getItem(LINK_KEY) ?? 'null') as PendingLink | null;
+  } catch {
+    return null;
+  }
+}
+
+const PRECHECK_ERRORS: Record<PrecheckReason, ApiError['code']> = {
+  NO_SCHOOL: 'not_school_account',
+  NOT_IN_ROSTER: 'not_in_roster',
+  EMAIL_MISMATCH: 'email_mismatch',
+  STUDENT_ID_TAKEN: 'student_id_taken',
+  NOT_REGISTERED: 'not_registered',
+};
+
+/** 가입 화면의 학교 고르기. 재학생 명단을 불러온 학교만 (로그인 전에 부른다) */
+export async function listOpenSchools(): Promise<OpenSchool[]> {
+  return (await run(() => call('listOpenSchools')())).data.schools;
+}
+
+/**
+ * 메일을 보내기 전에 명단과 맞춰 본다 (로그인 전에 부른다).
+ * name이 있으면 가입: 이름·학번·메일이 명단의 한 줄과 같고 아직 가입 전이어야 한다.
+ * name이 없으면 학번 로그인: 학번 줄의 메일과 같고 이미 가입했어야 한다.
+ */
+export async function precheckStudent(input: { email: string; studentId: string; name?: string }): Promise<PrecheckResult> {
+  const { data } = await run(() => call('precheckStudent')(input));
+  if (!data.ok) throw new ApiError(PRECHECK_ERRORS[data.reason]);
+  return { schoolId: data.schoolId, schoolName: data.schoolName };
+}
+
+/** 학교 메일로 로그인 링크를 보낸다. 가입이면 signup(학교·이름·학번)을 같이 넘겨 두면 링크를 열 때 명단 대조까지 한다 */
+export async function sendSignInLink(email: string, signup?: SignupInfo): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  await run(() =>
+    sendSignInLinkToEmail(auth, normalized, { url: `${location.origin}/auth/finish`, handleCodeInApp: true }),
+  );
+  storeLink({ email: normalized, signup });
+}
+
+/** 지금 주소가 메일의 로그인 링크인지 (/auth/finish 화면에서) */
+export function isSignInLink(href: string): boolean {
+  return isSignInWithEmailLink(auth, href);
+}
+
+/** 링크를 보낸 브라우저면 메일을 기억하고 있다. 다른 기기에서 열었으면 null → 화면에서 메일을 다시 묻는다 */
+export function pendingSignInEmail(): string | null {
+  return storedLink()?.email ?? null;
+}
+
+/**
+ * 링크로 로그인한다. 가입 중이면 명단 대조(verifyStudentRoster)까지 하고, 사진 전이라 verifyStatus 'none'으로 돌아온다.
+ * 가입하지 않은 메일이면 로그아웃하고 ApiError('not_registered').
+ */
+export async function completeSignInLink(href: string, email?: string): Promise<User> {
+  const pending = storedLink();
+  const address = (email ?? pending?.email ?? '').trim().toLowerCase();
+  if (!address) throw new ApiError('invalid_state');
+  try {
+    await signInWithEmailLink(auth, address, href);
+    await call('ensureUser')();
+    // 가입 정보는 같은 메일로 보낸 링크일 때만 쓴다
+    const signup = pending?.email === address ? pending.signup : undefined;
+    if (signup) await verifyStudentRoster(signup.schoolId, signup.name, signup.studentId);
+    storeLink(null);
+    const { data } = await call('ensureUser')();
+    const user = await profileToUser(data);
+    if (!user) throw new ApiError('not_school_account');
+    return user;
+  } catch (e) {
+    await fbSignOut(auth);
+    throw toApiError(e);
+  }
+}
+
+/** 가입 마지막 단계: 검표 때 보여줄 본인 사진 (ImagePicker의 JPEG data URL) */
+export async function submitProfilePhoto(photoDataUrl: string): Promise<User> {
+  const { data } = await run(() => call('submitProfilePhoto')({ photoDataUrl }));
+  const user = await profileToUser(data.profile);
+  if (!user) throw new ApiError('not_school_account');
+  return user;
 }
 
 // ---------- 기기 묶기 (docs/api.md 9장) ----------
