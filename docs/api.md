@@ -467,3 +467,27 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 | `NO_PENDING_CHECK` | 확인 시간이 지났어요. 다시 스캔해 주세요 |
 | 스캔 결과 `mismatch` | 사진 속 얼굴과 달라서 입장을 막았어요 |
 
+
+## 13. 체인 직접 읽기 (S7 추첨 검증, S8 공개 현황판, S9 내 기록) [2.1]
+
+브라우저가 Firebase를 거치지 않고 Base Sepolia 컨트랙트를 직접 읽는다. 코드는 `apps/web/src/lib/chain/`, 프론트는 `lib/api.ts`의 아래 함수만 부른다. 이 값에는 "체인 기록" 배지를 붙이고 서버 기록과 섞지 않는다.
+
+```ts
+getChainEventStatus(eventId): ChainEventStatus
+  // { exists, capacity, active, withinCapacity, issued, used,
+  //   reassigned: { queue, lottery }, released: { noWaiter, adminRevoke }, drawRounds, asOfBlock, contractUrl }
+getTicketHistory(ticketId): TicketHistoryItem[]   // 실제 연결도 이제 체인 기록 (발급, 취소표 배정, 입장). 체인 기록 전이면 []
+getChainDraw(eventId, round): ChainDraw | null    // { commitment, seedBlock, seed | null, commitTx, seedTx }
+verifyMyDraw(entry: MyDrawEntry): DrawCheck       // { leaf, included, commitmentMatches, seeded, seed, myScore, ok }
+DEMO_DRAW                                         // Base Sepolia 데모 회차 (가짜 응모자 10명의 entries, winners)
+```
+
+- 읽기에 실패하면 `ApiError('chain_unavailable')`. 화면은 "체인을 읽지 못했어요, 다시 시도"를 띄운다.
+- `active ≤ capacity`는 컨트랙트가 강제한다. 현황판의 "정원 초과 발행 없음" 체크는 `withinCapacity`를 쓴다.
+- 사유 코드: 1 대기 순서, 2 추첨, 3 대기자 없음, 4 운영진 회수.
+- 공연 전 검증(`verifyMyDraw`)은 내 응모 포함 여부, 커밋 일치, 시드, 내 점수만 본다. 대기 인원과 다른 응모자는 드러나지 않는다. 전체 재계산은 공연 후 전체 leaf 목록을 공개할 때 한다(`lib/chain/draw.ts`의 `recomputeWinners`).
+- 실제 응모의 `MyDrawEntry`(salt, proof)는 백엔드 추첨이 생기면 서버가 본인에게만 준다(#24). 그 전에는 `DEMO_DRAW.entries` 중 하나로 S7을 시연한다.
+- 설정(선택): `VITE_CHAIN_RPC`(기본 `https://base-sepolia-rpc.publicnode.com`), `VITE_CHAIN_FROM_BLOCK`(기본 배포 블록 54203696). 컨트랙트 주소는 기존 `VITE_CHAIN_CONTRACT`, 없으면 배포 주소.
+- 로그를 배포 블록부터 한 번 읽고 이후 새 블록만 읽는다. 데모 규모용이고, 큰 행사에는 인덱서가 필요하다.
+- 표를 취소한 사람도 tokenId(`keccak256(ticketId)`)로 익스플로러에서 그 표가 재배정됐는지와 시각은 볼 수 있다. 누구에게 갔는지는 알 수 없다. 체인이 공개라 막을 수 없다.
+- 테스트: `npm --prefix apps/web test` (서버와 같은 시험 벡터, 데모 회차 검증, reader). `VITE_CHAIN_LIVE=1`이면 실제 Base Sepolia도 읽는다.

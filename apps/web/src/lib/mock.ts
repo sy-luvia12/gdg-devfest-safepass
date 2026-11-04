@@ -33,6 +33,9 @@ import {
   type VerifyResult,
   type WaitlistEntry,
 } from '@/types';
+import demoDraw from './chain/demo-draw.json';
+import { checkMyDraw } from './chain/draw';
+import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
 
 const STATE_KEY = 'safepass-mock-v6';
 const SESSION_KEY = 'safepass-mock-session';
@@ -1251,4 +1254,35 @@ export function mockSelectedAccount(): string {
 
 export function mockReset() {
   save(seed());
+}
+
+// ---------- 체인 직접 읽기 (mock: 데모 회차 값과 고정 현황) ----------
+
+/** 고정 현황. 실제 연결은 chain/live.ts가 Base Sepolia에서 읽는다 */
+export async function getChainEventStatus(_eventId: string): Promise<ChainEventStatus> {
+  await wait();
+  return {
+    exists: true,
+    capacity: 300,
+    active: 5,
+    withinCapacity: true,
+    issued: 6,
+    used: 2,
+    reassigned: { queue: 0, lottery: 2 },
+    released: { noWaiter: 0, adminRevoke: 1 },
+    drawRounds: 1,
+    asOfBlock: '54300000',
+    contractUrl: 'https://base-sepolia.blockscout.com/address/0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE',
+  };
+}
+
+/** 데모 회차만 있다 (실제 체인에 올라간 값과 같다) */
+export async function getChainDraw(eventId: string, round: number): Promise<ChainDraw | null> {
+  await wait();
+  if (eventId !== demoDraw.eventId || round !== demoDraw.round) return null;
+  return { commitment: demoDraw.commitment, seedBlock: String(demoDraw.seedBlock), seed: demoDraw.seed, commitTx: demoDraw.commitTx, seedTx: demoDraw.seedTx };
+}
+
+export async function verifyMyDraw(entry: MyDrawEntry): Promise<DrawCheck> {
+  return checkMyDraw(entry, await getChainDraw(entry.eventId, entry.round));
 }
