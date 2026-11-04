@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { useAuth, useEventId } from '@/app/AuthProvider';
+import { useAuth } from '@/app/AuthProvider';
 import { homePathFor, studentGatePath } from '@/app/config';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
@@ -20,7 +20,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const goHome = async (u: User, eventCount: number, eventId: string) => {
+  const goHome = async (u: User, eventCount: number, eventId: string | null) => {
     if (u.role !== 'student') return navigate(homePathFor(u.role), { replace: true });
     const gate = studentGatePath(u);
     if (gate) return navigate(gate, { replace: true });
@@ -89,16 +89,15 @@ export function LoginPage() {
 }
 
 /** 행사가 여러 개면 축제 목록, 하나면 입장권 유무에 따라 /ticket 또는 /event */
-async function studentHome(eventCount: number, eventId: string): Promise<string> {
-  if (eventCount > 1) return '/events';
+async function studentHome(eventCount: number, eventId: string | null): Promise<string> {
+  if (eventCount > 1 || !eventId) return '/events';
   const ticket = await getMyTicket(eventId).catch(() => null);
   return ticket ? '/ticket' : '/event';
 }
 
 /** 이미 로그인한 학생 */
 function StudentRedirect() {
-  const eventId = useEventId();
-  const { user, events } = useAuth();
+  const { user, events, eventId } = useAuth();
   const gate = user ? studentGatePath(user) : null;
   const [to, setTo] = useState<string | null>(null);
   useEffect(() => {

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  CalendarDays,
   ClipboardList,
+  GraduationCap,
   ListOrdered,
   LayoutDashboard,
   LogOut,
@@ -14,37 +16,40 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
-import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
 import { eventTitle } from '@/app/format';
 import { SchoolSwitcher } from '@/components/SchoolSwitcher';
 import { getEvent, listDeviceResets, listPendingVerifications } from '@/lib/api';
 import type { Event } from '@/types';
-import { useAuth, useEventId } from './AuthProvider';
+import { useAuth } from './AuthProvider';
 
 type NavItem = { to: string; label: string; icon: LucideIcon; badge?: 'approvals' | 'devices' };
 
+// 학교 메뉴는 행사를 바꿔도 그대로, 행사 메뉴는 지금 고른 행사 기준
 const NAV: { group: string; items: NavItem[] }[] = [
   {
-    group: '운영',
+    group: '이 행사',
     items: [
       { to: '/admin', label: '실시간 현황', icon: LayoutDashboard },
       { to: '/admin/entries', label: '입장 기록', icon: ClipboardList },
       { to: '/admin/tickets', label: '발급 현황', icon: Ticket },
       { to: '/admin/reassignments', label: '취소·재배정', icon: ListOrdered },
+      { to: '/admin/roster', label: '행사 명단', icon: Sheet },
+      { to: '/admin/settings', label: '행사 설정', icon: Settings },
     ],
   },
   {
-    group: '사람',
+    group: '학교',
     items: [
+      { to: '/admin/events', label: '행사 목록', icon: CalendarDays },
+      { to: '/admin/students', label: '재학생 명단', icon: GraduationCap },
       { to: '/admin/approvals', label: '재학생 승인', icon: UserCheck, badge: 'approvals' },
       { to: '/admin/devices', label: '기기 초기화', icon: Smartphone, badge: 'devices' },
       { to: '/admin/staff', label: '스태프 관리', icon: Users },
-      { to: '/admin/roster', label: '명단 연동', icon: Sheet },
     ],
   },
-  { group: '설정', items: [{ to: '/admin/settings', label: '행사 설정', icon: Settings }] },
 ];
 
 export type AdminContext = {
@@ -60,16 +65,16 @@ export function useAdmin(): AdminContext {
 
 /** 관리자 화면 공통 틀: 상단 바 + 메뉴 (노트북: 왼쪽 세로 / 폰: 위쪽 가로 스크롤) */
 export function AdminLayout() {
-  const eventId = useEventId();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { school, signOut } = useAuth();
+  const { user, school, eventId, signOut } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [badges, setBadges] = useState({ approvals: 0, devices: 0 });
 
   useEffect(() => {
     // 학교를 바꾸면 이전 행사 이름이 남지 않게 비운다
     setEvent(null);
+    if (!eventId) return;
     let cancelled = false;
     getEvent(eventId)
       .then((e) => !cancelled && setEvent(e))
@@ -87,14 +92,20 @@ export function AdminLayout() {
   useEffect(refreshBadges, [refreshBadges, pathname]);
 
   const ctx: AdminContext = { event, setEvent, refreshBadges };
+  const inSetup = pathname === '/admin/setup';
+  // 학교 관리자는 스페이스와 재학생 명단부터 만든다
+  const needsSetup = !!user?.adminSchoolId && (!school || !school.studentRoster);
+  if (needsSetup && !inSetup) return <Navigate to="/admin/setup" replace />;
 
   return (
     <div className="min-h-dvh bg-bg">
       <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
           <div className="min-w-0">
-            <p className="text-label text-ink-3">{school?.name} · SafePass 관리자</p>
-            <h1 className="truncate text-heading text-ink">{event ? eventTitle(event) : '행사'}</h1>
+            <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · SafePass 관리자</p>
+            <h1 className="truncate text-heading text-ink">
+              {inSetup ? '스페이스 만들기' : event ? eventTitle(event) : eventId ? '' : '행사 없음'}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -124,8 +135,11 @@ export function AdminLayout() {
         </div>
         {/* 학교·행사 고르기 (고를 것이 있을 때만) */}
         <SchoolSwitcher className="mx-auto max-w-admin px-5 pb-3 md:px-8" />
-        {/* 폰·태블릿: 가로 스크롤 메뉴 */}
-        <nav aria-label="관리자 메뉴" className="flex gap-1 overflow-x-auto px-5 pb-3 [scrollbar-width:none] lg:hidden">
+        {/* 폰·태블릿: 가로 스크롤 메뉴 (스페이스 만드는 중에는 숨김) */}
+        <nav
+          aria-label="관리자 메뉴"
+          className={cx('gap-1 overflow-x-auto px-5 pb-3 [scrollbar-width:none] lg:hidden', inSetup ? 'hidden' : 'flex')}
+        >
           {NAV.flatMap((g) => g.items).map((item) => (
             <NavItemLink key={item.to} item={item} count={item.badge ? badges[item.badge] : 0} compact />
           ))}
@@ -133,7 +147,10 @@ export function AdminLayout() {
       </header>
 
       <div className="mx-auto flex max-w-admin gap-8 px-5 py-6 md:px-8 md:py-8">
-        <nav aria-label="관리자 메뉴" className="sticky top-24 hidden h-fit w-52 shrink-0 flex-col gap-6 lg:flex">
+        <nav
+          aria-label="관리자 메뉴"
+          className={cx('sticky top-24 hidden h-fit w-52 shrink-0 flex-col gap-6', !inSetup && 'lg:flex')}
+        >
           {NAV.map((g) => (
             <div key={g.group} className="flex flex-col gap-1">
               <p className="px-3 pb-1 text-caption text-ink-3">{g.group}</p>

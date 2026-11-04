@@ -8,16 +8,23 @@ import {
   type ConfirmResult,
   type DeviceResetRequest,
   type Event,
+  type EventInput,
   type EventSettings,
   type EventStats,
   type EventTheme,
+  type OpenSchool,
+  type PrecheckResult,
   type QrRefresh,
   type Reassignment,
   type ReassignMode,
   type RosterEntry,
+  type RosterImport,
+  type RosterView,
   type ScanLog,
   type ScanResult,
   type School,
+  type SchoolInput,
+  type SignupInfo,
   type StaffStats,
   type Ticket,
   type TicketHistoryItem,
@@ -27,7 +34,7 @@ import {
   type WaitlistEntry,
 } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v5';
+const STATE_KEY = 'safepass-mock-v6';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
@@ -45,7 +52,8 @@ type MockState = {
   reassignments: Reassignment[];
   waitlists: Record<string, WaitlistEntry[]>; // eventId → 대기 명단
   scanLogs: ScanLog[];
-  rosters: Record<string, Roster>; // eventId → 명단
+  rosters: Record<string, Roster>; // eventId → 행사 명단
+  studentRosters: Record<string, Roster>; // schoolId → 재학생 명단
   deviceResets: DeviceResetRequest[];
   seq: number;
 };
@@ -144,6 +152,12 @@ export const MOCK_SCHOOL_ACCOUNTS = SEED.map(({ school, people: ps }) => ({
     .filter((p) => p.demo)
     .map((p) => ({ uid: `${school.id}-${p.key}`, label: `${p.demo} ${p.name}` })),
 }));
+// 스페이스를 아직 만들지 않은 학교의 학생회. 로그인하면 /admin/setup부터 시작한다
+const NEW_SPACE = { id: 'saebit', name: '새빛대학교', domain: 'saebit.ac.kr', brandColor: '#6B4EFF' };
+MOCK_SCHOOL_ACCOUNTS.push({
+  school: { id: NEW_SPACE.id, name: `${NEW_SPACE.name} (스페이스 없음)`, brandColor: NEW_SPACE.brandColor },
+  accounts: [{ uid: `${NEW_SPACE.id}-admin`, label: '학생회 처음 세팅' }],
+});
 export const MOCK_OUTSIDER = { uid: 'outsider', label: '개인 Gmail (외부인)' };
 const DEFAULT_ACCOUNT = 'hanbit-s1';
 
@@ -162,6 +176,7 @@ function seed(): MockState {
     waitlists: {},
     scanLogs: [],
     rosters: {},
+    studentRosters: {},
     deviceResets: [],
     seq: 100,
   };
@@ -193,6 +208,7 @@ function seed(): MockState {
         email: `${p.local || 'council'}@${school.domain}`,
         photoUrl: photo(uid),
         role: p.role,
+        adminSchoolId: p.role === 'admin' ? school.id : undefined,
         verifyStatus: verify,
         idCardUrl: verify === 'pending' ? `/mock/idcard-${uid}.svg` : undefined,
         submittedAt: verify === 'pending' ? now - (p.key === 'ap1' ? 3_600_000 : 900_000) : undefined,
@@ -258,6 +274,12 @@ function seed(): MockState {
       { email: `wait4@${school.domain}`, name: FAKE_NAMES[8], order: 4, status: 'waiting' },
       { email: `wait5@${school.domain}`, name: FAKE_NAMES[9], order: 5, status: 'waiting' },
     ];
+    // 재학생 명단: 학교 학생 + 가짜 학생. 스페이스가 이미 세팅된 학교로 시작한다
+    s.studentRosters[school.id] = {
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/1SafePassDemoStudentRoster000000/edit',
+      importedAt: now - 3 * 86_400_000,
+      entries: rosterEntries(s, school.id, school.domain),
+    };
     s.deviceResets.push({
       id: `seed-reset-${school.id}`,
       uid: `${school.id}-fake`,
@@ -268,6 +290,18 @@ function seed(): MockState {
       status: 'pending',
     });
   }
+  s.users.push({
+    uid: `${NEW_SPACE.id}-admin`,
+    schoolId: NEW_SPACE.id,
+    adminSchoolId: NEW_SPACE.id,
+    name: '새빛 학생회',
+    studentId: '',
+    email: `council@${NEW_SPACE.domain}`,
+    photoUrl: '/mock/outsider.svg',
+    role: 'admin',
+    verifyStatus: 'approved',
+    deviceStatus: 'registered',
+  });
   s.users.push({
     uid: 'outsider',
     schoolId: '',
@@ -351,6 +385,30 @@ function findEvent(s: MockState, eventId: string): Event {
   return event;
 }
 
+const summaryOf = (r: Roster | undefined) => r && { sheetUrl: r.sheetUrl, importedAt: r.importedAt, count: r.entries.length };
+
+/** 학교 학생 + 가짜 학생 (명단 불러오기 mock) */
+function rosterEntries(s: MockState, schoolId: string, domain: string): RosterEntry[] {
+  const students = s.users
+    .filter((u) => u.schoolId === schoolId && u.role === 'student')
+    .map((u) => ({ email: u.email, name: u.name, studentId: u.studentId }));
+  const extra = FAKE_NAMES.map((name, i) => ({
+    email: `member${i + 1}@${domain}`,
+    name,
+    studentId: `2024${String(2000 + i * 11)}`,
+  }));
+  return [...students, ...extra];
+}
+
+/** 학교 관리자는 자기 학교만 (adminSchoolId) */
+function requireSchoolAdmin(s: MockState, schoolId: string): User {
+  const admin = requireUser(s, ['admin']);
+  if (admin.adminSchoolId && admin.adminSchoolId !== schoolId) throw new ApiError('unauthenticated');
+  return admin;
+}
+
+const SHEET_URL = /^https:\/\/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]{20,}/;
+
 function myEvent(s: MockState, user: User): Event {
   const id = s.schools.find((sc) => sc.id === user.schoolId)?.currentEventId;
   if (!id) throw new ApiError('not_found');
@@ -408,7 +466,10 @@ export async function signInWithSchoolAccount(): Promise<User> {
   const uid = sessionStorage.getItem(SELECTED_KEY) ?? DEFAULT_ACCOUNT;
   const user = s.users.find((u) => u.uid === uid);
   if (!user) throw new ApiError('unknown');
-  if (!s.schools.some((sc) => sc.domain === domainOf(user.email))) throw new ApiError('not_school_account');
+  // 학생회는 스페이스가 아직 없어도 들어와서 만든다
+  if (user.role !== 'admin' && !s.schools.some((sc) => sc.domain === domainOf(user.email))) {
+    throw new ApiError('not_school_account');
+  }
   sessionStorage.setItem(SESSION_KEY, user.uid);
   return user;
 }
@@ -428,12 +489,16 @@ export async function getSchool(schoolId: string): Promise<School> {
   const s = load();
   const school = s.schools.find((sc) => sc.id === schoolId);
   if (!school) throw new ApiError('not_found');
-  return school;
+  return { ...school, studentRoster: summaryOf(s.studentRosters[schoolId]) };
 }
 
 /** 학교가 참여하는 행사. mock은 학교당 1개 */
 export async function listEvents(schoolId: string): Promise<Event[]> {
-  return load().events.filter((e) => e.schoolId === schoolId);
+  const s = load();
+  return s.events
+    .filter((e) => e.schoolIds.includes(schoolId))
+    .map((e) => ({ ...e, roster: summaryOf(s.rosters[e.id]) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** 관리자·스태프가 고를 수 있는 학교. mock은 자기 학교만 */
@@ -446,7 +511,145 @@ export async function listSchools(): Promise<School[]> {
 
 export async function getEvent(eventId: string): Promise<Event> {
   await wait();
-  return findEvent(load(), eventId);
+  const s = load();
+  return { ...findEvent(s, eventId), roster: summaryOf(s.rosters[eventId]) };
+}
+
+// ---------- 스페이스 · 명단 · 행사 등록 (관리자) ----------
+
+/** 스페이스 만들기·수정. 학교 관리자는 자기 학교만 */
+export async function upsertSchool(schoolId: string, input: SchoolInput): Promise<School> {
+  await wait();
+  const s = load();
+  requireSchoolAdmin(s, schoolId);
+  const domain = input.domain.trim().toLowerCase();
+  if (s.schools.some((sc) => sc.id !== schoolId && sc.domain === domain)) throw new ApiError('domain_taken');
+  const fields = { name: input.name.trim(), domain, brandColor: input.brandColor };
+  const school = s.schools.find((sc) => sc.id === schoolId);
+  if (school) Object.assign(school, fields);
+  else s.schools.push({ id: schoolId, ...fields, currentEventId: '' });
+  save(s);
+  return getSchool(schoolId);
+}
+
+function rosterView(r: Roster | undefined): RosterView {
+  return {
+    summary: summaryOf(r) ?? null,
+    entries: [...(r?.entries ?? [])].sort((a, b) => a.studentId.localeCompare(b.studentId)).slice(0, 200),
+    serviceAccountEmail: 'ttv-festival-pass@appspot.gserviceaccount.com',
+  };
+}
+
+function checkSheetUrl(sheetUrl: string) {
+  if (!SHEET_URL.test(sheetUrl.trim())) throw new ApiError('sheet_bad_url');
+}
+
+export async function getStudentRoster(schoolId: string): Promise<RosterView> {
+  await wait();
+  const s = load();
+  requireSchoolAdmin(s, schoolId);
+  return rosterView(s.studentRosters[schoolId]);
+}
+
+/** 재학생 시트 불러오기. mock은 학교 학생 + 가짜 학생을 만든다 */
+export async function importStudentRoster(schoolId: string, sheetUrl: string): Promise<RosterImport> {
+  await wait();
+  await wait();
+  const s = load();
+  requireSchoolAdmin(s, schoolId);
+  checkSheetUrl(sheetUrl);
+  const school = s.schools.find((sc) => sc.id === schoolId);
+  if (!school) throw new ApiError('not_found');
+  const roster = { sheetUrl: sheetUrl.trim(), importedAt: Date.now(), entries: rosterEntries(s, schoolId, school.domain) };
+  s.studentRosters[schoolId] = roster;
+  save(s);
+  return { summary: summaryOf(roster)!, skipped: [{ row: 14, reason: 'BAD_DOMAIN' }] };
+}
+
+export async function getEventRoster(eventId: string): Promise<RosterView> {
+  await wait();
+  const s = load();
+  requireSchoolAdmin(s, findEvent(s, eventId).schoolId);
+  return rosterView(s.rosters[eventId]);
+}
+
+/** 행사 명단(당첨자) 불러오기. mock은 재학생 명단의 앞쪽 절반 + 학교 학생 계정 */
+export async function importEventRoster(eventId: string, sheetUrl: string): Promise<RosterImport> {
+  await wait();
+  await wait();
+  const s = load();
+  const event = findEvent(s, eventId);
+  requireSchoolAdmin(s, event.schoolId);
+  checkSheetUrl(sheetUrl);
+  const pool = event.schoolIds.flatMap((id) => s.studentRosters[id]?.entries ?? []);
+  const students = pool.filter((r) => !r.email.startsWith('member'));
+  const winners = pool.filter((r) => r.email.startsWith('member')).filter((_, i) => i % 2 === 0);
+  const roster = { sheetUrl: sheetUrl.trim(), importedAt: Date.now(), entries: [...students, ...winners] };
+  s.rosters[eventId] = roster;
+  save(s);
+  return { summary: summaryOf(roster)!, skipped: [] };
+}
+
+/** 행사 등록. 주최 학교(schoolIds[0]) 관리자만 */
+export async function createEvent(input: EventInput): Promise<Event> {
+  await wait();
+  const s = load();
+  const host = input.schoolIds[0];
+  requireSchoolAdmin(s, host);
+  const schools = input.schoolIds.map((id) => s.schools.find((sc) => sc.id === id));
+  if (schools.some((sc) => !sc)) throw new ApiError('not_found');
+  const event: Event = {
+    id: nextId(s, 'event'),
+    schoolId: host,
+    schoolIds: input.schoolIds,
+    name: input.name.trim(),
+    date: input.date,
+    place: input.place.trim(),
+    capacity: input.capacity,
+    faceValue: input.faceValue,
+    enteredCount: 0,
+    issuedCount: 0,
+    allowedDomains: schools.map((sc) => sc!.domain),
+    theme: { source: 'school', colors: [] },
+    settings: { requireRoster: input.requireRoster },
+    reassignMode: 'queue',
+    allowReissueAfterCancel: false,
+    dataRetentionDays: 7,
+  };
+  s.events.push(event);
+  const school = s.schools.find((sc) => sc.id === host);
+  if (school && !school.currentEventId) school.currentEventId = event.id;
+  save(s);
+  return event;
+}
+
+export async function updateEvent(eventId: string, patch: Partial<Omit<EventInput, 'schoolIds'>>): Promise<Event> {
+  await wait();
+  const s = load();
+  const event = findEvent(s, eventId);
+  requireSchoolAdmin(s, event.schoolId);
+  if (patch.capacity !== undefined && patch.capacity < Math.max(1, event.issuedCount)) throw new ApiError('invalid_state');
+  const { requireRoster, ...rest } = patch;
+  Object.assign(event, rest);
+  if (requireRoster !== undefined) event.settings = { ...event.settings, requireRoster };
+  save(s);
+  return { ...event, roster: summaryOf(s.rosters[eventId]) };
+}
+
+/** 회원가입: 학번으로 재학생 명단의 줄을 찾고, 이름과 로그인 메일이 그 줄과 같아야 한다 */
+export async function verifyStudentRoster(schoolId: string, name: string, studentId: string): Promise<User> {
+  await wait();
+  const s = load();
+  const user = requireUser(s);
+  const row = s.studentRosters[schoolId]?.entries.find((r) => r.studentId === studentId.trim());
+  if (!row || row.name.replace(/\s+/g, '') !== name.replace(/\s+/g, '')) throw new ApiError('not_in_roster');
+  if (row.email.toLowerCase() !== user.email.toLowerCase()) throw new ApiError('email_mismatch');
+  const taken = s.users.some((u) => u.uid !== user.uid && u.schoolId === schoolId && u.studentId === row.studentId);
+  if (taken) throw new ApiError('student_id_taken');
+  // 사진까지 내야 가입 완료 (submitProfilePhoto). 사진이 없으면 /onboarding으로 간다
+  Object.assign(user, { schoolId, name: row.name, studentId: row.studentId, verifyStatus: user.photoUrl ? 'approved' : 'none' });
+  save(s);
+  return user;
 }
 
 export async function updateEventTheme(eventId: string, theme: EventTheme): Promise<Event> {
@@ -469,6 +672,120 @@ export async function updateEventSettings(eventId: string, settings: EventSettin
   event.settings = { ...settings };
   save(s);
   return event;
+}
+
+// ---------- 학생 가입·로그인: 메일 링크 (docs/student-auth.md) ----------
+// mock은 메일을 보내지 않는다. sendSignInLink 뒤에 mockSignInLinkFor(email)로 받은 주소를 열면 메일의 링크를 누른 것과 같다
+
+const LINK_KEY = 'safepass-mock-link';
+type PendingLink = { email: string; signup?: SignupInfo };
+
+function pendingLinks(): Record<string, PendingLink> {
+  try {
+    return JSON.parse(localStorage.getItem(LINK_KEY) ?? '{}') as Record<string, PendingLink>;
+  } catch {
+    return {};
+  }
+}
+
+/** 학번 줄을 이미 가입한 계정이 쓰고 있는지 */
+const claimedBy = (s: MockState, schoolId: string, studentId: string) =>
+  s.users.find((u) => u.schoolId === schoolId && u.studentId === studentId && u.role === 'student');
+
+export async function listOpenSchools(): Promise<OpenSchool[]> {
+  await wait();
+  const s = load();
+  return s.schools
+    .filter((sc) => s.studentRosters[sc.id])
+    .map((sc) => ({ id: sc.id, name: sc.name, domain: sc.domain }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+export async function precheckStudent(input: { email: string; studentId: string; name?: string }): Promise<PrecheckResult> {
+  await wait();
+  const s = load();
+  const email = input.email.trim().toLowerCase();
+  const school = s.schools.find((sc) => sc.domain === domainOf(email) && s.studentRosters[sc.id]);
+  if (!school) throw new ApiError('not_school_account');
+  const row = s.studentRosters[school.id].entries.find((r) => r.studentId === input.studentId.trim());
+  const owner = row && claimedBy(s, school.id, row.studentId);
+  if (input.name !== undefined) {
+    if (!row || row.name.replace(/\s+/g, '') !== input.name.replace(/\s+/g, '')) throw new ApiError('not_in_roster');
+    if (row.email.toLowerCase() !== email) throw new ApiError('email_mismatch');
+    if (owner) throw new ApiError('student_id_taken');
+  } else {
+    if (!row) throw new ApiError('not_in_roster');
+    if (row.email.toLowerCase() !== email) throw new ApiError('email_mismatch');
+    if (!owner) throw new ApiError('not_registered');
+  }
+  return { schoolId: school.id, schoolName: school.name };
+}
+
+export async function sendSignInLink(email: string, signup?: SignupInfo): Promise<void> {
+  await wait();
+  const normalized = email.trim().toLowerCase();
+  localStorage.setItem(LINK_KEY, JSON.stringify({ ...pendingLinks(), [normalized]: { email: normalized, signup } }));
+}
+
+/** mock 전용: 메일 대신 열 링크 주소 */
+export function mockSignInLinkFor(email: string): string {
+  return `/auth/finish?mockEmail=${encodeURIComponent(email.trim().toLowerCase())}`;
+}
+
+export function isSignInLink(href: string): boolean {
+  return new URL(href, location.origin).searchParams.has('mockEmail');
+}
+
+export function pendingSignInEmail(): string | null {
+  return new URL(location.href).searchParams.get('mockEmail');
+}
+
+export async function completeSignInLink(href: string, email?: string): Promise<User> {
+  await wait();
+  const s = load();
+  const address = (email ?? new URL(href, location.origin).searchParams.get('mockEmail') ?? '').trim().toLowerCase();
+  if (!address) throw new ApiError('invalid_state');
+  const links = pendingLinks();
+  const pending = links[address];
+  if (!pending) throw new ApiError('invalid_state');
+  delete links[address];
+  localStorage.setItem(LINK_KEY, JSON.stringify(links));
+  let user = userByEmail(s, address);
+  if (pending.signup) {
+    const { schoolId, name, studentId } = pending.signup;
+    if (!user) {
+      user = {
+        uid: nextId(s, 'u'),
+        // 학번은 명단 대조(verifyStudentRoster)가 통과하면 채운다
+        schoolId,
+        name,
+        studentId: '',
+        email: address,
+        photoUrl: '',
+        role: 'student',
+        verifyStatus: 'none',
+        deviceStatus: 'registered',
+        deviceName: 'iPhone 15',
+      };
+      s.users.push(user);
+      save(s);
+    }
+    sessionStorage.setItem(SESSION_KEY, user.uid);
+    return verifyStudentRoster(schoolId, name, studentId);
+  }
+  if (!user) throw new ApiError('not_registered');
+  sessionStorage.setItem(SESSION_KEY, user.uid);
+  return user;
+}
+
+export async function submitProfilePhoto(photoDataUrl: string): Promise<User> {
+  await wait();
+  const s = load();
+  const user = requireUser(s, ['student']);
+  user.photoUrl = photoDataUrl;
+  user.verifyStatus = 'approved';
+  save(s);
+  return user;
 }
 
 // ---------- 재학생 승인 · 기기 (기술 설계 2.2~2.3) ----------
@@ -579,6 +896,7 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   const user = requireUser(s);
   const event = findEvent(s, eventId);
   if (!event.allowedDomains.includes(domainOf(user.email))) throw new ApiError('not_school_account');
+  if (user.role === 'student' && user.verifyStatus !== 'approved') throw new ApiError('not_registered');
   const existing = s.tickets.find((t) => t.eventId === eventId && t.ownerUid === user.uid);
   if (existing) return existing;
   // 취소한 학생은 다시 받을 수 없다 (테스트 행사만 예외)
@@ -891,35 +1209,6 @@ export async function listTickets(eventId: string): Promise<TicketRow[]> {
     };
   });
   return [...real.sort((a, b) => b.issuedAt - a.issuedAt), ...fake];
-}
-
-export async function getRoster(eventId: string): Promise<Roster | null> {
-  await wait();
-  const s = load();
-  requireUser(s, ['admin']);
-  return s.rosters[eventId] ?? null;
-}
-
-/** 구글 시트 명단 불러오기 (기술 설계 2.5). mock은 학교 학생 + 가짜 행을 만든다 */
-export async function importRoster(eventId: string, sheetUrl: string): Promise<Roster> {
-  await wait();
-  await wait();
-  const s = load();
-  const admin = requireUser(s, ['admin']);
-  if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(sheetUrl.trim())) throw new ApiError('invalid_state');
-  const school = s.schools.find((sc) => sc.id === admin.schoolId);
-  const students = s.users
-    .filter((u) => u.schoolId === admin.schoolId && u.role === 'student')
-    .map((u) => ({ email: u.email, name: u.name, studentId: u.studentId }));
-  const extra = FAKE_NAMES.map((name, i) => ({
-    email: `member${i + 1}@${school?.domain}`,
-    name,
-    studentId: `2024${String(2000 + i * 11)}`,
-  }));
-  const roster: Roster = { sheetUrl: sheetUrl.trim(), importedAt: Date.now(), entries: [...students, ...extra] };
-  s.rosters[eventId] = roster;
-  save(s);
-  return roster;
 }
 
 export async function listStaff(): Promise<User[]> {

@@ -1,0 +1,121 @@
+import { describe, expect, it } from 'vitest';
+import { decidePrecheck, isProfilePhoto, matchStudent, parseRosterRows, parseSheetId } from '../src/domain/roster';
+
+const KU = ['korea.ac.kr'];
+const SHEET = 'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/edit#gid=0';
+
+describe('parseSheetId', () => {
+  it('reads the id from a sheet URL', () => {
+    expect(parseSheetId(SHEET)).toBe('1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789');
+  });
+
+  it.each(['', 'https://example.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz', 'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz'])(
+    'rejects %j',
+    (url) => expect(parseSheetId(url)).toBeNull(),
+  );
+});
+
+describe('parseRosterRows', () => {
+  it('finds columns by header name in any order', () => {
+    const parsed = parseRosterRows(
+      [
+        ['학교 이메일', '학번', '이름'],
+        ['Kim@Korea.ac.kr ', '2024001', '김하늘'],
+      ],
+      KU,
+    );
+    expect(parsed).toEqual({ ok: true, rows: [{ name: '김하늘', studentId: '2024001', email: 'kim@korea.ac.kr' }], skipped: [] });
+  });
+
+  it('fails when a column is missing', () => {
+    expect(parseRosterRows([['이름', '학번']], KU)).toEqual({ ok: false, reason: 'MISSING_COLUMNS' });
+  });
+
+  it('skips unusable rows with their sheet row number and ignores blank rows', () => {
+    const parsed = parseRosterRows(
+      [
+        ['이름', '학번', '이메일'],
+        ['김하늘', '2024001', 'a@korea.ac.kr'],
+        [],
+        ['이도윤', '', 'b@korea.ac.kr'],
+        ['박서연', '2024003', 'c@gmail.com'],
+        ['최민준', '2024001', 'd@korea.ac.kr'],
+        ['정지우', '2024005', 'A@korea.ac.kr'],
+        ['한유진', '2024/06', 'f@korea.ac.kr'],
+      ],
+      KU,
+    );
+    expect(parsed.ok && parsed.rows.map((r) => r.studentId)).toEqual(['2024001']);
+    expect(parsed.ok && parsed.skipped).toEqual([
+      { row: 4, reason: 'MISSING_FIELD' },
+      { row: 5, reason: 'BAD_DOMAIN' },
+      { row: 6, reason: 'DUPLICATE_STUDENT_ID' },
+      { row: 7, reason: 'DUPLICATE_EMAIL' },
+      { row: 8, reason: 'BAD_STUDENT_ID' },
+    ]);
+  });
+});
+
+describe('matchStudent', () => {
+  const row = { name: '김 하늘', studentId: '2024001', email: 'kim@korea.ac.kr' };
+
+  it('accepts the row owner, ignoring spaces in the name and email case', () => {
+    expect(matchStudent(row, '김하늘', 'KIM@korea.ac.kr')).toBe('OK');
+  });
+
+  it('rejects another name before checking the email', () => {
+    expect(matchStudent(row, '이도윤', 'other@korea.ac.kr')).toBe('NAME_MISMATCH');
+  });
+
+  it('rejects a classmate signing up with a friend name and id', () => {
+    expect(matchStudent(row, '김하늘', 'friend@korea.ac.kr')).toBe('EMAIL_MISMATCH');
+  });
+});
+
+describe('decidePrecheck', () => {
+  const row = { name: '김하늘', studentId: '2024001', email: 'kim@korea.ac.kr' };
+  const claimed = { ...row, claimedBy: 'uid-1' };
+
+  describe('sign-up (with name)', () => {
+    it('lets a free row through', () => {
+      expect(decidePrecheck(row, { email: 'kim@korea.ac.kr', name: '김하늘' })).toBe('OK');
+    });
+
+    it('answers a wrong name like a missing row', () => {
+      expect(decidePrecheck(row, { email: 'kim@korea.ac.kr', name: '이도윤' })).toBe('NOT_IN_ROSTER');
+      expect(decidePrecheck(null, { email: 'kim@korea.ac.kr', name: '김하늘' })).toBe('NOT_IN_ROSTER');
+    });
+
+    it('rejects another email and a row someone already signed up with', () => {
+      expect(decidePrecheck(row, { email: 'friend@korea.ac.kr', name: '김하늘' })).toBe('EMAIL_MISMATCH');
+      expect(decidePrecheck(claimed, { email: 'kim@korea.ac.kr', name: '김하늘' })).toBe('STUDENT_ID_TAKEN');
+    });
+  });
+
+  describe('sign-in by student id (no name)', () => {
+    it('needs the row email and a finished sign-up', () => {
+      expect(decidePrecheck(claimed, { email: 'KIM@korea.ac.kr' })).toBe('OK');
+      expect(decidePrecheck(row, { email: 'kim@korea.ac.kr' })).toBe('NOT_REGISTERED');
+      expect(decidePrecheck(null, { email: 'kim@korea.ac.kr' })).toBe('NOT_IN_ROSTER');
+    });
+
+    it('answers another email exactly like a student id that is not on the roster', () => {
+      const missing = decidePrecheck(null, { email: 'friend@korea.ac.kr' });
+      expect(decidePrecheck(claimed, { email: 'friend@korea.ac.kr' })).toBe(missing);
+      expect(decidePrecheck(row, { email: 'friend@korea.ac.kr' })).toBe(missing);
+      expect(missing).toBe('NOT_IN_ROSTER');
+    });
+  });
+});
+
+describe('isProfilePhoto', () => {
+  it('accepts a small JPEG data URL', () => {
+    expect(isProfilePhoto('data:image/jpeg;base64,/9j/4AAQSkZJRg==', 300_000)).toBe(true);
+  });
+
+  it('rejects other types, broken data and photos over the limit', () => {
+    expect(isProfilePhoto('data:image/png;base64,iVBORw0KGgo=', 300_000)).toBe(false);
+    expect(isProfilePhoto('https://example.com/me.jpg', 300_000)).toBe(false);
+    expect(isProfilePhoto(`data:image/jpeg;base64,${'A'.repeat(400_004)}`, 300_000)).toBe(false);
+  });
+});

@@ -8,6 +8,8 @@ export type School = {
   domain: string; // 학교 이메일 도메인
   brandColor: string; // 학교 상징색 hex. 테마 기본 시드
   currentEventId: string; // 처음 보여줄 행사. 학교의 행사 목록은 listEvents(schoolId)
+  /** 재학생 명단 요약. 없으면 아직 시트를 불러오지 않은 스페이스 → 관리자는 /admin/setup부터 */
+  studentRoster?: RosterSummary;
 };
 
 /** 행사 테마. source가 'event'면 행사 디자인(포스터)에서 뽑은 색, 'school'이면 학교 상징색 */
@@ -27,6 +29,10 @@ export type User = {
   email: string; // 학교 이메일
   photoUrl: string; // 프로토타입은 미리 넣어둔 테스트 사진
   role: Role; // staff: 검표 / admin: 검표 + 관리자
+  /** 학교 관리자가 맡은 학교. admin인데 없으면 SafePass 팀 계정 (모든 학교, 새 스페이스 만들기) */
+  adminSchoolId?: string;
+  /** 학교 관리자가 추가한 스태프가 맡은 학교. 그 학교 행사만 검표한다. 없으면 모든 학교 (팀 계정) */
+  staffSchoolId?: string;
   verifyStatus: VerifyStatus;
   rejectReason?: string;
   idCardUrl?: string; // 학생증 사진 (관리자만 열람)
@@ -60,6 +66,8 @@ export type Event = {
   allowedDomains: string[];
   theme: EventTheme;
   settings: EventSettings;
+  /** 행사 명단 요약 (당첨자·참가자). settings.requireRoster가 켜져 있으면 여기 있는 학생만 발급 */
+  roster?: RosterSummary;
   reassignMode: ReassignMode;
   /** 테스트용: 취소한 학생도 다시 받을 수 있음. 실제 행사는 false (노션 "요청 처리 방침") */
   allowReissueAfterCancel: boolean;
@@ -177,6 +185,40 @@ export type StaffStats = { enteredCount: number; capacity: number; myCount: numb
 
 export type RosterEntry = { email: string; name: string; studentId: string };
 
+/** 재학생 명단(학교)·행사 명단(행사) 요약 */
+export type RosterSummary = { sheetUrl: string; importedAt: number; count: number };
+
+/** 명단 화면용. entries는 앞부분만 (미리보기). serviceAccountEmail: 시트를 공유할 계정 */
+export type RosterView = { summary: RosterSummary | null; entries: RosterEntry[]; serviceAccountEmail: string };
+
+export type RosterSkipReason = 'MISSING_FIELD' | 'BAD_STUDENT_ID' | 'BAD_DOMAIN' | 'DUPLICATE_STUDENT_ID' | 'DUPLICATE_EMAIL';
+
+/** 시트 불러오기 결과. skipped: 쓰지 못한 줄 (시트의 줄 번호) */
+export type RosterImport = { summary: RosterSummary; skipped: { row: number; reason: RosterSkipReason }[] };
+
+/** 가입 화면의 학교 고르기 (재학생 명단을 불러온 학교) */
+export type OpenSchool = { id: string; name: string; domain: string };
+
+/** 가입할 때 입력한 값. 메일 링크를 열면 이 값으로 재학생 명단 대조를 한다 */
+export type SignupInfo = { schoolId: string; name: string; studentId: string };
+
+/** 메일을 보내기 전 명단 확인 결과 */
+export type PrecheckResult = { schoolId: string; schoolName: string };
+
+/** 스페이스 만들기·수정 */
+export type SchoolInput = { name: string; domain: string; brandColor: string };
+
+/** 행사 등록. schoolIds[0]이 주최 학교, 나머지는 함께하는 학교 (고연전) */
+export type EventInput = {
+  schoolIds: string[];
+  name: string;
+  date: string; // ISO (+09:00)
+  place: string;
+  capacity: number;
+  faceValue: number;
+  requireRoster: boolean;
+};
+
 export type DeviceResetRequest = {
   id: string;
   uid: string;
@@ -199,6 +241,15 @@ export class ApiError extends Error {
     | 'wrong_role' // 학생이 아닌 계정(스태프·학생회)으로 입장권을 받으려 함
     | 'device_blocked' // 다른 기기에 등록된 계정
     | 'cancelled_before' // 이 행사 입장권을 취소한 적이 있음
+    | 'email_mismatch' // 회원가입·학번 로그인: 그 학번 줄의 메일이 입력한 메일과 다름
+    | 'not_registered' // 아직 가입(명단 대조·사진)을 마치지 않은 학생, 또는 명단에서 빠진 학생
+    | 'student_id_taken' // 회원가입: 그 학번으로 이미 가입한 계정이 있음
+    | 'domain_taken' // 스페이스: 다른 학교가 쓰는 메일 도메인
+    | 'sheet_bad_url' // 구글 시트 주소가 아님
+    | 'sheet_not_shared' // 서비스 계정에 공유되지 않은 시트
+    | 'sheet_not_found'
+    | 'sheet_api_disabled' // 프로젝트에서 Sheets API가 꺼져 있음
+    | 'sheet_missing_columns' // 첫 줄에 이름·학번·이메일 열이 없음
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);

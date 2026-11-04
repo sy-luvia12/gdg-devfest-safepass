@@ -6,19 +6,27 @@ import { emailDomain, formatNftNumber } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
 import { callableOptions } from './callableOptions';
+import { schoolForEmail } from './rosterStore';
 
 export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const eventId = readDocId(request.data, 'eventId');
 
   return db.runTransaction(async (tx) => {
-    await requireRole(tx, caller.uid, ['student'], 'ROLE');
+    const student = await requireRole(tx, caller.uid, ['student'], 'ROLE');
     const eventRef = db.doc(`events/${eventId}`);
     const event = eventFromSnap(await tx.get(eventRef));
     if (!event) throw new HttpsError('not-found', 'Event not found.');
     if (!caller.emailVerified || !event.allowedDomains.includes(emailDomain(caller.email))) {
       const reason: IssueReason = 'DOMAIN';
       throw new HttpsError('permission-denied', 'This school domain cannot join this event.', { reason });
+    }
+    // Schools with a loaded roster only take students who finished sign-up (roster check and face photo).
+    // A school without one keeps the old sign-in, so seeded demo students still work.
+    const school = await schoolForEmail(caller.email, tx);
+    if (school?.get('studentRoster') && !(student.rosterVerified && student.photoSubmitted)) {
+      const reason: IssueReason = 'NOT_REGISTERED';
+      throw new HttpsError('failed-precondition', 'Finish sign-up first.', { reason });
     }
     const owned = await tx.get(
       db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', caller.uid).limit(1),
@@ -32,6 +40,10 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callabl
         const reason: IssueReason = 'CANCELLED_BEFORE';
         throw new HttpsError('failed-precondition', 'A cancelled ticket cannot be taken again.', { reason });
       }
+    }
+    if (event.requireRoster && !(await tx.get(db.doc(`events/${eventId}/roster/${caller.email}`))).exists) {
+      const reason: IssueReason = 'NOT_IN_ROSTER';
+      throw new HttpsError('failed-precondition', 'Not on this event roster.', { reason });
     }
     if (event.issuedCount >= event.capacity) throw new HttpsError('resource-exhausted', 'Event is full.');
 

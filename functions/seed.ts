@@ -96,6 +96,8 @@ const events: Record<string, Record<string, unknown>> = {
 };
 
 // A profile only applies before the first sign-in. Add test accounts here first.
+// An admin with adminSchoolId manages only that school (e.g. { ..., role: 'admin', adminSchoolId: 'korea' }).
+// An admin without it is a SafePass team account that manages every school and can open new school spaces.
 // Replace the demo-* addresses with the team's real school accounts before the rehearsal.
 const profiles = [
   { email: 'tigerex91@gmail.com', name: '관리자', studentId: '', role: 'admin' },

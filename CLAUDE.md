@@ -66,6 +66,7 @@ apps/web/                 # 웹앱 (프론트)
 functions/                # Cloud Functions                    ← 백엔드
   src/handlers/           #   callable 함수 (발급, 취소·재배정, QR 토큰, 검표, 기기, 스태프 등)
   src/domain/             #   순수 규칙 (재배정 후보 순서, 기기 서명, 번호 형식)
+  src/sheets/             #   구글 시트 읽기 (서비스 계정, 재학생·행사 명단)
   src/chain/              #   체인 아웃박스·클라이언트 (NFT 기록)
   seed.ts                 #   학교·행사·테스트 계정 시드
 contracts/                # FestivalTicket.sol (Hardhat, Base Sepolia)  ← 블록체인
@@ -111,7 +112,10 @@ firebase.json             #                                    ← 백엔드
 | `/admin/approvals` | 재학생 승인 | admin |
 | `/admin/devices` | 기기 초기화 요청 | admin |
 | `/admin/staff` | 스태프 관리 | admin |
-| `/admin/roster` | 명단 연동 (구글 시트) | admin |
+| `/admin/setup` | 스페이스 만들기: 학교 정보 → 재학생 시트 (학교 관리자는 여기부터) | admin |
+| `/admin/students` | 재학생 명단 (학교 전체, 회원가입 대조용) | admin |
+| `/admin/events`, `/admin/events/new` | 행사 목록 · 행사 등록 | admin |
+| `/admin/roster` | 행사 명단 (당첨자·참가자 시트, 발급 대조용) | admin |
 | `/admin/settings` | 행사 정보 · 입장 규칙 · 보관 기간 · 테마 | admin |
 
 - 로그인 후 이동: 학생은 아래 "학생 관문"을 먼저 거치고, 입장권이 있으면 `/ticket`, 없으면 `/event` / staff는 `/staff/scan` / admin은 `/admin`
@@ -209,7 +213,11 @@ listReassignments(eventId): Promise<Reassignment[]>   // 취소·재배정 기�
 getWaitlist(eventId): Promise<WaitlistEntry[]>
 updateReassignMode(eventId, mode) / updateAllowReissue(eventId, allow)   // admin
 listTickets(eventId): Promise<TicketRow[]>
-getRoster(eventId) / importRoster(eventId, sheetUrl)
+upsertSchool(schoolId, { name, domain, brandColor })                 // 스페이스 만들기 (학교 관리자는 자기 학교만)
+getStudentRoster(schoolId) / importStudentRoster(schoolId, sheetUrl) // 재학생 명단
+createEvent(input) / updateEvent(eventId, patch)                     // 행사 등록 (주최 학교 관리자)
+getEventRoster(eventId) / importEventRoster(eventId, sheetUrl)       // 행사 명단
+verifyStudentRoster(schoolId, name, studentId): Promise<User>        // 회원가입: 학번 줄의 이름·메일 대조
 listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인 전이면 첫 로그인 때 적용
 ```
 
@@ -229,8 +237,10 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 - 색 생성 규칙은 `DESIGN.md` 2.1장. 컴포넌트에서 테마 색 hex를 직접 쓰지 않는다.
 
 ### 로그인 규칙
-- 구글 로그인만으로는 개인 Gmail도 들어온다. 이메일 도메인이 `allowedDomains`에 없으면 "학교 계정으로만 이용할 수 있어요" 에러.
-- 학교 메일이 Google Workspace가 아닌 학교는 이후 이메일 링크 로그인으로 보완한다(이번 범위 아님).
+- **학생**: 학교 메일 링크(Firebase 이메일 링크, 비밀번호 없음). 가입 = 학교·이름·학번 → `precheckStudent` → 메일 링크 → `completeSignInLink`(명단 대조) → 본인 사진 `submitProfilePhoto`. 로그인 = 메일(+학번) → 메일 링크. 화면 연결은 `docs/student-auth.md`.
+- **운영진(스태프·학생회)**: 구글 로그인(`signInWithSchoolAccount`).
+- 재학생 명단을 불러온 학교는 가입을 마친 학생만 들어오고 발급받는다(`not_registered`). 명단이 없는 학교는 예전처럼 구글 로그인으로 들어온다.
+- 로그인할 때마다 서버가 명단을 다시 본다. 명단에서 빠진 학생은 다시 가입해야 한다.
 
 ### QR · 검표 규칙
 - QR 내용: `TTV1:{ticketId}:{qrToken}`(mock도 같은 형식). 기기 키가 있으면 폰이 `TTV2:{ticketId}:{qrToken}:{signedAt}:{signature}`로 서명해 보여 준다(`docs/api.md` 12장). 검표 화면은 스캔한 문자열을 해석하지 않고 그대로 `verifyEntry`에 넘긴다.
@@ -259,8 +269,8 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 - 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia)와 아웃박스(`functions/src/chain`)가 있다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
 - 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
-- 관리자·스태프 권한은 전역 `role`이다. 학교 단위로 나누지 않았다(이후 과제).
-- 아직 화면과 mock뿐: 재학생 승인, 사진·학생증 업로드, 구글 시트 명단·대기 명단 등록, 테마·검표 설정 저장, 개인정보 파기
+- 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).
+- 아직 화면과 mock뿐: 재학생 승인, 사진·학생증 업로드, 대기 명단 등록, 테마·검표 설정 저장, 개인정보 파기
 - 하지 않는 것: reCAPTCHA, App Check, Gemini, 결제, 개인 간 양도
 - 배포 빌드는 Firebase 설정(`.env.local`)이 없으면 실패한다. mock 빌드는 `VITE_BACKEND=mock`을 명시한다.
 
@@ -293,3 +303,10 @@ firebase deploy --only hosting   # 저장소 루트에서
 
 ## 작업을 마칠 때
 - 무엇을 바꿨는지, 어떤 파일을 건드렸는지, 남의 소유 파일에 필요한 변경 요청이 있는지 짧게 요약한다.
+
+## 명단 (학교 스페이스 · 행사)
+- 학교 관리자(`users.adminSchoolId`)는 자기 학교만 다룬다. 값이 없는 admin은 SafePass 팀 계정 (모든 학교, 새 스페이스).
+- **재학생 명단**(`schools/{id}/roster/{studentId}`): 회원가입 대조. 학번으로 줄을 찾고 이름 + 로그인 메일이 그 줄과 같아야 한다. 학번 하나에 계정 하나(`claimedBy`).
+- **행사 명단**(`events/{id}/roster/{email}`): `requireRoster` 행사는 여기 있는 메일만 발급 (`not_in_roster`).
+- 시트는 관리자가 Cloud Functions 서비스 계정에 뷰어로 공유하고, 함수가 읽어 Firestore에 복사한다. 명단 하위 컬렉션은 클라이언트가 읽지 못한다. 시트 첫 줄은 `이름`·`학번`·`이메일` 제목.
+- 배포 전 GCP 콘솔에서 **Google Sheets API 사용 설정**이 필요하다.

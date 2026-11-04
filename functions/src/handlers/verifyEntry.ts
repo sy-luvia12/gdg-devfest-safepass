@@ -4,7 +4,7 @@ import { CONFIRM_WINDOW_MS, type VerifyEntryReason, type VerifyEntryResponse } f
 import { parseDeviceKey, qrSignatureIsValid } from '../domain/device';
 import { decideEntry, parseQrPayload, scanResultFor, type FestivalEvent, type QrPayload } from '../domain/ticket';
 import { db } from '../firebase';
-import { eventFromSnap, qrTokenRef, readDocId, readString, requireAuth, requireRole, ticketFromSnap } from './boundary';
+import { eventFromSnap, qrTokenRef, readDocId, readString, requireAuth, requireEventSchool, requireRole, ticketFromSnap } from './boundary';
 import { callableOptions } from './callableOptions';
 import { admitTicket, entryCheckRef, holderOf, recordScan } from './entry';
 
@@ -34,6 +34,9 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(callabl
     const qr = parseQrPayload(raw);
     const ticketSnap = qr ? await tx.get(db.doc(`tickets/${qr.ticketId}`)) : null;
     const ticket = qr && ticketSnap ? ticketFromSnap(ticketSnap, await tx.get(qrTokenRef(qr.ticketId))) : null;
+    // Staff check only their own school's events: the event the scanner chose, or the ticket's event on older clients.
+    const checkedEventId = expectedEventId ?? ticket?.eventId;
+    if (checkedEventId) await requireEventSchool(tx, staff, checkedEventId);
     // A ticket for another school's event is refused before anything else, so it never counts as entered here.
     const decision: ReturnType<typeof decideEntry> | { ok: false; reason: VerifyEntryReason } = !qr
       ? { ok: false, reason: 'INVALID_FORMAT' }

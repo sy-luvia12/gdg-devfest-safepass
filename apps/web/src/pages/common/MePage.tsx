@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ChevronRight, ClipboardList, FileText, Info, LogOut, Shield, Smartphone, UserCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth, useEventId } from '@/app/AuthProvider';
+import { useAuth } from '@/app/AuthProvider';
 import { homePathFor } from '@/app/config';
 import { Avatar } from '@/components/Avatar';
 import { AppHeader } from '@/components/AppHeader';
@@ -18,12 +18,11 @@ const ROLE: Record<Role, string> = { student: '재학생', staff: '검표 스태
 /** 내 정보·설정 (모든 역할) */
 export function MePage() {
   const navigate = useNavigate();
-  const eventId = useEventId();
-  const { user, school, signOut } = useAuth();
+  const { user, school, eventId, signOut } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
 
   useEffect(() => {
-    getEvent(eventId).then(setEvent).catch(() => {});
+    if (eventId) getEvent(eventId).then(setEvent).catch(() => {});
   }, [eventId]);
 
   if (!user || !school) return <StateView kind="loading" fullScreen />;

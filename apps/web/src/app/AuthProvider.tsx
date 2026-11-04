@@ -2,8 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import * as api from '@/lib/api';
 import type { Event, School, User } from '@/types';
 
-/** 보고 있는 학교와 그 학교의 행사들. eventId는 그중 지금 보고 있는 행사 */
-type Scope = { school: School; events: Event[]; eventId: string };
+/** 보고 있는 학교와 그 학교의 행사들. eventId는 그중 지금 보고 있는 행사 (행사가 없으면 null).
+ * school이 null이면 학교 관리자의 스페이스가 아직 없다 → /admin/setup */
+type Scope = { school: School | null; events: Event[]; eventId: string | null };
 
 type AuthState = {
   user: User | null;
@@ -24,6 +25,8 @@ type AuthState = {
   selectSchool: (schoolId: string) => Promise<void>;
   /** 보고 있는 행사를 바꾼다. 다음에 들어와도 유지된다 */
   selectEvent: (eventId: string) => void;
+  /** 스페이스·행사를 만든 뒤 학교와 행사 목록을 다시 읽는다. eventId를 주면 그 행사를 고른다 */
+  refreshScope: (eventId?: string) => Promise<void>;
 };
 
 const SCHOOL_KEY = 'safepass-school';
@@ -51,12 +54,18 @@ async function scopeFor(school: School): Promise<Scope> {
   const last = stored(EVENT_KEY);
   const pick =
     events.find((e) => e.id === last) ?? events.find((e) => e.id === school.currentEventId) ?? events[0];
-  return { school, events, eventId: pick?.id ?? school.currentEventId };
+  return { school, events, eventId: pick?.id ?? null };
 }
 
 /** 학생은 자기 학교. 관리자·스태프는 지난번에 고른 학교, 없으면 자기 학교나 첫 학교 */
 async function resolve(u: User): Promise<Scope & { schools: School[] }> {
   if (u.role === 'student') return { ...(await scopeFor(await api.getSchool(u.schoolId))), schools: [] };
+  // 학교 관리자·스태프는 자기 학교만. 관리자가 스페이스를 아직 안 만들었으면 학교 없이 들어온다
+  const ownSchoolId = u.role === 'admin' ? u.adminSchoolId : u.staffSchoolId;
+  if (ownSchoolId) {
+    const own = await api.getSchool(ownSchoolId).catch(() => null);
+    return own ? { ...(await scopeFor(own)), schools: [own] } : { school: null, events: [], eventId: null, schools: [] };
+  }
   const schools = await api.listSchools();
   const last = stored(SCHOOL_KEY);
   const pick = schools.find((s) => s.id === last) ?? schools.find((s) => s.id === u.schoolId) ?? schools[0];
@@ -104,14 +113,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const selectSchool = useCallback(async (schoolId: string) => {
     const next = await scopeFor(await api.getSchool(schoolId));
     store(SCHOOL_KEY, schoolId);
-    store(EVENT_KEY, next.eventId);
+    if (next.eventId) store(EVENT_KEY, next.eventId);
     setScope(next);
-  }, []);
+    // 방금 만든 스페이스는 목록에 아직 없다
+    if (!schools.some((s) => s.id === schoolId)) setSchools(await api.listSchools());
+  }, [schools]);
 
   const selectEvent = useCallback((eventId: string) => {
     store(EVENT_KEY, eventId);
     setScope((s) => (s && s.events.some((e) => e.id === eventId) ? { ...s, eventId } : s));
   }, []);
+
+  const refreshScope = useCallback(
+    async (eventId?: string) => {
+      if (!user) return;
+      if (eventId) store(EVENT_KEY, eventId);
+      const r = await resolve(user);
+      setScope({ school: r.school, events: r.events, eventId: r.eventId });
+      setSchools(r.schools);
+    },
+    [user],
+  );
 
   const refreshUser = useCallback(async () => {
     const u = await api.getCurrentUser();
@@ -132,8 +154,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       schools,
       selectSchool,
       selectEvent,
+      refreshScope,
     }),
-    [user, scope, loading, signIn, signOut, refreshUser, schools, selectSchool, selectEvent],
+    [user, scope, loading, signIn, signOut, refreshUser, schools, selectSchool, selectEvent, refreshScope],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -144,9 +167,9 @@ export function useAuth(): AuthState {
   return ctx;
 }
 
-/** 지금 보고 있는 행사 id. RequireRole 안쪽 화면에서만 쓴다. */
+/** 지금 보고 있는 행사 id. RequireEvent 안쪽 화면에서만 쓴다 (행사가 없으면 그 앞에서 막힌다). */
 export function useEventId(): string {
   const { eventId } = useAuth();
-  if (!eventId) throw new Error('useEventId needs a signed-in user');
+  if (!eventId) throw new Error('useEventId needs a selected event');
   return eventId;
 }
