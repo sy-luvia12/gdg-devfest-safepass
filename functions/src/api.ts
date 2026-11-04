@@ -397,6 +397,28 @@ export interface OpsListStudentsResponse {
   students: OpsStudent[];
 }
 
+// Event admins (행사 담당자) are admin accounts with adminSchoolId, usually a team member's own Gmail. The operator
+// assigns them by email. Someone who has not signed in yet gets it on the first Google sign-in (seedProfiles).
+export interface OpsEventAdmin {
+  email: string;
+  name: string;
+  schoolId: string;
+  /** ACTIVE: signed in already. PENDING_SIGNUP: applies on the first sign-in */
+  status: 'ACTIVE' | 'PENDING_SIGNUP';
+}
+export interface OpsListEventAdminsResponse {
+  admins: OpsEventAdmin[];
+}
+export interface OpsSetEventAdminRequest {
+  email: string;
+  /** The school this account manages events for. null removes the event admin role. */
+  schoolId: string | null;
+}
+export interface OpsSetEventAdminResponse {
+  ok: true;
+  status: 'UPDATED' | 'PENDING_SIGNUP' | 'REMOVED';
+}
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -426,4 +448,6 @@ export interface Callables {
   opsListRoster: [OpsListRosterRequest, OpsListRosterResponse];
   opsEditRoster: [OpsEditRosterRequest, OpsEditRosterResponse];
   opsListStudents: [OpsListStudentsRequest, OpsListStudentsResponse];
+  opsListEventAdmins: [void, OpsListEventAdminsResponse];
+  opsSetEventAdmin: [OpsSetEventAdminRequest, OpsSetEventAdminResponse];
 }

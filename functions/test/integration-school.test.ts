@@ -517,4 +517,41 @@ describe('operator console', () => {
     const after = await ops.call('opsListStudents', { schoolId: B });
     expect(after.students.find((s) => s.uid === student.uid)).toMatchObject({ deviceRegistered: false, resetRequested: false });
   });
+
+  it('assigns a personal Gmail as event admin before or after its first sign-in, and leaves team admins alone', async () => {
+    const ops = await login('ops@sch-ops.test');
+    const adminA = await login('admin@sch-a.test');
+    expect(await codeOf(adminA.call('opsSetEventAdmin', { email: 'x@sch-gmail.test', schoolId: A }))).toBe('functions/permission-denied');
+
+    // Not signed in yet: applies on the first Google sign-in
+    expect(await ops.call('opsSetEventAdmin', { email: 'Pending.Admin@sch-gmail.test', schoolId: A })).toEqual({ ok: true, status: 'PENDING_SIGNUP' });
+    let list = await ops.call('opsListEventAdmins', undefined);
+    expect(list.admins).toContainEqual(expect.objectContaining({ email: 'pending.admin@sch-gmail.test', schoolId: A, status: 'PENDING_SIGNUP' }));
+    const pending = await login('pending.admin@sch-gmail.test');
+    expect(await pending.call('ensureUser', undefined)).toMatchObject({ role: 'admin', adminSchoolId: A });
+    // and it can register an event for its school, not for another one
+    const date = '2026-12-01T18:00:00+09:00';
+    const made = await pending.call('createEvent', { schoolIds: [A], name: 'Gmail Fest', date, place: 'Hall', capacity: 10, faceValue: 0, requireRoster: true });
+    expect(made.ok).toBe(true);
+    expect(await codeOf(pending.call('createEvent', { schoolIds: [B], name: 'X', date, place: 'Hall', capacity: 10, faceValue: 0, requireRoster: true }))).toBe(
+      'functions/permission-denied',
+    );
+
+    // Signed in first as a (rejected) student: the stored account is updated in place
+    const early = await login('early.admin@sch-gmail.test');
+    expect(await early.call('ensureUser', undefined)).toMatchObject({ role: 'student' });
+    expect(await ops.call('opsSetEventAdmin', { email: 'early.admin@sch-gmail.test', schoolId: B })).toEqual({ ok: true, status: 'UPDATED' });
+    expect(await early.call('ensureUser', undefined)).toMatchObject({ role: 'admin', adminSchoolId: B });
+    list = await ops.call('opsListEventAdmins', undefined);
+    expect(list.admins).toContainEqual(expect.objectContaining({ email: 'early.admin@sch-gmail.test', schoolId: B, status: 'ACTIVE' }));
+
+    // Removing it makes the account a plain (non-school) user again
+    expect(await ops.call('opsSetEventAdmin', { email: 'early.admin@sch-gmail.test', schoolId: null })).toEqual({ ok: true, status: 'REMOVED' });
+    expect(await early.call('ensureUser', undefined)).not.toHaveProperty('adminSchoolId');
+
+    // Team admins and operator addresses are never changed
+    expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'team@sch-team.test', schoolId: A }))).toBe('functions/failed-precondition');
+    expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'ops@ops.safepass.app', schoolId: A }))).toBe('functions/failed-precondition');
+    expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'new@sch-gmail.test', schoolId: 'no-such-school' }))).toBe('functions/not-found');
+  });
 });

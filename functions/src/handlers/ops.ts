@@ -1,6 +1,10 @@
+import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
   OPS_EDIT_MAX,
+  type OpsEventAdmin,
+  type OpsListEventAdminsResponse,
+  type OpsSetEventAdminResponse,
   type OpsEditRosterResponse,
   type OpsListRosterResponse,
   type OpsListStudentsResponse,
@@ -187,4 +191,70 @@ export const opsListStudents = onCall<unknown, Promise<OpsListStudentsResponse>>
     }))
     .sort((a, b) => a.studentId.localeCompare(b.studentId));
   return { students: list };
+});
+
+// ---------- Event admins (행사 담당자) ----------
+
+const OPERATOR_DOMAIN = '@ops.safepass.app';
+const EMAIL = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/;
+
+export const opsListEventAdmins = onCall<unknown, Promise<OpsListEventAdminsResponse>>(callableOptions, async (request) => {
+  const caller = requireAuth(request);
+  await db.runTransaction((tx) => requireOperator(tx, caller.uid));
+  const [users, pending] = await Promise.all([
+    db.collection('users').where('role', '==', 'admin').get(),
+    db.collection('seedProfiles').where('role', '==', 'admin').get(),
+  ]);
+  const admins: OpsEventAdmin[] = [];
+  const signedIn = new Set<string>();
+  for (const d of users.docs) {
+    signedIn.add(String(d.get('email') ?? '').toLowerCase());
+    if (!d.get('adminSchoolId')) continue;
+    admins.push({ email: d.get('email') ?? '', name: d.get('name') ?? '', schoolId: d.get('adminSchoolId'), status: 'ACTIVE' });
+  }
+  for (const d of pending.docs) {
+    if (!d.get('adminSchoolId') || signedIn.has(d.id)) continue;
+    admins.push({ email: d.id, name: d.get('name') ?? '', schoolId: d.get('adminSchoolId'), status: 'PENDING_SIGNUP' });
+  }
+  admins.sort((a, b) => a.schoolId.localeCompare(b.schoolId) || a.email.localeCompare(b.email));
+  return { admins };
+});
+
+// Makes an account the event admin of one school, or removes the role (schoolId null). SafePass team admins and
+// the operator are never changed here.
+export const opsSetEventAdmin = onCall<unknown, Promise<OpsSetEventAdminResponse>>(callableOptions, async (request) => {
+  const caller = requireAuth(request);
+  const data = (request.data ?? {}) as { email?: unknown; schoolId?: unknown };
+  const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
+  if (!EMAIL.test(email)) throw new HttpsError('invalid-argument', 'email is not valid.');
+  if (email.endsWith(OPERATOR_DOMAIN)) throw new HttpsError('failed-precondition', 'An operator account cannot be changed.');
+  const schoolId = data.schoolId === null ? null : readDocId(request.data, 'schoolId');
+
+  return db.runTransaction(async (tx): Promise<OpsSetEventAdminResponse> => {
+    await requireOperator(tx, caller.uid);
+    if (schoolId && !(await tx.get(db.doc(`schools/${schoolId}`))).exists) throw new HttpsError('not-found', 'School not found.');
+    const account = (await tx.get(db.collection('users').where('email', '==', email).limit(1))).docs[0];
+    const seedRef = db.doc(`seedProfiles/${email}`);
+    const seed = await tx.get(seedRef);
+    const current = account ?? (seed.exists ? seed : null);
+    // A team admin (admin without a school) stays as it is
+    if (current?.get('role') === 'admin' && !current.get('adminSchoolId')) {
+      throw new HttpsError('failed-precondition', 'A SafePass team admin cannot be changed.');
+    }
+    const grant = { role: 'admin', adminSchoolId: schoolId, staffSchoolId: FieldValue.delete() };
+    const revoke = { role: 'student', adminSchoolId: FieldValue.delete() };
+
+    if (account) {
+      if (!schoolId && account.get('role') !== 'admin') return { ok: true, status: 'REMOVED' };
+      tx.update(account.ref, schoolId ? grant : revoke);
+      if (seed.exists) tx.delete(seedRef);
+      return { ok: true, status: schoolId ? 'UPDATED' : 'REMOVED' };
+    }
+    if (schoolId) {
+      tx.set(seedRef, { ...grant, name: seed.get('name') ?? email.split('@')[0], studentId: '' }, { merge: true });
+      return { ok: true, status: 'PENDING_SIGNUP' };
+    }
+    if (seed.exists) tx.delete(seedRef);
+    return { ok: true, status: 'REMOVED' };
+  });
 });
