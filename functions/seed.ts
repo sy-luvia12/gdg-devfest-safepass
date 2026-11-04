@@ -27,6 +27,8 @@ const base = {
   enteredCount: 0,
   reassignMode: 'queue',
   requireDevice: false,
+  // Staff compare the holder's photo and confirm before admitting. Off until the council turns it on.
+  twoStepCheck: false,
   // Real events: a student who cancels cannot take a ticket again. Only the test event below sets true.
   allowReissueAfterCancel: false,
 };

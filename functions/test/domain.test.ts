@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { VERIFY_ENTRY_REASONS } from '../src/api';
 import {
   decideEntry,
   candidateOrder,
@@ -18,17 +19,34 @@ const used: Ticket = { ...base, status: 'used', usedAtMs: NOW - 1000 };
 
 describe('parseQrPayload', () => {
   it('reads ticketId and token from a TTV1 payload', () => {
-    expect(parseQrPayload('TTV1:abc123:tok_-9')).toEqual({ ticketId: 'abc123', token: 'tok_-9' });
+    expect(parseQrPayload('TTV1:abc123:tok_-9')).toEqual({ version: 1, ticketId: 'abc123', token: 'tok_-9' });
   });
 
   it('round-trips what formatQrPayload produces', () => {
-    expect(parseQrPayload(formatQrPayload('XyZ', 'AAAA-_'))).toEqual({ ticketId: 'XyZ', token: 'AAAA-_' });
+    expect(parseQrPayload(formatQrPayload('XyZ', 'AAAA-_'))).toEqual({ version: 1, ticketId: 'XyZ', token: 'AAAA-_' });
+  });
+
+  it('reads a signed TTV2 payload with its signing time and signature', () => {
+    expect(parseQrPayload('TTV2:abc123:tok_-9:1700000000000:sig_-Z')).toEqual({
+      version: 2,
+      ticketId: 'abc123',
+      token: 'tok_-9',
+      signedAt: 1_700_000_000_000,
+      signature: 'sig_-Z',
+    });
   });
 
   it.each([
     '',
     'TTV1:abc',
     'TTV2:abc:tok',
+    'TTV2:abc:tok:1700000000000',
+    'TTV2:abc:tok:1700000000000:',
+    'TTV2:abc:tok:soon:sig',
+    'TTV2:abc:tok:-5:sig',
+    'TTV2:abc:tok:1700000000000:sig:extra',
+    'TTV2:abc:tok:1700000000000:s/g',
+    'TTV3:abc:tok',
     'TTV1::tok',
     'TTV1:abc:',
     'TTV1:abc:tok:extra',
@@ -122,13 +140,20 @@ describe('isDomainAllowed', () => {
 });
 
 describe('scanResultFor', () => {
-  it('labels every verifyEntry rejection for the scan log', () => {
-    expect(scanResultFor('USED')).toBe('used');
-    expect(scanResultFor('EXPIRED')).toBe('expired');
-    expect(scanResultFor('TOKEN_MISMATCH')).toBe('expired');
-    expect(scanResultFor('INVALID_FORMAT')).toBe('invalid');
-    expect(scanResultFor('NOT_FOUND')).toBe('invalid');
-    expect(scanResultFor('WRONG_EVENT')).toBe('invalid');
+  it.each([
+    ['USED', 'used'],
+    ['EXPIRED', 'expired'],
+    ['TOKEN_MISMATCH', 'expired'],
+    ['INVALID_FORMAT', 'invalid'],
+    ['NOT_FOUND', 'invalid'],
+    ['WRONG_EVENT', 'invalid'],
+    ['SIGNATURE_INVALID', 'invalid'],
+  ] as const)('labels %s as %s in the scan log', (reason, result) => {
+    expect(scanResultFor(reason)).toBe(result);
+  });
+
+  it('covers every reason in the contract', () => {
+    for (const reason of VERIFY_ENTRY_REASONS) expect(scanResultFor(reason)).toBeTruthy();
   });
 });
 

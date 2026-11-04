@@ -4,11 +4,12 @@ import { CHAIN_SECRETS, chainFromParams } from '../chain/config';
 import { processChainOp, WaitingForPrevious } from '../chain/process';
 import { db } from '../firebase';
 import { requireAuth } from './boundary';
+import { callableOptions } from './callableOptions';
 
 // Admin replay of chain ops that are not done: ops queued while the chain was off, and ops parked
 // as blocked when the minter ran out of gas. Ops run oldest first so each ticket's order holds.
 export const retryChainOps = onCall<unknown, Promise<RetryChainOpsResponse>>(
-  { secrets: CHAIN_SECRETS, timeoutSeconds: 540 },
+  { ...callableOptions, secrets: CHAIN_SECRETS, timeoutSeconds: 540 },
   async (request) => {
     const caller = requireAuth(request);
     const role = (await db.doc(`users/${caller.uid}`).get()).get('role');

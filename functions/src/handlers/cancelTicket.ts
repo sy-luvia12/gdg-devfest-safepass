@@ -7,10 +7,11 @@ import { REASON } from '../chain/ids';
 import { candidateOrder, isDomainAllowed } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, qrTokenRef, readDocId, requireAuth, ticketFromSnap } from './boundary';
+import { callableOptions } from './callableOptions';
 
 const unitRandom = () => randomInt(0, 2 ** 32) / 2 ** 32;
 
-export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(async (request) => {
+export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const ticketId = readDocId(request.data, 'ticketId');
   const ticketRef = db.doc(`tickets/${ticketId}`);

@@ -3,8 +3,9 @@ import { onCall } from 'firebase-functions/v2/https';
 import type { ResetDeviceResponse } from '../api';
 import { db } from '../firebase';
 import { readDocId, requireAuth, requireRole } from './boundary';
+import { callableOptions } from './callableOptions';
 
-export const resetDevice = onCall<unknown, Promise<ResetDeviceResponse>>(async (request) => {
+export const resetDevice = onCall<unknown, Promise<ResetDeviceResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const uid = readDocId(request.data, 'uid');
 
