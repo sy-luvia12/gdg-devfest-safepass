@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run test/domain test/device test/chain.test.ts test/roster",
-    "test:int": "npm run build && firebase emulators:exec --project demo-ttv --only auth,functions,firestore \"vitest run test/integration --testTimeout=30000\"",
+    "test:int": "npm run build && firebase emulators:exec --project demo-ttv --only auth,functions,firestore \"vitest run test/integration --no-file-parallelism --testTimeout=30000\"",
     "test:chain": "bash scripts/test-chain.sh",
     "seed": "tsx seed.ts"
   },
