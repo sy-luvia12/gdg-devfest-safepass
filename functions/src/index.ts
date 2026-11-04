@@ -1,3 +1,4 @@
+export { submitVerification } from './handlers/submitVerification';
 export { ensureUser } from './handlers/ensureUser';
 export { issueTicket } from './handlers/issueTicket';
 export { refreshQrToken } from './handlers/refreshQrToken';

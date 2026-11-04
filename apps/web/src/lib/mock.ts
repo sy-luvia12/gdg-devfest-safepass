@@ -25,6 +25,9 @@ import {
   type WaitlistEntry,
 } from '@/types';
 
+import registry from './fixtures/studentRegistry.json';
+import { matchesStudent, type StudentIdentity } from '../../../../functions/src/domain/studentRegistry';
+
 const STATE_KEY = 'safepass-mock-v5';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
@@ -472,14 +475,17 @@ export async function updateEventSettings(eventId: string, settings: EventSettin
 // ---------- 재학생 승인 · 기기 (기술 설계 2.2~2.3) ----------
 
 /** 사진은 data URL (프로토타입). 실제는 Storage 업로드 후 경로를 넘긴다. */
-export async function submitVerification(photoDataUrl: string, idCardDataUrl: string): Promise<User> {
+export async function submitVerification(photoDataUrl: string, idCardDataUrl: string, identity?: Pick<StudentIdentity, 'name' | 'studentId'>): Promise<User> {
   await wait();
   const s = load();
-  const user = requireUser(s);
+  const user = requireUser(s, ['student']);
+  if (user.verifyStatus === 'approved') return user;
+  if (!photoDataUrl || !idCardDataUrl) throw new ApiError('invalid_state');
+  if (identity) Object.assign(user, { name: identity.name.trim(), studentId: identity.studentId.trim() });
   user.photoUrl = photoDataUrl;
   user.idCardUrl = idCardDataUrl;
-  user.verifyStatus = 'pending';
-  user.rejectReason = undefined;
+  user.verifyStatus = matchesStudent(user, registry) ? 'approved' : 'rejected';
+  user.rejectReason = user.verifyStatus === 'rejected' ? '학적 명단과 일치하지 않아요. 이름·학번·학교 계정을 확인하고, 계속 실패하면 학교 담당자에게 문의해 주세요.' : undefined;
   user.submittedAt = Date.now();
   save(s);
   return user;
@@ -500,6 +506,7 @@ export async function reviewVerification(uid: string, approve: boolean, reason?:
   const admin = requireUser(s, ['admin']);
   const user = s.users.find((u) => u.uid === uid && u.schoolId === admin.schoolId);
   if (!user || user.verifyStatus !== 'pending') throw new ApiError('invalid_state');
+  if (approve && !matchesStudent(user, registry)) throw new ApiError('not_in_roster');
   user.verifyStatus = approve ? 'approved' : 'rejected';
   user.rejectReason = approve ? undefined : reason || '사진을 확인할 수 없어요';
   save(s);
@@ -576,6 +583,7 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   const s = load();
   const user = requireUser(s);
   const event = findEvent(s, eventId);
+  if (user.role === 'student' && user.verifyStatus !== 'approved') throw new ApiError('not_in_roster');
   if (!event.allowedDomains.includes(domainOf(user.email))) throw new ApiError('not_school_account');
   const existing = s.tickets.find((t) => t.eventId === eventId && t.ownerUid === user.uid);
   if (existing) return existing;

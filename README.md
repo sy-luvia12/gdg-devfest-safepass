@@ -38,3 +38,8 @@ npm --prefix functions run test:int
 ```bash
 firebase deploy --only firestore:rules,functions
 ```
+
+## 학적 명단 기반 재학생 자동 인증
+
+가상 테스트 명단, Google Sheets 설정, 백엔드 협의 사항은 [재학생 자동 인증 안내](docs/student-verification.md)를 참고한다.
+팀 공유용 제목과 설명은 [PR 준비 초안](docs/onboarding-pr.md)에 정리했다.

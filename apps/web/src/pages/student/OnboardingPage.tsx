@@ -7,6 +7,8 @@ import { AppHeader } from '@/components/AppHeader';
 import { BottomBar, Button } from '@/components/Button';
 import { cx } from '@/components/cx';
 import { ImagePicker } from '@/components/ImagePicker';
+import { StateView } from '@/components/StateView';
+import { TextField } from '@/components/TextField';
 import { submitVerification } from '@/lib/api';
 
 const STEPS = ['동의', '본인 사진', '학생증', '확인'] as const;
@@ -17,35 +19,66 @@ const AGREEMENTS = [
   { key: 'delete', text: '행사가 끝나고 7일 뒤 사진과 입장 기록이 삭제된다는 것을 확인했어요' },
 ] as const;
 
-/** 첫 로그인: 동의 → 본인 사진 → 학생증 사진 → 학생회 승인 요청 (기술 설계 2.3) */
+/** 첫 로그인: 동의 → 본인 사진 → 학생증 사진 → 학적 명단 자동 대조 */
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { user, refreshUser, signOut } = useAuth();
+  const [name, setName] = useState(user?.name ?? '');
+  const [studentId, setStudentId] = useState(user?.studentId ?? '');
+  const [verified, setVerified] = useState(false);
   const [step, setStep] = useState(0);
   const [agreed, setAgreed] = useState<Record<string, boolean>>({});
   const [photo, setPhoto] = useState<string | null>(null);
   const [idCard, setIdCard] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!user) return null;
   const gate = studentGatePath(user);
+  if (verified) return (
+    <>
+      <AppHeader title="재학생 확인" />
+      <StateView
+        kind="success"
+        title="재학생 인증이 완료됐어요"
+        description="이제 축제를 확인하고 입장권을 받을 수 있어요"
+        action={
+          <Button loading={submitting} onClick={async () => {
+            setSubmitting(true);
+            setError(null);
+            try {
+              await refreshUser();
+              navigate('/event', { replace: true });
+            } catch {
+              setError('정보를 불러오지 못했어요. 다시 시도해 주세요.');
+            } finally {
+              setSubmitting(false);
+            }
+          }}>
+            축제 보러 가기
+          </Button>
+        }
+      />
+      {error && <p role="alert" className="px-5 text-center text-caption text-danger">{error}</p>}
+    </>
+  );
   if (gate !== '/onboarding') return <Navigate to={gate ?? '/ticket'} replace />;
 
   const allAgreed = AGREEMENTS.every((a) => agreed[a.key]);
-  const canNext = [allAgreed, !!photo, !!idCard, true][step];
+  const canNext = [allAgreed && !!name.trim() && !!studentId.trim(), !!photo, !!idCard, true][step];
 
   const onNext = async () => {
     if (step < STEPS.length - 1) return setStep(step + 1);
     if (!photo || !idCard) return;
     setSubmitting(true);
-    setError(false);
+    setError(null);
     try {
-      await submitVerification(photo, idCard);
-      await refreshUser();
-      navigate('/onboarding/pending', { replace: true });
+      const result = await submitVerification(photo, idCard, { name, studentId });
+      if (result.verifyStatus === 'approved') setVerified(true);
+      else setError(result.rejectReason ?? '학적 명단과 일치하지 않아요. 이름·학번·학교 계정을 확인해 주세요.');
     } catch {
-      setError(true);
+      setError('확인하지 못했어요. 잠시 후 다시 시도해 주세요. 계속 실패하면 학교 담당자에게 문의해 주세요.');
+    } finally {
       setSubmitting(false);
     }
   };
@@ -82,9 +115,12 @@ export function OnboardingPage() {
             <div>
               <h2 className="text-title text-ink">{user.name}님, 반가워요</h2>
               <p className="mt-1 text-body text-ink-2">
-                입장권은 재학생 본인만 쓸 수 있어요. 학생회가 학생증과 사진을 확인한 뒤 발급받을 수 있어요.
+                이름·학번·학교 이메일을 학적 명단과 대조해 자동으로 재학생을 확인해요.
               </p>
             </div>
+            <TextField label="이름" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+            <TextField label="학번" value={studentId} maxLength={40} onChange={(e) => setStudentId(e.target.value)} />
+            <p className="text-caption text-ink-2">학교 계정: {user.email}</p>
             <ul className="flex flex-col gap-3">
               {AGREEMENTS.map((a) => (
                 <li key={a.key}>
@@ -139,10 +175,10 @@ export function OnboardingPage() {
           <section className="flex flex-col gap-5">
             <div>
               <h2 className="text-title text-ink">학생증을 찍어 주세요</h2>
-              <p className="mt-1 text-body text-ink-2">학생회가 본인 사진과 학생증을 비교해 재학생인지 확인해요</p>
+              <p className="mt-1 text-body text-ink-2">학생증 사진도 함께 등록해 주세요. 재학생 여부는 학적 명단으로 확인해요</p>
             </div>
             <ImagePicker label="학생증 앞면" hint="이름과 학번이 보이게" value={idCard} onChange={setIdCard} shape="card" />
-            <p className="text-caption text-ink-2">학생증 사진은 학생회만 볼 수 있고, 승인 후 행사 종료 7일 뒤 삭제돼요</p>
+            <p className="text-caption text-ink-2">학생증 사진은 공개되지 않아요. 등록 정보에 문제가 있으면 학교 담당자에게 문의해 주세요</p>
           </section>
         )}
 
@@ -152,8 +188,8 @@ export function OnboardingPage() {
             <div className="grid grid-cols-[96px_1fr] items-center gap-4 rounded-lg border border-line p-4">
               {photo && <img src={photo} alt="본인 사진" className="h-24 w-24 rounded-full object-cover" />}
               <div>
-                <p className="text-heading text-ink">{user.name}</p>
-                <p className="text-caption text-ink-2 tabular">{user.studentId}</p>
+                <p className="text-heading text-ink">{name}</p>
+                <p className="text-caption text-ink-2 tabular">{studentId}</p>
                 <p className="text-caption text-ink-2">{user.email}</p>
               </div>
             </div>
@@ -163,15 +199,15 @@ export function OnboardingPage() {
               지금 쓰는 이 기기가 입장권 기기로 등록돼요. 입장권 QR은 이 기기에서만 떠요. 기기를 바꾸면 학생회에
               초기화를 요청하면 돼요.
             </p>
-            <p className="text-caption text-ink-2">학생회 확인은 보통 하루 안에 끝나요. 승인되면 입장권을 받을 수 있어요.</p>
+            <p className="text-caption text-ink-2">학적 명단에 이름·학번·학교 이메일이 일치하면 바로 인증돼요.</p>
           </section>
         )}
       </main>
 
       <BottomBar>
-        {error && <p role="alert" className="text-center text-caption text-danger">보내지 못했어요. 다시 시도해 주세요</p>}
+        {error && <p role="alert" className="text-center text-caption text-danger">{error}</p>}
         <Button loading={submitting} disabled={!canNext} onClick={onNext}>
-          {step === STEPS.length - 1 ? '승인 요청 보내기' : '다음'}
+          {step === STEPS.length - 1 ? '재학생 확인하기' : '다음'}
         </Button>
         {step > 0 && (
           <Button variant="ghost" disabled={submitting} onClick={() => setStep(step - 1)}>

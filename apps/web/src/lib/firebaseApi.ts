@@ -52,6 +52,7 @@ function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e;
   if (e instanceof FunctionsError) {
     const code = e.code.replace('functions/', '');
+    if (deviceReason(e) === 'NOT_VERIFIED') return new ApiError('not_in_roster');
     if (deviceReason(e) === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
     if (code === 'permission-denied') return new ApiError('not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
@@ -79,8 +80,8 @@ function toUser(p: UserProfile, schoolId: string, deviceStatus: User['deviceStat
     email: p.email,
     photoUrl: p.photoUrl ?? '',
     role: p.role,
-    // 재학생 승인은 백엔드 다음 단계(2.3). 지금은 통과한 것으로 본다
-    verifyStatus: 'approved',
+    verifyStatus: p.verifyStatus ?? 'none',
+    rejectReason: p.rejectReason,
     deviceStatus,
   };
 }
@@ -199,6 +200,19 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!auth.currentUser) return null;
   const { data } = await call('ensureUser')();
   return profileToUser(data);
+}
+
+export async function submitVerification(photo: string, idCard: string, identity?: { name: string; studentId: string }): Promise<User> {
+  try {
+    const current = identity ?? await getCurrentUser();
+    if (!current) throw new ApiError('unauthenticated');
+    const { data } = await call('submitVerification')({ photo, idCard, name: current.name, studentId: current.studentId });
+    const user = await profileToUser(data);
+    if (!user) throw new ApiError('not_school_account');
+    return user;
+  } catch (e) {
+    throw toApiError(e);
+  }
 }
 
 // ---------- 기기 묶기 (docs/api.md 9장) ----------

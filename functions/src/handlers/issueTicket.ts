@@ -11,12 +11,15 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(async (
   const eventId = readDocId(request.data, 'eventId');
 
   return db.runTransaction(async (tx) => {
-    await requireRole(tx, caller.uid, ['student']);
+    const user = await requireRole(tx, caller.uid, ['student']);
     const eventRef = db.doc(`events/${eventId}`);
     const event = eventFromSnap(await tx.get(eventRef));
     if (!event) throw new HttpsError('not-found', 'Event not found.');
     if (!caller.emailVerified || !event.allowedDomains.includes(emailDomain(caller.email))) {
       throw new HttpsError('permission-denied', 'This school domain cannot join this event.');
+    }
+    if (user.verifyStatus !== 'approved') {
+      throw new HttpsError('failed-precondition', 'Student verification required.', { reason: 'NOT_VERIFIED' });
     }
     const owned = await tx.get(
       db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', caller.uid).limit(1),

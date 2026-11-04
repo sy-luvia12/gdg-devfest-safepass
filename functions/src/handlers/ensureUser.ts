@@ -21,6 +21,7 @@ export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(async (re
       studentId: s?.studentId ?? '',
       photoUrl: s?.photoUrl ?? caller.picture,
       role: s?.role ?? 'student',
+      verifyStatus: s?.verifyStatus === 'approved' ? 'approved' : 'none',
     };
     const { uid: _uid, ...fields } = profile;
     tx.set(userRef, { ...fields, createdAt: FieldValue.serverTimestamp() });
@@ -28,6 +29,9 @@ export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(async (re
   });
 });
 
-function profileOf(uid: string, d: DocumentData): UserProfile {
-  return { uid, name: d.name, studentId: d.studentId, email: d.email, photoUrl: d.photoUrl ?? null, role: d.role };
+export function profileOf(uid: string, d: DocumentData): UserProfile {
+  return {
+    uid, name: d.name, studentId: d.studentId, email: d.email, photoUrl: d.photoUrl ?? null, role: d.role,
+    verifyStatus: d.verifyStatus ?? 'none', rejectReason: d.rejectReason ?? undefined, schoolId: d.schoolId,
+  };
 }

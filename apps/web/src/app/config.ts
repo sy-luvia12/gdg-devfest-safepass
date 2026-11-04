@@ -18,7 +18,7 @@ export function homePathFor(role: Role): string {
 export function studentGatePath(user: User): string | null {
   if (user.role !== 'student') return null;
   if (user.verifyStatus === 'none' || user.verifyStatus === 'rejected') return '/onboarding';
-  if (user.verifyStatus === 'pending') return '/onboarding/pending';
+  if (user.verifyStatus === 'pending') return '/onboarding';
   if (user.deviceStatus === 'blocked') return '/device';
   return null;
 }

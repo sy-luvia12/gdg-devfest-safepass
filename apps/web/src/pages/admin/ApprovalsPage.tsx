@@ -57,7 +57,7 @@ export function ApprovalsPage() {
 
   return (
     <>
-      <PageTitle title="재학생 승인" description="학생증과 본인 사진이 같은 사람인지 확인한 뒤 승인해 주세요" />
+      <PageTitle title="재학생 승인" description="이전 대기 요청만 표시돼요. 새 인증은 학적 명단과 대조해 자동 처리돼요" />
       {error ? (
         <StateView
           kind="error"

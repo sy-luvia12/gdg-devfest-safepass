@@ -1,0 +1,110 @@
+[
+  {
+    "schoolId": "hanbit",
+    "name": "김하늘",
+    "studentId": "20231234",
+    "email": "haneul@hanbit.ac.kr"
+  },
+  {
+    "schoolId": "hanbit",
+    "name": "이도윤",
+    "studentId": "20220517",
+    "email": "doyoon@hanbit.ac.kr"
+  },
+  {
+    "schoolId": "hanbit",
+    "name": "송하윤",
+    "studentId": "20260031",
+    "email": "hayun@hanbit.ac.kr"
+  },
+  {
+    "schoolId": "hanbit",
+    "name": "남궁민",
+    "studentId": "20220874",
+    "email": "nmin@hanbit.ac.kr"
+  },
+  {
+    "schoolId": "hanbit",
+    "name": "문가은",
+    "studentId": "20250412",
+    "email": "gaeun@hanbit.ac.kr"
+  },
+  {
+    "schoolId": "hanbit",
+    "name": "홍준서",
+    "studentId": "20240977",
+    "email": "junseo@hanbit.ac.kr"
+  },
+  {
+    "schoolId": "pureun",
+    "name": "박서연",
+    "studentId": "20240088",
+    "email": "seoyeon@pureun.ac.kr"
+  },
+  {
+    "schoolId": "pureun",
+    "name": "한지우",
+    "studentId": "20230745",
+    "email": "jiwoo@pureun.ac.kr"
+  },
+  {
+    "schoolId": "pureun",
+    "name": "권나은",
+    "studentId": "20260117",
+    "email": "naeun@pureun.ac.kr"
+  },
+  {
+    "schoolId": "pureun",
+    "name": "서도경",
+    "studentId": "20221390",
+    "email": "dokyung@pureun.ac.kr"
+  },
+  {
+    "schoolId": "pureun",
+    "name": "류시온",
+    "studentId": "20250236",
+    "email": "sion@pureun.ac.kr"
+  },
+  {
+    "schoolId": "pureun",
+    "name": "백예준",
+    "studentId": "20240561",
+    "email": "yejun@pureun.ac.kr"
+  },
+  {
+    "schoolId": "chorok",
+    "name": "윤채원",
+    "studentId": "20230312",
+    "email": "chaewon@chorok.ac.kr"
+  },
+  {
+    "schoolId": "chorok",
+    "name": "임도현",
+    "studentId": "20221108",
+    "email": "dohyun@chorok.ac.kr"
+  },
+  {
+    "schoolId": "chorok",
+    "name": "차은솔",
+    "studentId": "20260204",
+    "email": "eunsol@chorok.ac.kr"
+  },
+  {
+    "schoolId": "chorok",
+    "name": "구본우",
+    "studentId": "20231577",
+    "email": "bonwoo@chorok.ac.kr"
+  },
+  {
+    "schoolId": "chorok",
+    "name": "탁하람",
+    "studentId": "20250618",
+    "email": "haram@chorok.ac.kr"
+  },
+  {
+    "schoolId": "chorok",
+    "name": "편지성",
+    "studentId": "20240349",
+    "email": "jisung@chorok.ac.kr"
+  }
+]

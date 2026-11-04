@@ -32,8 +32,8 @@ export const updateEventSettings: typeof mock.updateEventSettings = real ? notYe
 /** 테스트용: 취소 후 재발급 허용 (백엔드 setAllowReissue) */
 export const updateAllowReissue: typeof mock.updateAllowReissue = real ? fb.updateAllowReissue : mock.updateAllowReissue;
 
-// 재학생 승인 · 기기 (백엔드 다음 단계 2.2, 2.3)
-export const submitVerification: typeof mock.submitVerification = real ? notYet : mock.submitVerification;
+// 재학생 자동 인증 · 기기 (수동 검토는 이전 mock 요청만)
+export const submitVerification: typeof mock.submitVerification = real ? fb.submitVerification : mock.submitVerification;
 export const listPendingVerifications: typeof mock.listPendingVerifications = real
   ? empty([])
   : mock.listPendingVerifications;

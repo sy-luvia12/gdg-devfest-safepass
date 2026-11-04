@@ -44,6 +44,7 @@ async function signIn(email: string): Promise<Client> {
     (await httpsCallable<Callables[K][0], Callables[K][1]>(functions, name)(req)).data;
   return {
     ensureUser: call('ensureUser'),
+    submitVerification: call('submitVerification'),
     issueTicket: call('issueTicket'),
     refreshQrToken: call('refreshQrToken'),
     verifyEntry: call('verifyEntry'),
@@ -92,6 +93,10 @@ beforeAll(async () => {
   await db.doc(`seedProfiles/${ALICE}`).set({ name: 'Alice Kim', studentId: '2024000001', photoUrl: 'https://example.com/a.png', role: 'student' });
   await db.doc(`seedProfiles/${STAFF}`).set({ name: 'Gate Staff', studentId: '', photoUrl: null, role: 'staff' });
   await db.doc(`seedProfiles/${CHIEF}`).set({ name: 'Chief Admin', studentId: '', photoUrl: null, role: 'admin' });
+  // Existing demo scenario explicitly uses students already verified by the server.
+  for (const email of [ALICE, BOB, CAROL, DAVE, ERIN, FRANK]) {
+    await db.doc(`seedProfiles/${email}`).set({ verifyStatus: 'approved' }, { merge: true });
+  }
   [alice, bob, carol, dave, erin, staff, outsider, chief, frank] = await Promise.all(
     [ALICE, BOB, CAROL, DAVE, ERIN, STAFF, OUTSIDER, CHIEF, FRANK].map(signIn),
   );

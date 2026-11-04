@@ -11,6 +11,9 @@ export interface UserProfile {
   email: string;
   photoUrl: string | null;
   role: Role;
+  verifyStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  rejectReason?: string;
+  schoolId?: string;
 }
 
 export type EnsureUserResponse = UserProfile;
@@ -151,6 +154,7 @@ export interface TicketChainState {
 
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
+  submitVerification: [{ photo: string; idCard: string; name: string; studentId: string }, UserProfile];
   ensureUser: [void, EnsureUserResponse];
   issueTicket: [IssueTicketRequest, IssueTicketResponse];
   refreshQrToken: [RefreshQrTokenRequest, RefreshQrTokenResponse];
