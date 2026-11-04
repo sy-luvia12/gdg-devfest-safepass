@@ -95,9 +95,15 @@ describe('decidePrecheck', () => {
   describe('sign-in by student id (no name)', () => {
     it('needs the row email and a finished sign-up', () => {
       expect(decidePrecheck(claimed, { email: 'KIM@korea.ac.kr' })).toBe('OK');
-      expect(decidePrecheck(claimed, { email: 'friend@korea.ac.kr' })).toBe('EMAIL_MISMATCH');
       expect(decidePrecheck(row, { email: 'kim@korea.ac.kr' })).toBe('NOT_REGISTERED');
       expect(decidePrecheck(null, { email: 'kim@korea.ac.kr' })).toBe('NOT_IN_ROSTER');
+    });
+
+    it('answers another email exactly like a student id that is not on the roster', () => {
+      const missing = decidePrecheck(null, { email: 'friend@korea.ac.kr' });
+      expect(decidePrecheck(claimed, { email: 'friend@korea.ac.kr' })).toBe(missing);
+      expect(decidePrecheck(row, { email: 'friend@korea.ac.kr' })).toBe(missing);
+      expect(missing).toBe('NOT_IN_ROSTER');
     });
   });
 });

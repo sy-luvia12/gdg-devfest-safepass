@@ -83,7 +83,9 @@ export function decidePrecheck(
     if (match === 'EMAIL_MISMATCH') return 'EMAIL_MISMATCH';
     return row.claimedBy ? 'STUDENT_ID_TAKEN' : 'OK';
   }
-  if (row.email.toLowerCase() !== input.email.trim().toLowerCase()) return 'EMAIL_MISMATCH';
+  // Without a name nothing proves who is asking, so another email answers like a missing row: the call is open to
+  // visitors and must not tell which student ids are on the roster or which email belongs to which id.
+  if (row.email.toLowerCase() !== input.email.trim().toLowerCase()) return 'NOT_IN_ROSTER';
   return row.claimedBy ? 'OK' : 'NOT_REGISTERED';
 }
 
