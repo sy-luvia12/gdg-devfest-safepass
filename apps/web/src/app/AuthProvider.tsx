@@ -60,9 +60,10 @@ async function scopeFor(school: School): Promise<Scope> {
 /** 학생은 자기 학교. 관리자·스태프는 지난번에 고른 학교, 없으면 자기 학교나 첫 학교 */
 async function resolve(u: User): Promise<Scope & { schools: School[] }> {
   if (u.role === 'student') return { ...(await scopeFor(await api.getSchool(u.schoolId))), schools: [] };
-  // 학교 관리자는 자기 학교만. 스페이스를 아직 안 만들었으면 학교 없이 들어온다
-  if (u.role === 'admin' && u.adminSchoolId) {
-    const own = await api.getSchool(u.adminSchoolId).catch(() => null);
+  // 학교 관리자·스태프는 자기 학교만. 관리자가 스페이스를 아직 안 만들었으면 학교 없이 들어온다
+  const ownSchoolId = u.role === 'admin' ? u.adminSchoolId : u.staffSchoolId;
+  if (ownSchoolId) {
+    const own = await api.getSchool(ownSchoolId).catch(() => null);
     return own ? { ...(await scopeFor(own)), schools: [own] } : { school: null, events: [], eventId: null, schools: [] };
   }
   const schools = await api.listSchools();

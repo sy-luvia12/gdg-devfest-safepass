@@ -1,7 +1,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { SetAllowReissueResponse } from '../api';
 import { db } from '../firebase';
-import { readDocId, requireAuth, requireRole } from './boundary';
+import { hostOf, readDocId, requireAuth, requireSchoolAdmin } from './boundary';
 import { callableOptions } from './callableOptions';
 
 // Test events only: lets a student who cancelled take a ticket again. Real events keep it off.
@@ -13,8 +13,9 @@ export const setAllowReissue = onCall<unknown, Promise<SetAllowReissueResponse>>
   const eventRef = db.doc(`events/${eventId}`);
 
   return db.runTransaction(async (tx): Promise<SetAllowReissueResponse> => {
-    await requireRole(tx, caller.uid, ['admin']);
-    if (!(await tx.get(eventRef)).exists) throw new HttpsError('not-found', 'Event not found.');
+    const event = await tx.get(eventRef);
+    if (!event.exists) throw new HttpsError('not-found', 'Event not found.');
+    await requireSchoolAdmin(tx, caller.uid, hostOf(event.get('schoolIds')));
     tx.update(eventRef, { allowReissueAfterCancel: allow });
     return { ok: true };
   });

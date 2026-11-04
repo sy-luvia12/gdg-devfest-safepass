@@ -34,6 +34,7 @@ export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(callableO
       photoUrl: s?.photoUrl ?? caller.picture,
       role: s?.role ?? 'student',
       ...(s?.adminSchoolId ? { adminSchoolId: s.adminSchoolId } : {}),
+      ...(s?.staffSchoolId ? { staffSchoolId: s.staffSchoolId } : {}),
     };
     const { uid: _uid, ...fields } = profile;
     tx.set(userRef, { ...fields, createdAt: FieldValue.serverTimestamp() });
@@ -50,6 +51,7 @@ export function profileOf(uid: string, d: DocumentData): UserProfile {
     photoUrl: d.photoUrl ?? null,
     role: d.role,
     ...(d.adminSchoolId ? { adminSchoolId: d.adminSchoolId } : {}),
+    ...(d.staffSchoolId ? { staffSchoolId: d.staffSchoolId } : {}),
     ...(d.schoolId ? { schoolId: d.schoolId } : {}),
     ...(d.rosterVerified ? { rosterVerified: true } : {}),
     ...(d.photoSubmitted ? { photoSubmitted: true } : {}),

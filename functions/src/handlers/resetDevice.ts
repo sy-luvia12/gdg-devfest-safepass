@@ -1,16 +1,23 @@
 import { FieldValue } from 'firebase-admin/firestore';
-import { onCall } from 'firebase-functions/v2/https';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { ResetDeviceResponse } from '../api';
 import { db } from '../firebase';
 import { readDocId, requireAuth, requireRole } from './boundary';
 import { callableOptions } from './callableOptions';
+import { schoolForEmail } from './rosterStore';
 
 export const resetDevice = onCall<unknown, Promise<ResetDeviceResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const uid = readDocId(request.data, 'uid');
 
   return db.runTransaction(async (tx): Promise<ResetDeviceResponse> => {
-    await requireRole(tx, caller.uid, ['admin']);
+    const admin = await requireRole(tx, caller.uid, ['admin']);
+    // A school admin resets devices of its own school's students only.
+    if (admin.adminSchoolId) {
+      const target = await tx.get(db.doc(`users/${uid}`));
+      const school = target.get('schoolId') || (await schoolForEmail(target.get('email') ?? '', tx))?.id;
+      if (school !== admin.adminSchoolId) throw new HttpsError('permission-denied', 'This student belongs to another school.');
+    }
     const request = db.doc(`deviceResets/${uid}`);
     const pending = (await tx.get(request)).exists;
     tx.delete(db.doc(`devices/${uid}`));

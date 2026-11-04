@@ -48,6 +48,22 @@ export async function requireSchoolAdmin(tx: Transaction, uid: string, schoolId:
   return user;
 }
 
+// The school an operator works for: adminSchoolId for an admin, staffSchoolId for staff. Undefined means a
+// SafePass team account (or staff added before schools were scoped), which may work at every school.
+export function operatorSchoolId(user: DocumentData): string | undefined {
+  return (user.role === 'admin' ? user.adminSchoolId : user.staffSchoolId) || undefined;
+}
+
+// Staff and school admins only work at events their school takes part in.
+export async function requireEventSchool(tx: Transaction, user: DocumentData, eventId: string): Promise<void> {
+  const school = operatorSchoolId(user);
+  if (!school) return;
+  const schoolIds = (await tx.get(db.doc(`events/${eventId}`))).get('schoolIds');
+  if (!Array.isArray(schoolIds) || !schoolIds.includes(school)) {
+    throw new HttpsError('permission-denied', 'This event belongs to another school.');
+  }
+}
+
 // The first school in an event's schoolIds hosts it, and that school's admin manages the event.
 export function hostOf(schoolIds: unknown): string {
   return Array.isArray(schoolIds) && typeof schoolIds[0] === 'string' ? schoolIds[0] : '';

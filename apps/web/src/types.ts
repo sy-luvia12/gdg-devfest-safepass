@@ -31,6 +31,8 @@ export type User = {
   role: Role; // staff: 검표 / admin: 검표 + 관리자
   /** 학교 관리자가 맡은 학교. admin인데 없으면 SafePass 팀 계정 (모든 학교, 새 스페이스 만들기) */
   adminSchoolId?: string;
+  /** 학교 관리자가 추가한 스태프가 맡은 학교. 그 학교 행사만 검표한다. 없으면 모든 학교 (팀 계정) */
+  staffSchoolId?: string;
   verifyStatus: VerifyStatus;
   rejectReason?: string;
   idCardUrl?: string; // 학생증 사진 (관리자만 열람)

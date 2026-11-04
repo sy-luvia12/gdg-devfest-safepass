@@ -13,6 +13,8 @@ export interface UserProfile {
   role: Role;
   /** Set on admin accounts that manage one school. Absent on SafePass team admins, who manage every school. */
   adminSchoolId?: string;
+  /** Set on staff added by a school admin: they check tickets at that school's events only. */
+  staffSchoolId?: string;
   /** Set once verifyStudentRoster matched this account to its school roster row. */
   schoolId?: string;
   rosterVerified?: boolean;

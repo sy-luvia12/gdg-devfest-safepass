@@ -123,6 +123,7 @@ function toUser(
     photoUrl: p.photoUrl ?? '',
     role: p.role,
     adminSchoolId: p.adminSchoolId,
+    staffSchoolId: p.staffSchoolId,
     // 재학생 명단이 있는 학교의 학생만 가입 단계를 본다 (profileToUser). 그 밖에는 통과로 본다
     verifyStatus,
     deviceStatus,
@@ -883,10 +884,14 @@ export async function getMyScanHistory(): Promise<ScanLog[]> {
 
 // ---------- 스태프 관리 (setStaff) ----------
 
-/** 스태프와 학생회 계정. 학교 구분 없이 운영 계정 전체 */
+/** 스태프와 학생회 계정. 지금 보는 학교에 속한 계정과 학교가 정해지지 않은 팀 계정 */
 export async function listStaff(): Promise<User[]> {
   const snap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['staff', 'admin'])));
   return snap.docs
+    .filter((d) => {
+      const school = d.get('role') === 'admin' ? d.get('adminSchoolId') : d.get('staffSchoolId');
+      return !school || school === viewerSchoolId;
+    })
     .map((d) => toUser({ ...(d.data() as Omit<UserProfile, 'uid'>), uid: d.id, photoUrl: d.get('photoUrl') ?? null }, ''))
     .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name, 'ko') : a.role === 'admin' ? -1 : 1));
 }
