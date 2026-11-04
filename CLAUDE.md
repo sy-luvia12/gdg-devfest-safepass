@@ -238,7 +238,7 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 // 운영진 콘솔 (operator 계정만. 서버 opsListRoster / opsEditRoster / opsListStudents)
 signInAsOperator(id, password): Promise<User>       // 아이디 → {id}@ops.safepass.app 이메일·비밀번호 계정. 틀리면 'wrong_password'
 opsListRoster(kind: 'school' | 'event', id): Promise<OpsRoster>   // 학교: 메일·가입 여부 / 행사: 재학생 명단 대조(match)와 메일
-opsEditRoster(kind, id, { upserts, deletes, replace? }): Promise<OpsEditResult>   // 학번 기준 추가·덮어쓰기·삭제. 서버 명단을 바로 고친다
+opsEditRoster(kind, id, { upserts, deletes, replace? }): Promise<OpsEditResult>   // 학번 기준 추가·덮어쓰기·삭제. 행사 명단은 시트를 한 번 불러온 뒤에만
 opsListStudents(schoolId): Promise<OpsStudent[]>    // 가입한 학생과 기기 등록·초기화 요청 여부
 opsResetDevice(uid): Promise<void>                  // resetDevice
 ```
@@ -334,9 +334,13 @@ firebase deploy --only hosting   # 저장소 루트에서
 - 배포 전 GCP 콘솔에서 **Google Sheets API 사용 설정**이 필요하다.
 
 ## 데모 데이터 (시드)와 운영진 계정
-- `functions/seed.ts`: 학교 4곳(고려대·연세대·성균관대·KAIST), 행사 7개(고려대 입실렌티·고연전·석탑대동제 / 연세대 아카라카·연고전 / 성균관대 대동제 / KAIST 태울석림제). 모두 `requireRoster`.
-- 재학생 명단(학교마다 가짜 학생 30명, `safepass.demo01@...`)과 행사 명단(그중 20명)은 **명단이 아직 없을 때만** 넣는다. 그 뒤로는 운영진 콘솔에서 고친 내용이 남는다. 팀원 실제 학교 메일은 콘솔에서 재학생 명단에 추가한다.
+- `functions/seed.ts`: 학교 4곳(고려대·연세대·성균관대·KAIST)과 행사 7개.
+  - 행사 명단 행사(`requireRoster` 켬): 고려대 입실렌티·고연전, 연세대 아카라카·연고전. 행사 담당자가 시트로 올린 명단의 학생만 받는다.
+  - 모든 재학생 행사(`requireRoster` 끔): 고려대 석탑대동제, 성균관대 대동제, KAIST 태울석림제. 행사 명단 없이 재학생 명단으로 가입한 학생은 누구나 받는다.
+  - 둘 다 행사 담당자가 "행사 설정"에서 바꿀 수 있다.
+- 학생은 넣지 않는다. 학교마다 빈 재학생 명단으로 시작하고, 팀원이 운영진 콘솔에서 자기 학교 계정을 넣는다. 이미 있는 명단은 건드리지 않는다.
+- 운영진 콘솔에서 재학생 명단은 언제든 고칠 수 있다. 행사 명단은 **행사 담당자가 시트로 한 번 불러온 뒤에만** 고칠 수 있다(그 전에는 `NO_SHEET_IMPORT`로 거부, 콘솔은 읽기만).
 - 운영진 계정: `OPS_PASSWORD=... npm --prefix functions run seed`로 만들거나 비밀번호를 바꾼다(아이디 기본 `ops`, `OPS_ID`로 변경). 비밀번호는 코드에 두지 않는다. 처음 한 번 Firebase 콘솔에서 **Authentication → 이메일/비밀번호 로그인 사용**이 필요하다.
 - 예전 시드의 행사(`test-reassign`, `koyon-*`)는 시드가 경고만 하고, `SEED_PRUNE=1`일 때 지운다.
-- mock 운영진: 아이디 `ops` / 비밀번호 `ops`.
+- mock 운영진: 아이디 `ops` / 비밀번호 `ops` (화면에는 표시하지 않는다).
 - 확인: `npm --prefix functions run test:seed` (에뮬레이터에서 시드 → 운영진 로그인 → 명단 조회). 에뮬레이터는 Java 21 이상이 필요하다.
