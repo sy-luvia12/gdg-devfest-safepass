@@ -4,9 +4,13 @@ import { ApprovalsPage } from '@/pages/admin/ApprovalsPage';
 import { ReassignmentsPage } from '@/pages/admin/ReassignmentsPage';
 import { DevicesPage } from '@/pages/admin/DevicesPage';
 import { EntriesPage } from '@/pages/admin/EntriesPage';
+import { EventFormPage } from '@/pages/admin/EventFormPage';
+import { EventListPage } from '@/pages/admin/EventListPage';
 import { RosterPage } from '@/pages/admin/RosterPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
+import { SetupPage } from '@/pages/admin/SetupPage';
 import { StaffPage } from '@/pages/admin/StaffPage';
+import { StudentRosterPage } from '@/pages/admin/StudentRosterPage';
 import { TicketsPage } from '@/pages/admin/TicketsPage';
 import { MePage } from '@/pages/common/MePage';
 import { AboutPage } from '@/pages/public/AboutPage';
@@ -23,6 +27,7 @@ import { PendingPage } from '@/pages/student/PendingPage';
 import { TicketPage } from '@/pages/student/TicketPage';
 import { AdminLayout } from './AdminLayout';
 import { MobileLayout } from './layouts';
+import { RequireEvent } from './RequireEvent';
 import { RequireRole } from './RequireRole';
 
 export const router = createBrowserRouter([
@@ -42,9 +47,15 @@ export const router = createBrowserRouter([
           { path: '/onboarding/pending', element: <PendingPage /> },
           { path: '/device', element: <DevicePage /> },
           { path: '/events', element: <EventsPage /> },
-          { path: '/event', element: <EventPage /> },
-          { path: '/ticket', element: <TicketPage /> },
-          { path: '/ticket/history', element: <HistoryPage /> },
+          {
+            // 학교에 행사가 아직 없으면 축제 목록(빈 상태)으로
+            element: <RequireEvent who="student" />,
+            children: [
+              { path: '/event', element: <EventPage /> },
+              { path: '/ticket', element: <TicketPage /> },
+              { path: '/ticket/history', element: <HistoryPage /> },
+            ],
+          },
         ],
       },
       {
@@ -54,7 +65,7 @@ export const router = createBrowserRouter([
       {
         element: <RequireRole roles={['staff', 'admin']} />,
         children: [
-          { path: '/staff/scan', element: <ScanPage /> },
+          { element: <RequireEvent who="staff" />, children: [{ path: '/staff/scan', element: <ScanPage /> }] },
           { path: '/staff/history', element: <ScanHistoryPage /> },
         ],
       },
@@ -67,15 +78,26 @@ export const router = createBrowserRouter([
       {
         element: <AdminLayout />,
         children: [
-          { path: '/admin', element: <AdminPage /> },
-          { path: '/admin/entries', element: <EntriesPage /> },
-          { path: '/admin/tickets', element: <TicketsPage /> },
-          { path: '/admin/reassignments', element: <ReassignmentsPage /> },
+          // 학교 메뉴: 행사가 없어도 쓴다
+          { path: '/admin/setup', element: <SetupPage /> },
+          { path: '/admin/students', element: <StudentRosterPage /> },
+          { path: '/admin/events', element: <EventListPage /> },
+          { path: '/admin/events/new', element: <EventFormPage /> },
           { path: '/admin/approvals', element: <ApprovalsPage /> },
           { path: '/admin/devices', element: <DevicesPage /> },
           { path: '/admin/staff', element: <StaffPage /> },
-          { path: '/admin/roster', element: <RosterPage /> },
-          { path: '/admin/settings', element: <SettingsPage /> },
+          {
+            // 행사 메뉴: 고른 행사 기준
+            element: <RequireEvent who="admin" />,
+            children: [
+              { path: '/admin', element: <AdminPage /> },
+              { path: '/admin/entries', element: <EntriesPage /> },
+              { path: '/admin/tickets', element: <TicketsPage /> },
+              { path: '/admin/reassignments', element: <ReassignmentsPage /> },
+              { path: '/admin/roster', element: <RosterPage /> },
+              { path: '/admin/settings', element: <SettingsPage /> },
+            ],
+          },
         ],
       },
     ],

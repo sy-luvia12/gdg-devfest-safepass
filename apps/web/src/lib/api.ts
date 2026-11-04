@@ -28,9 +28,24 @@ export const listSchools: typeof mock.listSchools = real ? fb.listSchools : mock
 export const listEvents: typeof mock.listEvents = real ? fb.listEvents : mock.listEvents;
 export const getEvent: typeof mock.getEvent = real ? fb.getEvent : mock.getEvent;
 export const updateEventTheme: typeof mock.updateEventTheme = real ? notYet : mock.updateEventTheme;
-export const updateEventSettings: typeof mock.updateEventSettings = real ? notYet : mock.updateEventSettings;
+export const updateEventSettings: typeof mock.updateEventSettings = real ? fb.updateEventSettings : mock.updateEventSettings;
 /** 테스트용: 취소 후 재발급 허용 (백엔드 setAllowReissue) */
 export const updateAllowReissue: typeof mock.updateAllowReissue = real ? fb.updateAllowReissue : mock.updateAllowReissue;
+
+// 스페이스 · 명단 · 행사 등록 (관리자). 명단은 구글 시트를 서버가 읽는다
+export const upsertSchool: typeof mock.upsertSchool = real ? fb.upsertSchool : mock.upsertSchool;
+export const getStudentRoster: typeof mock.getStudentRoster = real ? fb.getStudentRoster : mock.getStudentRoster;
+export const importStudentRoster: typeof mock.importStudentRoster = real
+  ? fb.importStudentRoster
+  : mock.importStudentRoster;
+export const getEventRoster: typeof mock.getEventRoster = real ? fb.getEventRoster : mock.getEventRoster;
+export const importEventRoster: typeof mock.importEventRoster = real ? fb.importEventRoster : mock.importEventRoster;
+export const createEvent: typeof mock.createEvent = real ? fb.createEvent : mock.createEvent;
+export const updateEvent: typeof mock.updateEvent = real ? fb.updateEvent : mock.updateEvent;
+/** 회원가입: 재학생 명단 대조 (로그인 담당 화면이 호출) */
+export const verifyStudentRoster: typeof mock.verifyStudentRoster = real
+  ? fb.verifyStudentRoster
+  : mock.verifyStudentRoster;
 
 // 재학생 승인 · 기기 (백엔드 다음 단계 2.2, 2.3)
 export const submitVerification: typeof mock.submitVerification = real ? notYet : mock.submitVerification;
@@ -71,8 +86,6 @@ export const listReassignments: typeof mock.listReassignments = real ? fb.listRe
 export const getWaitlist: typeof mock.getWaitlist = real ? fb.getWaitlist : mock.getWaitlist;
 export const updateReassignMode: typeof mock.updateReassignMode = real ? fb.updateReassignMode : mock.updateReassignMode;
 export const listTickets: typeof mock.listTickets = real ? fb.listTickets : mock.listTickets;
-export const getRoster: typeof mock.getRoster = real ? empty(null) : mock.getRoster;
-export const importRoster: typeof mock.importRoster = real ? notYet : mock.importRoster;
 export const listStaff: typeof mock.listStaff = real ? fb.listStaff : mock.listStaff;
 export const addStaff: typeof mock.addStaff = real ? fb.addStaff : mock.addStaff;
 export const removeStaff: typeof mock.removeStaff = real ? fb.removeStaff : mock.removeStaff;

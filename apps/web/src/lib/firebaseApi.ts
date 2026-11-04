@@ -15,17 +15,22 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { FunctionsError, httpsCallable } from 'firebase/functions';
-import type { Callables, UserProfile } from '../../../../functions/src/api';
+import type { Callables, GetRosterResponse, ImportRosterResponse, RosterSummary as ApiRosterSummary, SheetReason, UserProfile } from '../../../../functions/src/api';
 import {
   ApiError,
   type CancelResult,
   type DeviceResetRequest,
   type Event,
+  type EventInput,
   type EventStats,
   type ReassignMode,
   type Reassignment,
+  type RosterImport,
+  type RosterSummary,
+  type RosterView,
   type ScanLog,
   type School,
+  type SchoolInput,
   type StaffStats,
   type Ticket,
   type TicketRow,
@@ -52,7 +57,10 @@ function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e;
   if (e instanceof FunctionsError) {
     const code = e.code.replace('functions/', '');
-    if (deviceReason(e) === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
+    const reason = deviceReason(e);
+    if (reason === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
+    if (reason === 'NOT_IN_ROSTER') return new ApiError('not_in_roster');
+    if (reason && reason in SHEET_ERRORS) return new ApiError(SHEET_ERRORS[reason as SheetReason]);
     if (code === 'permission-denied') return new ApiError('not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
     if (code === 'not-found') return new ApiError('not_found');
@@ -62,7 +70,15 @@ function toApiError(e: unknown): ApiError {
   return new ApiError('unknown');
 }
 
-/** 함수 오류의 details.reason (기기 확인 실패, 재발급 금지 등) */
+const SHEET_ERRORS: Record<SheetReason, ApiError['code']> = {
+  BAD_SHEET_URL: 'sheet_bad_url',
+  SHEET_NOT_SHARED: 'sheet_not_shared',
+  SHEET_NOT_FOUND: 'sheet_not_found',
+  SHEETS_API_DISABLED: 'sheet_api_disabled',
+  MISSING_COLUMNS: 'sheet_missing_columns',
+};
+
+/** 함수 오류의 details.reason (기기 확인 실패, 재발급 금지, 명단·시트 오류 등) */
 function deviceReason(e: unknown): string | undefined {
   if (!(e instanceof FunctionsError)) return undefined;
   const details = e.details as { reason?: string } | undefined;
@@ -79,6 +95,7 @@ function toUser(p: UserProfile, schoolId: string, deviceStatus: User['deviceStat
     email: p.email,
     photoUrl: p.photoUrl ?? '',
     role: p.role,
+    adminSchoolId: p.adminSchoolId,
     // 재학생 승인은 백엔드 다음 단계(2.3). 지금은 통과한 것으로 본다
     verifyStatus: 'approved',
     deviceStatus,
@@ -104,7 +121,8 @@ function toEvent(id: string, d: DocumentData): Event {
     issuedCount: d.issuedCount ?? 0,
     allowedDomains: d.allowedDomains ?? [],
     theme: { source: 'school', colors: [] },
-    settings: { requireRoster: false },
+    settings: { requireRoster: d.requireRoster === true },
+    roster: rosterSummary(d.roster),
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
@@ -142,7 +160,15 @@ function toSchool(id: string, d: DocumentData): School {
     brandColor: d.brandColor ?? DEFAULT_BRAND,
     // 처음 보여줄 행사는 AuthProvider가 listEvents로 정한다
     currentEventId: EVENT_ID,
+    studentRoster: rosterSummary(d.studentRoster),
   };
+}
+
+/** 학교·행사 문서의 명단 요약 필드 (importedAt은 Timestamp) */
+function rosterSummary(v: unknown): RosterSummary | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const r = v as DocumentData;
+  return { sheetUrl: r.sheetUrl ?? '', importedAt: millis(r.importedAt), count: r.count ?? 0 };
 }
 
 /** 메일 도메인이 속한 학교. 없으면 null */
@@ -242,6 +268,77 @@ export async function getEvent(eventId: string): Promise<Event> {
   const snap = await getDoc(doc(db, 'events', eventId));
   if (!snap.exists()) throw new ApiError('not_found');
   return toEvent(snap.id, snap.data());
+}
+
+// ---------- 스페이스 · 명단 · 행사 등록 (관리자) ----------
+
+const fromApiSummary = (r: ApiRosterSummary): RosterSummary => ({ sheetUrl: r.sheetUrl, importedAt: r.importedAtMs, count: r.count });
+const toRosterView = (r: GetRosterResponse): RosterView => ({
+  summary: r.summary && fromApiSummary(r.summary),
+  entries: r.entries,
+  serviceAccountEmail: r.serviceAccountEmail,
+});
+const toRosterImport = (r: ImportRosterResponse): RosterImport => ({ summary: fromApiSummary(r.summary), skipped: r.skipped });
+
+async function run<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+export async function upsertSchool(schoolId: string, input: SchoolInput): Promise<School> {
+  try {
+    await call('upsertSchool')({ schoolId, name: input.name, domains: [input.domain], brandColor: input.brandColor });
+  } catch (e) {
+    // 같은 메일 도메인을 다른 학교가 쓰고 있으면 already-exists
+    if (e instanceof FunctionsError && e.code === 'functions/already-exists') throw new ApiError('domain_taken');
+    throw toApiError(e);
+  }
+  return getSchool(schoolId);
+}
+
+export async function getStudentRoster(schoolId: string): Promise<RosterView> {
+  return toRosterView((await run(() => call('getStudentRoster')({ schoolId }))).data);
+}
+
+export async function importStudentRoster(schoolId: string, sheetUrl: string): Promise<RosterImport> {
+  return toRosterImport((await run(() => call('importStudentRoster')({ schoolId, sheetUrl }))).data);
+}
+
+export async function getEventRoster(eventId: string): Promise<RosterView> {
+  return toRosterView((await run(() => call('getEventRoster')({ eventId }))).data);
+}
+
+export async function importEventRoster(eventId: string, sheetUrl: string): Promise<RosterImport> {
+  return toRosterImport((await run(() => call('importEventRoster')({ eventId, sheetUrl }))).data);
+}
+
+export async function createEvent(input: EventInput): Promise<Event> {
+  const { data } = await run(() => call('createEvent')(input));
+  return getEvent(data.eventId);
+}
+
+export async function updateEvent(eventId: string, patch: Partial<Omit<EventInput, 'schoolIds'>>): Promise<Event> {
+  await run(() => call('updateEvent')({ eventId, ...patch }));
+  return getEvent(eventId);
+}
+
+/** 행사 설정 화면의 "명단에 있는 학생만 발급" */
+export async function updateEventSettings(eventId: string, settings: Event['settings']): Promise<Event> {
+  return updateEvent(eventId, { requireRoster: settings.requireRoster });
+}
+
+/** 회원가입: 학번·이름이 재학생 명단의 그 줄과 맞고, 로그인한 메일이 그 줄의 메일이어야 한다 */
+export async function verifyStudentRoster(schoolId: string, name: string, studentId: string): Promise<User> {
+  const { data } = await run(() => call('verifyStudentRoster')({ schoolId, name, studentId }));
+  if (!data.ok) {
+    if (data.reason === 'EMAIL_MISMATCH') throw new ApiError('email_mismatch');
+    if (data.reason === 'STUDENT_ID_TAKEN') throw new ApiError('student_id_taken');
+    throw new ApiError('not_in_roster');
+  }
+  return withDevice(toUser(data.profile, schoolId));
 }
 
 // ---------- 입장권 ----------
