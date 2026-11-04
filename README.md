@@ -21,7 +21,7 @@ npm --prefix functions run build
 npm --prefix functions test
 ```
 
-에뮬레이터 통합 테스트는 JDK 21 이상이 필요하다. 기본 Java가 21 미만이면 `JAVA_HOME`을 21 이상으로 지정해서 실행한다.
+에뮬레이터 통합 테스트는 JDK 21 이상이 필요하다. 기본 Java가 21 미만이면 `JAVA_HOME`을 21 이상으로 지정해서 실행한다. 에뮬레이터가 `CHAIN_CONTRACT_ADDRESS` 값을 물으며 멈추면(체인 설정 파라미터), `functions/.env.demo-ttv`에 `CHAIN_CONTRACT_ADDRESS=` 한 줄을 만들어 둔다. `.env.*`는 커밋되지 않는다.
 
 ```bash
 npm --prefix functions run test:int
