@@ -53,7 +53,7 @@ function toApiError(e: unknown): ApiError {
   if (e instanceof FunctionsError) {
     const code = e.code.replace('functions/', '');
     if (deviceReason(e) === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
-    if (code === 'permission-denied') return new ApiError('not_school_account');
+    if (code === 'permission-denied') return new ApiError(deviceReason(e) === 'ROLE' ? 'wrong_role' : 'not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
     if (code === 'not-found') return new ApiError('not_found');
     if (code === 'unauthenticated') return new ApiError('unauthenticated');
@@ -268,6 +268,27 @@ export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   return d ? toTicket(d.id, d.data()) : null;
 }
 
+/** 내 입장권 실시간 구독. 재배정·입장·취소가 새로고침 없이 바로 반영된다 */
+export function subscribeMyTicket(
+  eventId: string,
+  cb: (ticket: Ticket | null) => void,
+  onError?: () => void,
+): () => void {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    onError?.();
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, 'tickets'), where('ownerUid', '==', uid), where('eventId', '==', eventId), limit(1)),
+    (snap) => {
+      const d = snap.docs[0];
+      cb(d ? toTicket(d.id, d.data()) : null);
+    },
+    () => onError?.(),
+  );
+}
+
 /** 1인 1매. 이미 있으면 기존 입장권을 돌려준다 */
 export async function issueTicket(eventId: string): Promise<Ticket> {
   try {
@@ -282,13 +303,14 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
 }
 
 async function requestQr(ticketId: string, uid: string) {
-  let deviceProof;
+  // 키 생성·서명이 실패하면(WebCrypto 없는 http 등) deviceProof 키 자체를 뺀다. undefined를 보내면 SDK가 null로 바꾼다
+  let proof: Awaited<ReturnType<typeof signRefresh>> | undefined;
   try {
-    deviceProof = await signRefresh((await getDeviceKeys(uid)).keys, ticketId);
+    proof = await signRefresh((await getDeviceKeys(uid)).keys, ticketId);
   } catch {
-    deviceProof = undefined;
+    proof = undefined;
   }
-  const { data } = await call('refreshQrToken')({ ticketId, deviceProof });
+  const { data } = await call('refreshQrToken')(proof ? { ticketId, deviceProof: proof } : { ticketId });
   return { token: data.qrPayload.split(':')[2] ?? '', expiresAt: data.expiresAt };
 }
 

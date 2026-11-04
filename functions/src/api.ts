@@ -22,9 +22,11 @@ export interface IssueTicketResponse {
   ticketId: string;
   nftNumber: string;
 }
-// failed-precondition with details.reason. CANCELLED_BEFORE: this student cancelled a ticket for the event and
-// the event does not set allowReissueAfterCancel.
-export const ISSUE_REASONS = ['CANCELLED_BEFORE'] as const;
+// details.reason on issueTicket errors.
+// failed-precondition CANCELLED_BEFORE: this student cancelled a ticket for the event and the event does not set
+// allowReissueAfterCancel. permission-denied ROLE: the caller is not a student. permission-denied DOMAIN: the mail
+// domain (or an unverified mail) cannot join this event.
+export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'ROLE', 'DOMAIN'] as const;
 export type IssueReason = (typeof ISSUE_REASONS)[number];
 
 export const REASSIGN_MODES = ['queue', 'random'] as const;

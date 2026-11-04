@@ -26,7 +26,7 @@
 | 함수 | 하는 일 |
 | --- | --- |
 | `issueTicket` | 도메인(`allowedDomains`), 1인 1매, 정원을 확인하고 발급 |
-| `refreshQrToken` | 내 입장권 화면이 30초마다 호출. 새 토큰과 만료 시각을 `tickets`에 저장하고 반환 |
+| `refreshQrToken` | 내 입장권 화면이 25초마다 호출(토큰 유효 30초). 새 토큰과 만료 시각을 클라이언트가 읽을 수 없는 `qrTokens/{ticketId}`에 저장하고 `TTV1:{ticketId}:{token}`을 반환 |
 | `verifyEntry` | 토큰 일치·미사용·미만료를 확인하고, 트랜잭션으로 사용됨 처리와 `enteredCount+1`. 이름·학번·사진 반환 |
 | `cancelTicket` | 주인이 입장권을 취소하면 `reassignMode`에 따라 대기 명단의 다음 사람 또는 무작위 한 명에게 재배정. 이력을 `reassignments`에 기록. 대기자가 없으면 다시 발급 가능한 수량으로 돌린다 |
 
@@ -69,9 +69,10 @@ markUsed(tokenId) onlyMinter                 // 입장 후 이전 불가 처리
 
 1. 첫 로그인 때 WebCrypto로 ECDSA P-256 키쌍을 만든다. `extractable: false`로 만들어 IndexedDB에 저장한다.
 2. `registerDevice`로 공개키를 `devices/{uid}`에 등록한다. 이미 등록된 기기가 있으면 거절한다. 폰 교체 등으로 키를 잃으면 관리자가 `resetDevice`로 초기화해야만 다시 등록할 수 있다.
-3. 30초마다 `{ticketId, ts, nonce}`를 기기 키로 서명해 QR을 만든다.
-4. `verifyEntry`는 서명, ts 30초 이내, nonce 첫 사용(`usedNonces`, TTL 자동 삭제), 상태를 확인한다.
-5. 검표를 두 단계로 나눈다. 검증을 통과하면 사진을 먼저 보여주고, 스태프가 얼굴을 대조해 승인하면 `confirmEntry`로 사용됨 처리한다.
+3. 현재 구현은 QR이 아니라 **QR 갱신 요청**에 서명한다. `refreshQrToken`에 `TTV1-REFRESH:{ticketId}:{signedAt}` 서명을 보내고, 서버가 `events.requireDevice`가 켜진 행사에서만 확인한다. `verifyEntry`는 서명을 보지 않는다. 아래 3~4는 아직 구현하지 않은 목표 설계다.
+   - 목표: 30초마다 `{ticketId, ts, nonce}`를 기기 키로 서명해 QR을 만든다.
+   - 목표: `verifyEntry`가 서명, ts 30초 이내, nonce 첫 사용(`usedNonces`, TTL 자동 삭제), 상태를 확인한다.
+5. (목표, 미구현) 검표를 두 단계로 나눈다. 검증을 통과하면 사진을 먼저 보여주고, 스태프가 얼굴을 대조해 승인하면 `confirmEntry`로 사용됨 처리한다.
 
 ### 2.3 학교 메일 인증과 재학생 승인
 

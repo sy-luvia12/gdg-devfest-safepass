@@ -27,8 +27,8 @@ const base = {
   enteredCount: 0,
   reassignMode: 'queue',
   requireDevice: false,
-  // Demo events: a student who cancelled may take a ticket again. Real events keep this false.
-  allowReissueAfterCancel: true,
+  // Real events: a student who cancels cannot take a ticket again. Only the test event below sets true.
+  allowReissueAfterCancel: false,
 };
 
 // The 고연전 games are one series that both schools take part in. Each game has its own tickets.
@@ -49,6 +49,17 @@ const events: Record<string, Record<string, unknown>> = {
     place: '녹지운동장',
     date: at('2026-11-06T18:00:00+09:00'),
     capacity: 10_000,
+  },
+  // Rehearsal event for the cancel and reassign scenes. Cancelling and taking a ticket again is allowed here.
+  'test-reassign': {
+    ...base,
+    name: '재배정 테스트',
+    schoolIds: ['korea'],
+    allowedDomains: ['korea.ac.kr'],
+    place: '테스트',
+    date: at('2026-11-06T12:00:00+09:00'),
+    capacity: 20,
+    allowReissueAfterCancel: true,
   },
   'koyon-basketball': { ...base, ...koyon, name: '농구', place: '잠실학생체육관', date: at('2026-11-13T11:00:00+09:00'), capacity: 5_000 },
   'koyon-icehockey': { ...base, ...koyon, name: '아이스하키', place: '목동아이스링크', date: at('2026-11-13T15:00:00+09:00'), capacity: 3_000 },
@@ -83,7 +94,19 @@ const events: Record<string, Record<string, unknown>> = {
 };
 
 // A profile only applies before the first sign-in. Add test accounts here first.
-const profiles = [{ email: 'tigerex91@gmail.com', name: '관리자', studentId: '', role: 'admin' }];
+// Replace the demo-* addresses with the team's real school accounts before the rehearsal.
+const profiles = [
+  { email: 'tigerex91@gmail.com', name: '관리자', studentId: '', role: 'admin' },
+  { email: 'demo-staff@korea.ac.kr', name: '검표 스태프', studentId: '', role: 'staff' },
+  { email: 'demo-student1@korea.ac.kr', name: '테스트 학생 1', studentId: '2024000001', role: 'student' },
+  { email: 'demo-student2@korea.ac.kr', name: '테스트 학생 2', studentId: '2024000002', role: 'student' },
+  { email: 'demo-student3@korea.ac.kr', name: '테스트 학생 3', studentId: '2024000003', role: 'student' },
+];
+
+// Waitlist of the test event. A person becomes a candidate only after signing in once, because users must hold the email.
+const waitlist: Record<string, { eventId: string; emails: string[] }> = {
+  'test-reassign': { eventId: 'test-reassign', emails: ['demo-student2@korea.ac.kr', 'demo-student3@korea.ac.kr'] },
+};
 
 // Only fills fields that are absent, so running this against a live project never overwrites counters or edited values.
 async function fillMissing(ref: DocumentReference, fields: Record<string, unknown>): Promise<number> {
@@ -106,6 +129,12 @@ async function main() {
     await fillMissing(db.doc(`seedProfiles/${email}`), profile);
   }
   console.log(`seedProfiles: ${profiles.length} checked in ${projectId}`);
+  for (const { eventId, emails } of Object.values(waitlist)) {
+    for (const [i, email] of emails.entries()) {
+      await fillMissing(db.doc(`events/${eventId}/waitlist/${email}`), { order: i + 1, status: 'waiting', assignedTicketId: null });
+    }
+    console.log(`events/${eventId}/waitlist: ${emails.length} checked`);
+  }
 }
 
 main().catch((e) => {

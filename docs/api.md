@@ -18,7 +18,7 @@
 | HttpsError 코드 | 의미 |
 | --- | --- |
 | `unauthenticated` | 로그인 안 함 |
-| `permission-denied` | 역할(role) 부족, 남의 입장권, 허용되지 않은 학교 도메인 |
+| `permission-denied` | 역할(role) 부족, 남의 입장권, 허용되지 않은 학교 도메인. `issueTicket`은 `details.reason`으로 `ROLE`(학생이 아님)과 `DOMAIN`(도메인 불허·미인증 메일)을 구분한다 |
 | `invalid-argument` | 요청 형식 오류 |
 | `not-found` | 행사, 입장권, 사용자 없음 |
 | `already-exists` | 이미 이 행사 입장권이 있음 (1인 1매) |
@@ -47,7 +47,10 @@
 | capacity | number | 정원 |
 | faceValue | number | 정가(원) |
 | allowedDomains | string[] | 발급 가능한 학교 도메인 |
-| issuedCount | number | 발급 수 (NFT 번호 생성에도 사용) |
+| issuedCount | number | 발급 수 (남은 수량 = `capacity - issuedCount`). 취소로 줄어든다 |
+| nftSeq | number | NFT 번호 생성용 증가 카운터. 줄지 않아 번호가 겹치지 않는다. 없으면 `issuedCount`를 쓴다 |
+| requireDevice | boolean | `true`면 `refreshQrToken`이 기기 서명을 확인한다 (9장). 시드 기본값은 `false` |
+| allowReissueAfterCancel | boolean | `true`면 취소한 사람도 다시 받을 수 있다 (10장). 시드에서는 `test-reassign`만 켠다 |
 | enteredCount | number | 입장 수 (관리자 화면 실시간 표시) |
 | reassignMode | `'queue' \| 'random'` | 취소표 재배정 방식. 운영측이 행사별로 한 번 정한다 (프로토타입은 시드 데이터). `queue`는 대기 순서대로, `random`은 대기 명단에서 무작위 |
 | schoolIds | string[] | 참여 학교 (`schools` 문서 id). 학생 화면의 축제 목록과 관리자 학교 선택에 쓴다. 고연전은 `['korea', 'yonsei']` |
@@ -69,9 +72,9 @@
 | eventId | string | |
 | ownerUid | string | 현재 주인 |
 | nftNumber | string | 표시용 번호. 예: `#0012` |
-| status | `'issued' \| 'used'` | |
-| qrToken | string \| null | 현재 유효한 QR 토큰 |
-| qrExpiresAt | Timestamp \| null | 토큰 만료 시각 |
+| status | `'issued' \| 'used' \| 'cancelled'` | `cancelled`는 받을 대기자가 없어 취소된 표. 주인이 없고 모든 함수가 없는 표로 취급한다 |
+| qrToken, qrExpiresAt | null | 항상 null. 실제 토큰은 `qrTokens/{ticketId}`에 있다 (10장) |
+| chain | map | 온체인 기록 상태 (11장) |
 | issuedAt | Timestamp | |
 | usedAt | Timestamp \| null | |
 
@@ -124,10 +127,12 @@
 - **응답**: `{ ticketId: string; nftNumber: string }`
 - **처리** (트랜잭션)
   1. 행사가 없으면 `not-found`
-  2. 로그인 메일 도메인이 `allowedDomains`에 없으면 `permission-denied`
+  1-1. 호출자가 student가 아니면 `permission-denied`, `details.reason: 'ROLE'`
+  2. 로그인 메일이 인증되지 않았거나 도메인이 `allowedDomains`에 없으면 `permission-denied`, `details.reason: 'DOMAIN'`
   3. 같은 행사에 `ownerUid == uid`인 입장권이 있으면 `already-exists`
+  3-1. 이 행사에서 취소한 적이 있고 `allowReissueAfterCancel`이 꺼져 있으면 `failed-precondition`, `details.reason: 'CANCELLED_BEFORE'` (10장)
   4. `issuedCount >= capacity`이면 `resource-exhausted`
-  5. `issuedCount + 1`로 `nftNumber`를 만들고 `tickets` 문서를 생성한다. status는 `issued`다.
+  5. `nftSeq + 1`로 `nftNumber`를 만들고 `tickets` 문서를 생성한다. status는 `issued`다.
 
 ### 2.3 `refreshQrToken`
 내 입장권 화면이 25초마다 호출한다. 만료 직전 공백을 없애려고 30초보다 짧게 잡는다.
@@ -188,13 +193,15 @@
 
 | 화면 | 쿼리 | 방식 |
 | --- | --- | --- |
-| 내 입장권 | `tickets` where `ownerUid == uid` | `onSnapshot` |
+| 내 입장권 | `tickets` where `ownerUid == uid` and `eventId == 지금 행사` | `onSnapshot` (`subscribeMyTicket`). 재배정·입장·취소가 새로고침 없이 반영된다 |
 | 내 정보 | `users/{uid}` | `getDoc` |
 | 관리자 실시간 현황 | `events/{eventId}`의 `enteredCount / capacity` | `onSnapshot` |
 
-QR 토큰은 `refreshQrToken` 응답으로만 받는다. 입장권 문서에도 `qrToken`이 있지만 화면은 응답값을 쓴다.
+QR 토큰은 `refreshQrToken` 응답으로만 받는다. 입장권 문서의 `qrToken`은 null이다. 구독이 문서를 다시 보내도 화면은 이미 받은 QR을 유지한다.
 
-## 4. 보안 규칙 초안 [P]
+## 4. 보안 규칙 [P]
+
+기준은 저장소의 `firestore.rules`다. 아래는 처음 초안이고, 9장과 10장에서 `scanLogs`, `deviceResets`, `reassignments`, `waitlist`, `schools` 규칙이 더해졌다. `qrTokens`, `devices`는 규칙이 없어 클라이언트가 읽을 수 없다.
 
 ```
 rules_version = '2';
@@ -221,10 +228,13 @@ service cloud.firestore {
 
 ## 5. 시드 데이터 [P]
 
-- `events/demo-festival`: 가상 축제 1개. `allowedDomains`에 팀원 학교 도메인, `capacity`는 데모용 소수(예: 50)
-- `seedProfiles/{email}`: 테스트 학생 3~4명(PM 준비). 검표용 staff 1명, 관리자 admin 1명
-- `events/demo-festival.reassignMode`: 데모용 방식 하나. 두 방식을 다 보여 주려면 값을 바꿔 두 번 시연한다.
-- `events/demo-festival/waitlist/{email}`: 대기 명단 2~3명. 발급받지 않은 테스트 학생 계정으로 넣는다.
+시드 스크립트(`functions/seed.ts`)는 비어 있는 필드만 채우고 기존 값은 덮어쓰지 않는다. 이미 배포된 행사의 값은 콘솔이나 `setAllowReissue` 같은 함수로 바꾼다.
+
+- `schools`: 고려대, 연세대, 성균관대, KAIST
+- `events`: 입실렌티(`demo-festival`), 고연전 3경기, 아카라카, 대동제, 태울석림제는 `allowReissueAfterCancel: false`다. 재배정 리허설용 `test-reassign`(고려대, 정원 20)만 `true`다.
+- `seedProfiles/{email}`: 관리자 1명, 스태프 1명(`demo-staff@…`), 테스트 학생 3명(`demo-student1~3@…`). `demo-*` 주소는 자리표시자이므로 리허설 전에 팀원의 실제 학교 계정으로 바꾼다.
+- `events/test-reassign/waitlist/{email}`: `demo-student2`, `demo-student3`이 순서 1, 2. 대기자는 미리 한 번 로그인해 `users`에 메일이 있어야 후보가 된다.
+- `reassignMode`는 `queue`가 기본이다. `random`을 보여 주려면 `setReassignMode`로 바꿔 두 번 시연한다.
 
 ## 6. 다음 단계 변경 사항 [2.x]
 
@@ -258,6 +268,14 @@ service cloud.firestore {
 | `INVALID_FORMAT`, `NOT_FOUND` | 인식할 수 없는 QR이에요 |
 | `WRONG_EVENT` | 다른 행사 입장권이에요 |
 | `TICKET_USED` | 이미 사용된 입장권은 취소할 수 없어요 |
+
+`issueTicket`의 `permission-denied`는 `details.reason`으로 문구를 나눈다.
+
+| details.reason | 문구 예시 |
+| --- | --- |
+| `ROLE` | 학생 계정으로만 받을 수 있어요 (스태프·학생회에는 받기 버튼을 막는다) |
+| `DOMAIN` | 학교 계정으로만 이용할 수 있어요 |
+| `CANCELLED_BEFORE` | 이 축제 입장권을 취소한 적이 있어서 다시 받을 수 없어요 |
 
 | outcome | 문구 예시 |
 | --- | --- |
@@ -308,10 +326,11 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 | `setReassignMode` | admin | `{ eventId, mode: 'queue' \| 'random' }` → `{ ok: true }` |
 | `registerDevice` | 본인 | `{ publicKeyJwk }` (EC P-256 공개키) → `{ ok: true }`. 이미 있으면 `already-exists` |
 | `resetDevice` | admin | `{ uid }` → `{ ok: true }`. 없어도 성공 |
+| `setStaff` | admin | `{ email, staff: boolean }` → `{ ok: true, status: 'UPDATED' \| 'PENDING_SIGNUP' }`. 메일의 계정에 `staff`/`student` 역할을 준다. 아직 로그인하지 않았으면 `seedProfiles`에 넣어 첫 로그인 때 적용한다(`PENDING_SIGNUP`). admin 계정은 바꾸지 못한다(`failed-precondition`) |
 
 ### 기기 확인 (`refreshQrToken`)
 - `events.requireDevice`가 `true`인 행사만 확인한다. 기본은 꺼져 있어서 기기 등록이 없는 프론트도 동작한다.
-- 요청에 `deviceProof: { signedAt, signature }`를 넣는다. 서명 대상은 `TTV1-REFRESH:{ticketId}:{signedAt}`, ECDSA P-256 SHA-256, IEEE P1363, base64url이다. `signedAt`은 서버 시각과 60초 안이어야 한다.
+- 요청에 `deviceProof: { signedAt, signature }`를 넣는다. 기기 키 생성이나 서명이 실패하면(WebCrypto가 없는 http 주소 등) 프론트는 이 필드를 빼고 보내고, 서버는 `undefined`와 `null`을 모두 "증명 없음"으로 본다. 서명 대상은 `TTV1-REFRESH:{ticketId}:{signedAt}`, ECDSA P-256 SHA-256, IEEE P1363, base64url이다. `signedAt`은 서버 시각과 60초 안이어야 한다.
 - 실패하면 `failed-precondition`이고 `details.reason`이 `DEVICE_NOT_REGISTERED` 또는 `DEVICE_PROOF_INVALID`다.
 
 ### 보안 규칙 추가
