@@ -36,6 +36,7 @@ import {
 import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
 import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
+import type { ClaimResult, MyLottery, RunDrawResult } from '@/types';
 
 const STATE_KEY = 'safepass-mock-v6';
 const SESSION_KEY = 'safepass-mock-session';
@@ -1285,4 +1286,27 @@ export async function getChainDraw(eventId: string, round: number): Promise<Chai
 
 export async function verifyMyDraw(entry: MyDrawEntry): Promise<DrawCheck> {
   return checkMyDraw(entry, await getChainDraw(entry.eventId, entry.round));
+}
+
+// ---------- 취소표 추첨 (mock: 데모 회차의 첫 응모자로 대기 중) ----------
+
+export async function getMyLottery(_eventId: string): Promise<MyLottery> {
+  await wait();
+  const e = demoDraw.entries[0];
+  return {
+    state: 'waiting',
+    nextAnnounceAt: Date.now() + 3 * 3_600_000,
+    offer: null,
+    receipt: { eventId: demoDraw.eventId, round: demoDraw.round, uid: e.uid, salt: e.salt, proof: e.proof, root: demoDraw.root, tokenIds: demoDraw.tokenIds },
+  };
+}
+
+export async function claimTicket(_eventId: string): Promise<ClaimResult> {
+  await wait();
+  return 'no_offer';
+}
+
+export async function runDrawNow(_eventId: string): Promise<RunDrawResult> {
+  await wait();
+  return { ok: false, reason: 'not_lottery' };
 }

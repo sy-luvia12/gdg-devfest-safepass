@@ -4,11 +4,12 @@ import { Contract, id as hashOf, JsonRpcProvider, Wallet } from 'ethers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FESTIVAL_TICKET_ABI } from '../src/chain/abi';
 import { ChainError, createChainClient, type ChainClient } from '../src/chain/client';
-import { REASON, tokenIdOf } from '../src/chain/ids';
+import { eventKeyOf, REASON, tokenIdOf } from '../src/chain/ids';
 import { processChainOp, walletAddressFor, WaitingForPrevious } from '../src/chain/process';
 import { preflightChain } from '../src/chain/preflight';
 import { deriveAddress } from '../src/chain/wallets';
 import { buildSnapshot, drawWinners, merkleProof, newSalt, verifyProof } from '../src/lottery/draw';
+import { drawRef, snapshotRound } from '../src/lottery/rounds';
 
 // Hardhat's default account 0 (deployer and minter in scripts/deploy.js). Public test key, local chain only.
 const MINTER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -216,4 +217,40 @@ describe('lottery round on a local chain', () => {
     expect(drawWinners({ seed, leaves: [...snap.leaves].reverse(), tokenIds: [...tokenIds].reverse() })).toEqual(winners);
     for (const w of winners) expect(verifyProof(w.leaf, merkleProof(snap.leaves, w.leaf), snap.root)).toBe(true);
   }, 60_000);
+});
+
+describe('lottery round through processChainOp', () => {
+  it('commits, waits for the seed block, seeds and announces the winners the chain seed decides', async () => {
+    const eventId = id('lev');
+    await db.doc(`events/${eventId}`).set({ capacity: 5, reassignMode: 'lottery', allowedDomains: ['korea.ac.kr'] });
+    for (let i = 0; i < 4; i++) {
+      await db.doc(`users/${id(`lw${i}`)}`).set({ email: `${id(`lw${i}`)}@korea.ac.kr`, name: `w${i}` });
+      await db.doc(`events/${eventId}/waitlist/${id(`lw${i}`)}@korea.ac.kr`).set({ order: i, status: 'waiting' });
+    }
+    for (const t of ['lt1', 'lt2']) await db.doc(`tickets/${id(t)}`).set({ eventId, status: 'pooled', ownerUid: null, drawRound: null });
+
+    const r = await snapshotRound(db, eventId, { nowMs: Date.now(), announceAtMs: Date.now(), announceOnSeed: true, commitNow: true });
+    expect(r).toMatchObject({ ok: true, round: 1, tickets: 2, entries: 4 });
+
+    // Hardhat mines only on transactions; keep blocks coming while the processor waits for the seed block.
+    const provider = new JsonRpcProvider(RPC);
+    const miner = setInterval(() => void provider.send('evm_mine', []), 200);
+    try {
+      expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+    } finally {
+      clearInterval(miner);
+    }
+
+    const draw = (await drawRef(db, eventId, 1).get()).data()!;
+    expect(draw.status).toBe('announced');
+    const [commitment, , seed] = await reader.draws(eventKeyOf(eventId), 1);
+    expect(commitment).toBe(draw.commitment);
+    expect(seed).toBe(draw.seed);
+    const expected = drawWinners({ seed, leaves: draw.leaves, tokenIds: draw.tokenIds }).map((w) => w.leaf);
+    expect(draw.winners.map((w: { leaf: string }) => w.leaf)).toEqual(expected);
+    for (const w of draw.winners) expect((await db.doc(`tickets/${w.ticketId}`).get()).get('status')).toBe('offered');
+    // A repeat finds the round seeded and changes nothing.
+    await db.doc(`chainOps/draw-${eventId}-1`).update({ status: 'pending' });
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+  }, 120_000);
 });

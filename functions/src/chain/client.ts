@@ -25,7 +25,19 @@ export interface ChainClient {
   reassign(p: { ticketId: string; to: string; reason: Reason }): Promise<ChainResult>;
   release(p: { ticketId: string; reason: Reason }): Promise<ChainResult>;
   markUsed(ticketId: string): Promise<ChainResult>;
+  /** Commits a lottery round (when not already committed), waits for its seed block and stores the seed. Safe to repeat. */
+  drawRound(p: { eventId: string; round: number; commitment: string }): Promise<DrawRoundResult>;
 }
+
+export interface DrawRoundResult {
+  seed: string;
+  seedBlock: number;
+  commitTx: string | null;
+  seedTx: string | null;
+}
+
+const ZERO_HASH = `0x${'0'.repeat(64)}`;
+const BLOCKHASH_WINDOW = 256;
 
 export interface ChainConfig {
   rpcUrl: string;
@@ -88,6 +100,33 @@ export function createChainClient(cfg: ChainConfig): ChainClient {
       const tokenId = tokenIdOf(ticketId);
       if ((await ticket.isUsed(tokenId)) as boolean) return { txHash: null };
       return { txHash: await send(() => ticket.markUsed(tokenId)) };
+    },
+    async drawRound({ eventId, round, commitment }) {
+      const key = eventKeyOf(eventId);
+      const read = async () => {
+        const [c, b, s] = (await ticket.draws(key, round)) as [string, bigint, string];
+        return { commitment: c, seedBlock: Number(b), seed: s };
+      };
+      let d = await read();
+      let commitTx: string | null = null;
+      let seedTx: string | null = null;
+      if (d.seed !== ZERO_HASH) {
+        if (d.commitment !== commitment) throw new ChainError('TX_FAILED', `round ${round} is seeded with another commitment`);
+        return { seed: d.seed, seedBlock: d.seedBlock, commitTx, seedTx };
+      }
+      const head = await provider.getBlockNumber();
+      const expired = d.commitment !== ZERO_HASH && head > d.seedBlock + BLOCKHASH_WINDOW;
+      if (d.commitment === ZERO_HASH || expired) {
+        commitTx = await send(() => ticket.commitDraw(key, round, commitment));
+        d = await read();
+      } else if (d.commitment !== commitment) {
+        throw new ChainError('TX_FAILED', `round ${round} is committed with another commitment`);
+      }
+      // SEED_DELAY is 5 blocks (about 10 s on Base Sepolia). Polling stays well inside a function timeout.
+      for (let i = 0; i < 120 && (await provider.getBlockNumber()) <= d.seedBlock; i++) await new Promise((r) => setTimeout(r, 1000));
+      seedTx = await send(() => ticket.seedDraw(key, round));
+      d = await read();
+      return { seed: d.seed, seedBlock: d.seedBlock, commitTx, seedTx };
     },
   };
 }

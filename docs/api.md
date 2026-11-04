@@ -491,3 +491,46 @@ DEMO_DRAW                                         // Base Sepolia 데모 회차 
 - 로그를 배포 블록부터 한 번 읽고 이후 새 블록만 읽는다. 데모 규모용이고, 큰 행사에는 인덱서가 필요하다.
 - 표를 취소한 사람도 tokenId(`keccak256(ticketId)`)로 익스플로러에서 그 표가 재배정됐는지와 시각은 볼 수 있다. 누구에게 갔는지는 알 수 없다. 체인이 공개라 막을 수 없다.
 - 테스트: `npm --prefix apps/web test` (서버와 같은 시험 벡터, 데모 회차 검증, reader). `VITE_CHAIN_LIVE=1`이면 실제 Base Sepolia도 읽는다.
+
+## 14. 취소표 추첨 (reassignMode `lottery`) [#24]
+
+행사 문서의 `reassignMode`를 `lottery`로 바꾼 행사만 이 흐름을 탄다. `queue`·`random` 행사는 지금과 같다(취소 즉시 재배정).
+
+### 흐름
+1. **취소**: `cancelTicket` → `{ ok: true, outcome: 'POOLED' }`. 표는 `status: 'pooled'`(주인·QR 없음)로 풀에 들어간다. 정원 수량(`issuedCount`)은 그대로라 새 발급으로 풀리지 않는다. 체인은 아직 그대로 둔다.
+2. **스냅샷(비공개 시각)**: 대기 명단(`events/{id}/waitlist`, `status: 'waiting'`) 중 로그인한 적 있고 허용 도메인이며 이 행사 표가 없는 사람과 풀의 표를 고정한다. 응모마다 무작위 `salt`를 만든다.
+3. **커밋(발표 10분 전)**: `chainOps/draw-{eventId}-{round}`(`kind: 'commitDraw'`). `processChainOp`가 `commitDraw` → 5블록 대기 → `seedDraw` → 시드로 당첨자 계산(`functions/src/lottery/draw.ts`).
+4. **발표(공개 고정 시각)**: 당첨자에게 제안(`status: 'offered'`, 기한 `claimWindowMinutes`), 응모자 전원에게 영수증(salt, 머클 증명). 당첨되지 않은 표는 풀로 돌아간다.
+5. **수락**: `claimTicket` → 표가 당첨자 것이 되고 체인 `reassign`(사유 2).
+6. **만료**: 기한 안에 수락하지 않으면 대기 명단에서 빠지고(`expired`), 표는 다음 회차로.
+7. **마감**: 공연 `drawCloseBeforeStartHours` 전, 남은 풀의 표는 체인 `release`(사유 3), 다시 발급 가능한 수량으로.
+
+### 함수
+```ts
+getMyLottery({ eventId }): { state: 'NONE'|'WAITING'|'WON'|'CLAIMED'|'EXPIRED'|'CLOSED', nextAnnounceAt, offer: { ticketId, expiresAt } | null, receipt }
+claimTicket({ eventId }): { ok: true, ticketId } | { ok: false, reason: 'NO_OFFER'|'EXPIRED' }
+runDrawNow({ eventId }): { ok: true, round, tickets, entries } | { ok: false, reason: 'NOT_LOTTERY'|'NO_TICKETS'|'NO_ENTRIES'|'ROUND_OPEN' }   // admin, 데모용
+lotteryTick                                                     // 5분마다 일정 진행 (예약 함수)
+```
+- 웹: `lib/api.ts`의 `getMyLottery`, `claimTicket`, `runDrawNow`. `receipt`는 `verifyMyDraw`(13장)에 그대로 넘긴다.
+- 학생 화면 상태: 추첨 대기 중(`waiting`) / 당첨(`won`, 수락 기한 표시) / 수락 완료(`claimed`) / 수락 기한 지남(`expired`) / 추첨 마감(`closed`). 낙첨 상태는 없다. 대기 인원·순번·확률은 응답에 없다.
+- `runDrawNow`: 그 자리에서 스냅샷·커밋하고, 시드가 저장되면(Base Sepolia 약 10초) 바로 발표한다. 체인이 꺼져 있으면 커밋 op이 대기한다.
+
+### 일정 설정 (`events/{id}.lottery`, 없으면 기본값)
+| 필드 | 기본 | 검증 |
+|---|---|---|
+| `announceTimes` | `["12:00"]` | 06:00~21:00, 인접 발표 간격 ≥ 최소 추첨 간격 + 1시간 |
+| `minDrawGapHours` | 12 | 직전 발표 이후 이 시간이 지나야 스냅샷 |
+| `finalPhase` | `{ startsBeforeHours: 72, announceTimes: ["10:00","19:00"], minDrawGapHours: 6 }` | 같은 검증 |
+| `claimWindowMinutes` | 60 | 수락 마감이 22:00을 넘지 않음 |
+| `drawCloseBeforeStartHours` | 3 | |
+- 시각은 Asia/Seoul. 검증 함수는 `functions/src/domain/lottery.ts`의 `lotterySettingsProblems`(관리자 화면용 한국어 메시지).
+
+### 비공개 데이터
+- `lotteryPlans/{eventId}`(비공개 추첨 시각 포함), `lotteryDraws/{eventId}_{round}`(응모자·salt·당첨자)는 보안 규칙에 match가 없어 클라이언트가 읽을 수 없다. 학생은 `getMyLottery`로 자기 것만 받는다.
+- 체인 `reassign`은 발표 시각이 아니라 **수락 시각**에 보낸다(설계 문서와 다른 점). 수락하지 않은 당첨자에게 체인상 표가 넘어가지 않게 하려는 것이다. 수락 시각은 학생이 고르므로 비공개 추첨 시각은 여전히 드러나지 않는다.
+
+### 프론트 필요 작업 (화면 소유자)
+- 추첨 행사 취소 결과는 지금 `reassigned`로 매핑된다. "취소됐어요" 문구를 따로 두려면 `CancelResult`에 값을 추가하고 `TicketPage`의 `CANCEL_DONE`에 문구를 넣는다.
+- 관리자 재배정 방식에 `lottery`를 추가하려면 웹 `ReassignMode`와 `SettingsPage`·`ReassignmentsPage`의 이름표에 넣는다. 그 전까지는 "무작위"로 보인다.
+- 추첨 상태 화면과 "지금 추첨" 버튼.
