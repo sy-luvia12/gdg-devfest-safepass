@@ -84,7 +84,7 @@ export async function preflightChain(input: PreflightInput): Promise<PreflightRe
       const [balance, fee] = await Promise.all([provider.getBalance(minter), provider.getFeeData()]);
       const price = fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
       const tickets = price > 0n ? balance / (TICKET_GAS * price) : 0n;
-      add('minterGas', tickets > 0n, `${formatEther(balance)} POL, about ${tickets} tickets at the current fee`);
+      add('minterGas', tickets > 0n, `${formatEther(balance)} native gas token, about ${tickets} tickets at the current fee`);
     }
   } catch (e) {
     add('contract', false, `contract call failed: ${message(e)}`);
