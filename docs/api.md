@@ -424,3 +424,46 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 - `npm --prefix functions test`: 식별자·주소 파생 단위 테스트
 - `npm --prefix functions run test:int`: 체인이 꺼진 상태에서 op가 순서대로 쌓이는지 확인
 - `npm --prefix functions run test:chain`: Hardhat 로컬 노드 + Firestore 에뮬레이터. 재시도 안전성, 순서, 가스 부족 시 `blocked`, go-live 사전 점검의 성공·실패 경우와 비밀값 비노출을 확인
+
+## 12. 2단계 검표, 서명 QR, App Check [2.2·2.4]
+
+세 가지 모두 **기본은 꺼져 있다.** 켜기 전까지 앱과 API 동작은 이전과 같다.
+
+### 서명 QR (TTV2)
+- QR 문자열: `TTV2:{ticketId}:{token}:{signedAt}:{signature}`. 서명 대상은 `TTV2:{ticketId}:{token}:{signedAt}`이고 알고리즘은 기기 확인과 같다(ECDSA P-256, SHA-256, IEEE P1363, base64url). `signedAt`은 서버 시각과 60초 안이어야 한다.
+- `refreshQrToken`은 그대로 `TTV1:{ticketId}:{token}`을 돌려준다. 폰이 그 토큰으로 TTV2를 만들어 QR로 그린다. 토큰은 입장 처리 때 지워지므로 같은 QR을 다시 쓸 수 없어서, 설계서의 nonce 저장소(`usedNonces`)는 만들지 않았다.
+- `verifyEntry` 규칙
+  - TTV2는 항상 `devices/{주인 uid}`의 공개키로 서명을 확인한다. 키가 없거나 서명이 틀리거나 오래됐으면 `SIGNATURE_INVALID`.
+  - TTV1은 `events.requireDevice`가 `false`인 행사에서만 통과한다. `true`인 행사에서는 `SIGNATURE_INVALID`.
+  - 서명은 다른 규칙(`NOT_FOUND`, `USED`, `TOKEN_MISMATCH`, `EXPIRED`)을 모두 통과한 뒤에 확인한다. 거부된 스캔에는 학생 정보를 돌려주지 않는다.
+
+### 2단계 검표 (`events.twoStepCheck`)
+- `true`인 행사에서 `verifyEntry`가 모든 검사를 통과하면 입장 처리하지 않고 `entryChecks/{ticketId}`(직원 uid, 주인 uid, 만료 시각)를 만든 뒤 `{ ok: true, needsConfirm: true, holder, enteredCount(현재), capacity }`를 돌려준다. 이 단계에서는 `scanLogs`에 기록하지 않는다.
+- `false`이거나 필드가 없으면 응답과 동작이 이전과 같다(스캔 즉시 입장 처리).
+
+### `confirmEntry`
+- **호출자**: staff, admin. **요청**: `{ ticketId: string; match: boolean }`
+- **응답**: `{ ok: true; ticketId; enteredCount; capacity } | { ok: false; reason: 'MISMATCH' | 'USED' | 'NOT_FOUND' | 'NO_PENDING_CHECK' }`
+- **처리** (트랜잭션)
+  1. 확인 대기가 없거나, 다른 직원이 만든 것이거나, 60초(`CONFIRM_WINDOW_MS`)가 지났으면 `NO_PENDING_CHECK`. 스캔 뒤 입장권 주인이 바뀌었을 때도 같다.
+  2. 입장권이 없으면 `NOT_FOUND`, 이미 사용됐으면 `USED`.
+  3. `match: false`이면 `scanLogs`에 `mismatch`를 기록하고 대기를 지운 뒤 `MISMATCH`. 입장권은 `issued`로 남고 QR도 그대로 유효하다.
+  4. `match: true`이면 `verifyEntry`와 같은 방식으로 입장 처리(사용됨, `enteredCount + 1`, 토큰 삭제, 체인 `markUsed` 기록)하고 `scanLogs`에 `ok`를 기록한다.
+
+### App Check
+- 서버: `ENFORCE_APP_CHECK` 파라미터(기본 `false`)가 모든 callable의 `enforceAppCheck`에 연결되어 있다(`functions/src/handlers/callableOptions.ts`).
+- 프론트: `VITE_APPCHECK_SITE_KEY`가 있을 때만 reCAPTCHA Enterprise로 App Check를 시작한다. 로컬 개발은 `VITE_APPCHECK_DEBUG_TOKEN`을 쓴다.
+- 켜는 순서
+  1. Firebase 콘솔의 App Check에서 웹 앱을 reCAPTCHA Enterprise로 등록하고 사이트 키를 만든다.
+  2. `apps/web/.env.local`에 `VITE_APPCHECK_SITE_KEY`를 넣고 프론트를 배포한다.
+  3. 콘솔 App Check 지표에서 함수 호출의 검증 비율이 거의 100%가 될 때까지 지켜본다. 이때는 아직 강제하지 않는다.
+  4. `functions/.env.ttv-festival-pass`에 `ENFORCE_APP_CHECK=true`를 넣고 `firebase deploy --only functions`를 한다.
+- 되돌리기: `ENFORCE_APP_CHECK=false`로 바꾸고 함수를 다시 배포한다. 키를 잘못 넣으면 정상 사용자도 막히므로 3번을 건너뛰지 않는다.
+
+### 새 이유와 문구
+| 값 | 문구 예시 |
+| --- | --- |
+| `SIGNATURE_INVALID` | 서명이 없거나 맞지 않는 QR이에요. 학생에게 최신 입장권 화면을 열어 달라고 해 주세요 |
+| `NO_PENDING_CHECK` | 확인 시간이 지났어요. 다시 스캔해 주세요 |
+| 스캔 결과 `mismatch` | 사진 속 얼굴과 달라서 입장을 막았어요 |
+
