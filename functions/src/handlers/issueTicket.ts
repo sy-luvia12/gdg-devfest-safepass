@@ -30,6 +30,10 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(async (
         throw new HttpsError('failed-precondition', 'A cancelled ticket cannot be taken again.', { reason });
       }
     }
+    if (event.requireRoster && !(await tx.get(db.doc(`events/${eventId}/roster/${caller.email}`))).exists) {
+      const reason: IssueReason = 'NOT_IN_ROSTER';
+      throw new HttpsError('failed-precondition', 'Not on this event roster.', { reason });
+    }
     if (event.issuedCount >= event.capacity) throw new HttpsError('resource-exhausted', 'Event is full.');
 
     const nftNumber = formatNftNumber(event.nftSeq + 1);

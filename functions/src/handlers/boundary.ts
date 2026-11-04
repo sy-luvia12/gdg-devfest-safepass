@@ -1,4 +1,4 @@
-import type { DocumentData, DocumentSnapshot, Timestamp, Transaction } from 'firebase-admin/firestore';
+import { Timestamp, type DocumentData, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { REASSIGN_MODES, type DeviceKey, type DeviceProof, type ReassignMode, type Role } from '../api';
 import { parseDeviceKey } from '../domain/device';
@@ -32,6 +32,20 @@ export async function requireRole(tx: Transaction, uid: string, allowed: readonl
   return snap.data()!;
 }
 
+// Admin of this school: a school admin (adminSchoolId) for that school only, a team admin (no adminSchoolId) for any.
+export async function requireSchoolAdmin(tx: Transaction, uid: string, schoolId: string): Promise<DocumentData> {
+  const user = await requireRole(tx, uid, ['admin']);
+  if (user.adminSchoolId && user.adminSchoolId !== schoolId) {
+    throw new HttpsError('permission-denied', 'This admin manages another school.');
+  }
+  return user;
+}
+
+// The first school in an event's schoolIds hosts it, and that school's admin manages the event.
+export function hostOf(schoolIds: unknown): string {
+  return Array.isArray(schoolIds) && typeof schoolIds[0] === 'string' ? schoolIds[0] : '';
+}
+
 function record(data: unknown): Record<string, unknown> {
   if (typeof data !== 'object' || data === null) throw new HttpsError('invalid-argument', 'Request body must be an object.');
   return data as Record<string, unknown>;
@@ -43,10 +57,44 @@ export function readString(data: unknown, field: string): string {
   return value;
 }
 
+export const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
 export function readDocId(data: unknown, field: string): string {
   const value = readString(data, field);
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new HttpsError('invalid-argument', `${field} is not a valid id.`);
+  if (!DOC_ID.test(value)) throw new HttpsError('invalid-argument', `${field} is not a valid id.`);
   return value;
+}
+
+export function readOptional<T>(data: unknown, field: string, read: (data: unknown, field: string) => T): T | undefined {
+  return record(data)[field] === undefined ? undefined : read(data, field);
+}
+
+export function readCount(data: unknown, field: string): number {
+  const value = record(data)[field];
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 1_000_000) {
+    throw new HttpsError('invalid-argument', `${field} must be a whole number from 0 to 1000000.`);
+  }
+  return value;
+}
+
+export function readBoolean(data: unknown, field: string): boolean {
+  const value = record(data)[field];
+  if (typeof value !== 'boolean') throw new HttpsError('invalid-argument', `${field} must be a boolean.`);
+  return value;
+}
+
+export function readEventDate(data: unknown, field = 'date'): Timestamp {
+  const ms = Date.parse(readString(data, field));
+  if (Number.isNaN(ms)) throw new HttpsError('invalid-argument', `${field} must be an ISO 8601 date.`);
+  return Timestamp.fromMillis(ms);
+}
+
+export function readStringList(data: unknown, field: string): string[] {
+  const value = record(data)[field];
+  if (!Array.isArray(value) || value.length === 0 || !value.every((v) => typeof v === 'string' && v.length > 0)) {
+    throw new HttpsError('invalid-argument', `${field} must be a non-empty list of strings.`);
+  }
+  return value as string[];
 }
 
 export function readReassignMode(data: unknown): ReassignMode {
@@ -106,6 +154,7 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
     enteredCount: d.enteredCount ?? 0,
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
     requireDevice: d.requireDevice === true,
+    requireRoster: d.requireRoster === true,
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
   };
 }

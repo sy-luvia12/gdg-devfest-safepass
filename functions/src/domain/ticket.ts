@@ -30,6 +30,8 @@ export interface FestivalEvent {
   enteredCount: number;
   reassignMode: ReassignMode;
   requireDevice: boolean;
+  // Only students on events/{id}/roster can take a ticket.
+  requireRoster: boolean;
   // Test events only: lets a student who cancelled take a ticket again.
   allowReissueAfterCancel: boolean;
 }

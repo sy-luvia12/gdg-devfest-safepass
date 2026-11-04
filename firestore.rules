@@ -29,6 +29,7 @@ service cloud.firestore {
     match /deviceResets/{uid} {
       allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
+    // schools/{id}/roster, events/{id}/roster(명단)도 match가 없어서 클라이언트가 읽을 수 없다. 대조와 조회는 함수만 한다
     // qrTokens, devices는 match가 없어서 클라이언트가 읽을 수 없다. QR 토큰은 함수만 다룬다
     match /reassignments/{id} {
       allow read: if isAdmin();

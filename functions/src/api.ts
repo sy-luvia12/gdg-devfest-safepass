@@ -11,6 +11,11 @@ export interface UserProfile {
   email: string;
   photoUrl: string | null;
   role: Role;
+  /** Set on admin accounts that manage one school. Absent on SafePass team admins, who manage every school. */
+  adminSchoolId?: string;
+  /** Set once verifyStudentRoster matched this account to its school roster row. */
+  schoolId?: string;
+  rosterVerified?: boolean;
 }
 
 export type EnsureUserResponse = UserProfile;
@@ -24,7 +29,8 @@ export interface IssueTicketResponse {
 }
 // failed-precondition with details.reason. CANCELLED_BEFORE: this student cancelled a ticket for the event and
 // the event does not set allowReissueAfterCancel.
-export const ISSUE_REASONS = ['CANCELLED_BEFORE'] as const;
+// NOT_IN_ROSTER: the event sets requireRoster and the student's email is not on its roster.
+export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'NOT_IN_ROSTER'] as const;
 export type IssueReason = (typeof ISSUE_REASONS)[number];
 
 export const REASSIGN_MODES = ['queue', 'random'] as const;
@@ -132,6 +138,96 @@ export interface SetStaffResponse {
   status: 'UPDATED' | 'PENDING_SIGNUP';
 }
 
+// ---------- School spaces, rosters and events (admin) ----------
+// An admin with adminSchoolId manages only that school. A team admin (no adminSchoolId) manages every school.
+
+// failed-precondition with details.reason when a roster sheet cannot be read.
+export const SHEET_REASONS = ['BAD_SHEET_URL', 'SHEET_NOT_SHARED', 'SHEET_NOT_FOUND', 'SHEETS_API_DISABLED', 'MISSING_COLUMNS'] as const;
+export type SheetReason = (typeof SHEET_REASONS)[number];
+
+export interface UpsertSchoolRequest {
+  schoolId: string;
+  name: string;
+  domains: string[];
+  brandColor: string;
+}
+export interface UpsertSchoolResponse {
+  ok: true;
+  created: boolean;
+}
+
+export interface RosterEntry {
+  name: string;
+  studentId: string;
+  email: string;
+}
+export interface RosterSummary {
+  sheetUrl: string;
+  importedAtMs: number;
+  count: number;
+}
+export type RosterSkipReason = 'MISSING_FIELD' | 'BAD_STUDENT_ID' | 'BAD_DOMAIN' | 'DUPLICATE_STUDENT_ID' | 'DUPLICATE_EMAIL';
+export interface ImportRosterResponse {
+  ok: true;
+  summary: RosterSummary;
+  skipped: { row: number; reason: RosterSkipReason }[];
+}
+// summary is null before the first import. entries holds the first ROSTER_PREVIEW rows, sorted by student id.
+export interface GetRosterResponse {
+  summary: RosterSummary | null;
+  entries: RosterEntry[];
+  serviceAccountEmail: string;
+}
+export const ROSTER_PREVIEW = 200;
+
+export interface ImportStudentRosterRequest {
+  schoolId: string;
+  sheetUrl: string;
+}
+export interface GetStudentRosterRequest {
+  schoolId: string;
+}
+export interface ImportEventRosterRequest {
+  eventId: string;
+  sheetUrl: string;
+}
+export interface GetEventRosterRequest {
+  eventId: string;
+}
+
+// schoolIds[0] hosts the event and its admin creates it. allowedDomains come from the schools' domains.
+export interface EventFields {
+  schoolIds: string[];
+  name: string;
+  /** ISO 8601 with offset, e.g. 2026-11-06T18:00:00+09:00 */
+  date: string;
+  place: string;
+  capacity: number;
+  faceValue: number;
+  requireRoster: boolean;
+}
+export type CreateEventRequest = EventFields;
+export interface CreateEventResponse {
+  ok: true;
+  eventId: string;
+}
+// schoolIds cannot change after creation. capacity cannot go below issuedCount.
+export type UpdateEventRequest = { eventId: string } & Partial<Omit<EventFields, 'schoolIds'>>;
+export interface UpdateEventResponse {
+  ok: true;
+}
+
+// Sign-up check, called by the signed-in student. The row is found by student id; the name must match it and the
+// signed-in (Google-verified) email must be the row's email. A student id can back only one account.
+export const VERIFY_STUDENT_REASONS = ['NOT_IN_ROSTER', 'EMAIL_MISMATCH', 'STUDENT_ID_TAKEN'] as const;
+export type VerifyStudentReason = (typeof VERIFY_STUDENT_REASONS)[number];
+export interface VerifyStudentRosterRequest {
+  schoolId: string;
+  name: string;
+  studentId: string;
+}
+export type VerifyStudentRosterResponse = { ok: true; profile: UserProfile } | { ok: false; reason: VerifyStudentReason };
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -145,4 +241,12 @@ export interface Callables {
   setAllowReissue: [SetAllowReissueRequest, SetAllowReissueResponse];
   requestDeviceReset: [void, RequestDeviceResetResponse];
   setStaff: [SetStaffRequest, SetStaffResponse];
+  upsertSchool: [UpsertSchoolRequest, UpsertSchoolResponse];
+  importStudentRoster: [ImportStudentRosterRequest, ImportRosterResponse];
+  getStudentRoster: [GetStudentRosterRequest, GetRosterResponse];
+  createEvent: [CreateEventRequest, CreateEventResponse];
+  updateEvent: [UpdateEventRequest, UpdateEventResponse];
+  importEventRoster: [ImportEventRosterRequest, ImportRosterResponse];
+  getEventRoster: [GetEventRosterRequest, GetRosterResponse];
+  verifyStudentRoster: [VerifyStudentRosterRequest, VerifyStudentRosterResponse];
 }
