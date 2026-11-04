@@ -47,6 +47,14 @@ node contracts/scripts/lookup.js --ticket <ID> --network amoy        # Amoy에 �
   - `eventKey = keccak256(eventId)`
 - `ticketStatus`는 revert하지 않는다. 0 미발급, 1 유효, 2 입장 완료, 3 회수됨.
 
+## 배포 현황
+| 네트워크 | 주소 | 배포 tx | 소스 검증 |
+|---|---|---|---|
+| Base Sepolia (84532) | [`0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE`](https://sepolia.basescan.org/address/0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE) | [`0x6227…ed91`](https://sepolia.basescan.org/tx/0x622705532864316d553c0303e3289aded330d36dd541688b1c8892bcacb5ed91) | Sourcify exact match |
+
+- 2026-11-04 배포. admin과 minter는 모두 `0x3eAC838ccfFc2d1e76Efb66aA1E6664AE2FA7aB8`이다.
+- 실제 배포비는 0.0000116 ETH였다.
+
 ## 테스트넷 배포 런북
 기본 네트워크는 **Base Sepolia**(chainId 84532, 익스플로러 `https://sepolia.basescan.org`)다. Polygon Amoy(80002)도 `NETWORK=amoy`로 쓸 수 있다. 네트워크 목록은 `scripts/networks.js`.
 
@@ -58,7 +66,7 @@ Amoy faucet은 2026-11 현재 Alchemy, QuickNode 모두 메인넷 ETH 0.001 이�
 export MINTER_KEY_FILE=/path/outside/repo/minter.json
 contracts/scripts/chain.sh preflight   # 읽기 전용: 잔고, 가스 가격, 배포비, 감당 가능한 티켓 수. 배포비가 모자라면 exit 1
 contracts/scripts/chain.sh deploy      # preflight 통과 후 배포 → deployments/baseSepolia.json (커밋한다)
-contracts/scripts/chain.sh verify      # 소스 검증. 기본은 Sourcify(키 불필요)
+contracts/scripts/chain.sh verify      # 소스 검증: Sourcify API v2(키 불필요, scripts/sourcify.js). hardhat-verify 2.x는 없어진 v1을 불러서 쓰지 않는다
 NETWORK=amoy contracts/scripts/chain.sh preflight   # Amoy로 할 때
 ```
 

@@ -18,15 +18,14 @@ MINTER_PRIVATE_KEY="$(node -e 'process.stdout.write(JSON.parse(require("fs").rea
 export MINTER_PRIVATE_KEY
 [ -n "$had_x" ] && set -x
 
-deployment="./deployments/$NETWORK.json"
 case "${1:-}" in
   preflight) npx hardhat run scripts/preflight.js --network "$NETWORK" ;;
   deploy)
     npx hardhat run scripts/preflight.js --network "$NETWORK"
     npx hardhat run scripts/deploy.js --network "$NETWORK" ;;
   verify)
-    addr="$(node -p "require('$deployment').address")"
-    minter="$(node -p "require('$deployment').minter")"
-    npx hardhat verify --network "$NETWORK" "$addr" "$minter" "$minter" ;;
+    # Sourcify API v2. hardhat-verify 2.x still calls the removed v1 API.
+    npx hardhat compile --quiet
+    node scripts/sourcify.js "$NETWORK" ;;
   *) echo "usage: $0 preflight|deploy|verify" >&2; exit 2 ;;
 esac
