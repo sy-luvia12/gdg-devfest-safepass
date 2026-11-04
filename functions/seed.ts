@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { FieldValue, getFirestore, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 
 const projectId = process.env.GCLOUD_PROJECT ?? 'demo-ttv';
 if (!process.env.FIRESTORE_EMULATOR_HOST && projectId === 'demo-ttv') {
@@ -33,84 +34,62 @@ const base = {
   allowReissueAfterCancel: false,
 };
 
-// The 고연전 games are one series that both schools take part in. Each game has its own tickets.
-const koyon = {
-  schoolIds: ['korea', 'yonsei'],
-  allowedDomains: ['korea.ac.kr', 'yonsei.ac.kr'],
-  seriesName: { korea: '고연전', yonsei: '연고전' },
-};
+// Each school runs its own events. 고연전 (고려대) and 연고전 (연세대) are the same games, but each school issues
+// and checks its own tickets, so they are two events. Every event issues only to students on its event roster.
+const event = (schoolId: string, fields: Record<string, unknown>) => ({
+  ...base,
+  schoolIds: [schoolId],
+  allowedDomains: schools[schoolId].domains,
+  requireRoster: true,
+  ...fields,
+});
 
-// Dates, places and capacities are demo values. The 고연전 venues are placeholders to confirm.
+// Dates, places and capacities are demo values.
 const events: Record<string, Record<string, unknown>> = {
   // The first demo event, entered by hand in the console. Its id stays as it is.
-  'demo-festival': {
-    ...base,
-    name: '입실렌티',
-    schoolIds: ['korea'],
-    allowedDomains: ['korea.ac.kr'],
-    place: '녹지운동장',
-    date: at('2026-11-06T18:00:00+09:00'),
-    capacity: 10_000,
-  },
-  // Rehearsal event for the cancel and reassign scenes. Cancelling and taking a ticket again is allowed here.
-  'test-reassign': {
-    ...base,
-    name: '재배정 테스트',
-    schoolIds: ['korea'],
-    allowedDomains: ['korea.ac.kr'],
-    place: '테스트',
-    date: at('2026-11-06T12:00:00+09:00'),
-    capacity: 20,
-    allowReissueAfterCancel: true,
-  },
-  'koyon-basketball': { ...base, ...koyon, name: '농구', place: '잠실학생체육관', date: at('2026-11-13T11:00:00+09:00'), capacity: 5_000 },
-  'koyon-icehockey': { ...base, ...koyon, name: '아이스하키', place: '목동아이스링크', date: at('2026-11-13T15:00:00+09:00'), capacity: 3_000 },
-  'koyon-football': { ...base, ...koyon, name: '축구·럭비', place: '잠실종합운동장 주경기장', date: at('2026-11-14T13:00:00+09:00'), capacity: 20_000 },
-  'yonsei-akaraka': {
-    ...base,
-    name: '아카라카',
-    schoolIds: ['yonsei'],
-    allowedDomains: ['yonsei.ac.kr'],
-    place: '노천극장',
-    date: at('2026-11-20T18:00:00+09:00'),
-    capacity: 12_000,
-  },
-  'skku-daedongje': {
-    ...base,
-    name: '대동제',
-    schoolIds: ['skku'],
-    allowedDomains: ['g.skku.edu'],
-    place: '금잔디광장',
-    date: at('2026-11-21T18:00:00+09:00'),
-    capacity: 8_000,
-  },
-  'kaist-taeul': {
-    ...base,
-    name: '태울석림제',
-    schoolIds: ['kaist'],
-    allowedDomains: ['kaist.ac.kr'],
-    place: '대운동장',
-    date: at('2026-11-27T18:00:00+09:00'),
-    capacity: 5_000,
-  },
+  'demo-festival': event('korea', { name: '입실렌티', place: '녹지운동장', date: at('2026-11-06T18:00:00+09:00'), capacity: 10_000 }),
+  'korea-koyon': event('korea', { name: '고연전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
+  'korea-seoktap': event('korea', { name: '석탑대동제', place: '민주광장', date: at('2026-11-20T18:00:00+09:00'), capacity: 8_000 }),
+  'yonsei-akaraka': event('yonsei', { name: '아카라카', place: '노천극장', date: at('2026-11-20T18:00:00+09:00'), capacity: 12_000 }),
+  'yonsei-yonko': event('yonsei', { name: '연고전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
+  'skku-daedongje': event('skku', { name: '대동제', place: '금잔디광장', date: at('2026-11-21T18:00:00+09:00'), capacity: 8_000 }),
+  'kaist-taeul': event('kaist', { name: '태울석림제', place: '대운동장', date: at('2026-11-27T18:00:00+09:00'), capacity: 5_000 }),
 };
+
+// Events an earlier seed made. Listed so a run warns about them; SEED_PRUNE=1 deletes them.
+const retiredEvents = ['test-reassign', 'koyon-basketball', 'koyon-icehockey', 'koyon-football'];
+
+// Demo student rosters: made-up students with clearly fake addresses. The team adds its real school accounts in the
+// operator console (/ops), so nothing here needs to change for a rehearsal.
+const FAMILY = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권'];
+const GIVEN = ['하늘', '도윤', '서연', '민준', '지우', '하윤', '예린', '현우', '소율', '지안', '태윤', '유나', '다온', '민재', '지민', '서준'];
+const ROSTER_SIZE = 30;
+function demoRoster(schoolId: string, domain: string) {
+  return Array.from({ length: ROSTER_SIZE }, (_, i) => ({
+    name: `${FAMILY[(i * 7 + schoolId.length) % FAMILY.length]}${GIVEN[(i * 5 + schoolId.length) % GIVEN.length]}`,
+    studentId: `2024${String(i + 1).padStart(6, '0')}`,
+    email: `safepass.demo${String(i + 1).padStart(2, '0')}@${domain}`,
+  }));
+}
+// An event roster takes the first two thirds of its school's demo roster, so the rest show "not on the roster".
+const eventRosterOf = (rows: { name: string; studentId: string }[]) =>
+  rows.slice(0, Math.ceil((rows.length * 2) / 3)).map(({ name, studentId }) => ({ name, studentId }));
+
+// The operator account (/ops): signs in with an id and password, no Google. OPS_PASSWORD creates or updates it.
+const OPS_ID = process.env.OPS_ID ?? 'ops';
+const OPS_EMAIL = `${OPS_ID}@ops.safepass.app`;
 
 // A profile only applies before the first sign-in. Add test accounts here first.
 // An admin with adminSchoolId manages only that school (e.g. { ..., role: 'admin', adminSchoolId: 'korea' }).
 // An admin without it is a SafePass team account that manages every school and can open new school spaces.
 // Replace the demo-* addresses with the team's real school accounts before the rehearsal.
+// Event admins (행사 담당자) are admins with adminSchoolId. Students sign up against the student roster, so they need
+// no profile here.
 const profiles = [
+  { email: OPS_EMAIL, name: '어둠의 운영진', studentId: '', role: 'admin', operator: true },
   { email: 'tigerex91@gmail.com', name: '관리자', studentId: '', role: 'admin' },
-  { email: 'demo-staff@korea.ac.kr', name: '검표 스태프', studentId: '', role: 'staff' },
-  { email: 'demo-student1@korea.ac.kr', name: '테스트 학생 1', studentId: '2024000001', role: 'student' },
-  { email: 'demo-student2@korea.ac.kr', name: '테스트 학생 2', studentId: '2024000002', role: 'student' },
-  { email: 'demo-student3@korea.ac.kr', name: '테스트 학생 3', studentId: '2024000003', role: 'student' },
+  { email: 'demo-staff@korea.ac.kr', name: '검표 스태프', studentId: '', role: 'staff', staffSchoolId: 'korea' },
 ];
-
-// Waitlist of the test event. A person becomes a candidate only after signing in once, because users must hold the email.
-const waitlist: Record<string, { eventId: string; emails: string[] }> = {
-  'test-reassign': { eventId: 'test-reassign', emails: ['demo-student2@korea.ac.kr', 'demo-student3@korea.ac.kr'] },
-};
 
 // Only fills fields that are absent, so running this against a live project never overwrites counters or edited values.
 async function fillMissing(ref: DocumentReference, fields: Record<string, unknown>): Promise<number> {
@@ -129,15 +108,62 @@ async function main() {
     const filled = await fillMissing(db.doc(`events/${id}`), fields);
     console.log(`events/${id}: filled ${filled} missing fields`);
   }
+
+  // Rosters are written only when there is none yet, so edits made in /ops are never overwritten.
+  const rosters: Record<string, { name: string; studentId: string; email: string }[]> = {};
+  for (const [id, fields] of Object.entries(schools)) {
+    rosters[id] = demoRoster(id, (fields.domains as string[])[0]);
+    const ref = db.doc(`schools/${id}`);
+    if ((await ref.get()).get('studentRoster')) {
+      console.log(`schools/${id}/roster: kept (edit it in /ops)`);
+      continue;
+    }
+    const writer = db.bulkWriter();
+    for (const row of rosters[id]) void writer.set(db.doc(`schools/${id}/roster/${row.studentId}`), row);
+    await writer.close();
+    await ref.update({ studentRoster: { sheetUrl: '', importedAt: FieldValue.serverTimestamp(), count: rosters[id].length } });
+    console.log(`schools/${id}/roster: ${rosters[id].length} demo students`);
+  }
+  for (const [id, fields] of Object.entries(events)) {
+    const ref = db.doc(`events/${id}`);
+    if ((await ref.get()).get('roster')) {
+      console.log(`events/${id}/roster: kept (edit it in /ops)`);
+      continue;
+    }
+    const rows = eventRosterOf(rosters[(fields.schoolIds as string[])[0]]);
+    const writer = db.bulkWriter();
+    for (const row of rows) void writer.set(db.doc(`events/${id}/roster/${row.studentId}`), row);
+    await writer.close();
+    await ref.update({ roster: { sheetUrl: '', importedAt: FieldValue.serverTimestamp(), count: rows.length } });
+    console.log(`events/${id}/roster: ${rows.length} students`);
+  }
+
   for (const { email, ...profile } of profiles) {
     await fillMissing(db.doc(`seedProfiles/${email}`), profile);
   }
   console.log(`seedProfiles: ${profiles.length} checked in ${projectId}`);
-  for (const { eventId, emails } of Object.values(waitlist)) {
-    for (const [i, email] of emails.entries()) {
-      await fillMissing(db.doc(`events/${eventId}/waitlist/${email}`), { order: i + 1, status: 'waiting', assignedTicketId: null });
+
+  const password = process.env.OPS_PASSWORD;
+  if (password) {
+    if (password.length < 8) throw new Error('OPS_PASSWORD must be at least 8 characters.');
+    const auth = getAuth();
+    const existing = await auth.getUserByEmail(OPS_EMAIL).catch(() => null);
+    if (existing) await auth.updateUser(existing.uid, { password });
+    else await auth.createUser({ email: OPS_EMAIL, password, emailVerified: true, displayName: '어둠의 운영진' });
+    console.log(`operator: ${existing ? 'password updated' : 'created'} (id ${OPS_ID})`);
+  } else {
+    console.log('operator: skipped (set OPS_PASSWORD to create the /ops account or change its password)');
+  }
+
+  for (const id of retiredEvents) {
+    const ref = db.doc(`events/${id}`);
+    if (!(await ref.get()).exists) continue;
+    if (process.env.SEED_PRUNE === '1') {
+      await db.recursiveDelete(ref);
+      console.log(`events/${id}: deleted (retired)`);
+    } else {
+      console.log(`events/${id}: retired event still exists (run with SEED_PRUNE=1 to delete it and its rosters)`);
     }
-    console.log(`events/${eventId}/waitlist: ${emails.length} checked`);
   }
 }
 
