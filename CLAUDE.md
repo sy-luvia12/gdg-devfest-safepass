@@ -120,6 +120,7 @@ firebase.json             #                                    ← 백엔드
 | `/ops` | 운영진 콘솔 개요: 학교별 재학생 명단·행사 명단 수 | 운영진 |
 | `/ops/schools/:schoolId` | 재학생 명단 편집 (추가·수정·삭제, 붙여넣기, CSV) | 운영진 |
 | `/ops/events/:eventId` | 행사 명단 편집, 재학생 명단 대조 결과 | 운영진 |
+| `/ops/admins` | 행사 담당자 지정: 팀원 구글 계정(개인 Gmail 가능) → 학교 | 운영진 |
 | `/ops/devices` | 학교별 학생 기기 초기화 | 운영진 |
 
 - 로그인 후 이동: 학생은 아래 "학생 관문"을 먼저 거치고, 입장권이 있으면 `/ticket`, 없으면 `/event` / staff는 `/staff/scan` / admin은 `/admin`
@@ -134,6 +135,7 @@ firebase.json             #                                    ← 백엔드
 | 학교 담당자 (행정실 등) | 학교 등록, 재학생 명단(이름·학번·메일) 등록, 기기 초기화 요청 처리 | **설명만 한다.** 화면은 만들지 않고, 이 일은 운영진 콘솔이 대신한다 |
 | 행사 담당자 (`admin` + `adminSchoolId`) | 행사 등록, 행사 대상 명단(이름·학번) 등록, 발급·출입 관리. 자기 학교 행사만 본다 | 관리자 화면 `/admin` (학교 메뉴는 행사 목록·스태프 관리만) |
 | 운영진 (`admin` + `operator`, 학교 없음) | 모든 학교의 재학생 명단·행사 명단을 바로 고치고 기기를 초기화한다. 데모·테스트 관리용 | 운영진 콘솔 `/ops` |
+- 행사 담당자 계정은 운영진이 콘솔(`/ops/admins`)에서 구글 계정(개인 Gmail 가능)과 학교로 지정한다. 재학생 명단과 상관없이 구글 로그인으로 들어온다. 지정되지 않은 Gmail은 학생으로 보고 막는다.
 - 행사 담당자는 학생 메일을 보지 않는다. 행사 명단은 이름·학번만 받고, 서버가 같은 학교의 재학생 명단과 대조한다.
 - 두 학교가 함께하는 경기(고연전/연고전)도 학교마다 따로 행사를 만들어 각자 발급·검표한다.
 - 재학생 승인(사진·학생증을 보고 승인)은 없앴다. 재학생 명단 대조 가입이 대신한다.
@@ -241,6 +243,8 @@ opsListRoster(kind: 'school' | 'event', id): Promise<OpsRoster>   // 학교: 메
 opsEditRoster(kind, id, { upserts, deletes, replace? }): Promise<OpsEditResult>   // 학번 기준 추가·덮어쓰기·삭제. 행사 명단은 시트를 한 번 불러온 뒤에만
 opsListStudents(schoolId): Promise<OpsStudent[]>    // 가입한 학생과 기기 등록·초기화 요청 여부
 opsResetDevice(uid): Promise<void>                  // resetDevice
+opsListEventAdmins(): Promise<OpsEventAdmin[]>       // 행사 담당자 (로그인 전이면 pending)
+opsSetEventAdmin(email, schoolId | null): Promise<void>   // 지정·해제. 로그인 전이면 seedProfiles에 두고 첫 구글 로그인 때 적용. 팀 관리자·운영진은 못 바꿈
 ```
 
 - 실패는 `types.ts`의 `ApiError`(`code`: `not_school_account` / `sold_out` / `not_found` / `unauthenticated` / `not_in_roster` / `invalid_state` / `device_blocked` / `cancelled_before` / `wrong_role` / `unknown`)로 던진다. 서버 `permission-denied`는 `details.reason`이 `ROLE`이면 `wrong_role`, 아니면 `not_school_account`다. 화면 문구는 프론트가 정한다.
