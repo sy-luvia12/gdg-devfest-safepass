@@ -126,7 +126,7 @@ flowchart LR
     CF[Cloud Functions]
     AC[App Check]
   end
-  Chain[(Polygon Amoy<br/>FestivalTicket)]
+  Chain[(Base Sepolia<br/>FestivalTicket)]
   Sheets[Google Sheets]
 
   S & T & A --> AC --> CF
@@ -160,7 +160,7 @@ tell-the-vision/
 
 | 날짜 | 백엔드 | 디자인 + 프론트 |
 | --- | --- | --- |
-| 11/4 (수) | Hardhat 세팅, 컨트랙트, Amoy 배포, 발급 시 mint 연동 | 기기 키와 서명 QR, 검표 2단계(승인 버튼) |
+| 11/4 (수) | Hardhat 세팅, 컨트랙트, 테스트넷 배포, 발급 시 mint 연동 | 기기 키와 서명 QR, 검표 2단계(승인 버튼) |
 | 11/5 (목) | 취소 재배정의 체인 연동(`reassign`), 서명 검증, `confirmSchoolEmail`, `approveUser`, `importWaitlist` | 취소 화면과 결과 안내, 학교 메일 인증과 사진 업로드 온보딩, 관리자 승인 화면 |
 | 11/6 (금) | 데모 데이터 정리, 여유 시 App Check | 두 폰으로 리허설 |
 
@@ -169,7 +169,7 @@ tell-the-vision/
 
 ## 5. 팀 결정 필요
 
-- [ ] 테스트넷: Sepolia / Polygon Amoy(추천)
+- [x] 테스트넷: Base Sepolia (2026-11-04 결정. Amoy faucet이 메인넷 ETH 잔고를 요구해서 바꿈. Amoy도 `NETWORK=amoy`로 배포 가능)
 - [ ] 컨트랙트 개발 도구: Hardhat(추천) / Foundry
 - [ ] 서버의 블록체인 라이브러리: ethers.js(추천) / viem
 - [ ] RPC: Alchemy(추천) / Infura

@@ -1,8 +1,11 @@
 // Read-only check before spending testnet gas: minter balance, live gas price, and how many
-// tickets the balance covers. Sends no transaction. Exits 1 when the balance cannot pay for the deploy.
+// tickets the balance covers. Base also charges an L1 data fee; on Base Sepolia it measured about
+// 1e-14 ETH for the whole deploy (2026-11-04), so it is left out.
+// Sends no transaction. Exits 1 when the balance cannot pay for the deploy.
 const hre = require('hardhat');
 
 const { GAS, budget } = require('./budget');
+const { NETWORKS } = require('./networks');
 
 const fmt = (wei) => hre.ethers.formatEther(wei);
 
@@ -20,11 +23,12 @@ async function main() {
     network: hre.network.name,
     chainId: Number(chainId),
     minter: signer.address,
-    balancePOL: fmt(balance),
+    unit: NETWORKS[hre.network.name]?.symbol ?? 'ETH',
+    balance: fmt(balance),
     maxFeeGwei: hre.ethers.formatUnits(price, 'gwei'),
-    deployPOL: fmt(GAS.deploy * price),
-    setupPOL: fmt(b.setupCost),
-    ticketIssueAndEntryPOL: fmt(b.perTicket),
+    deployCost: fmt(GAS.deploy * price),
+    setupCost: fmt(b.setupCost),
+    ticketIssueAndEntryCost: fmt(b.perTicket),
     alreadyDeployed: Boolean(deployed),
     ticketsCovered: b.ticketsCovered,
   };

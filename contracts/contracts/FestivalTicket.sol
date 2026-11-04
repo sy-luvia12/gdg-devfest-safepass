@@ -40,7 +40,7 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
         bytes32 seed; // 0 until seedDraw stores blockhash(seedBlock)
     }
 
-    /// Blocks between a commit and its seed block. Polygon PoS makes about one block every 2 s.
+    /// Blocks between a commit and its seed block. Base and Polygon PoS each make about one block every 2 s.
     uint64 public constant SEED_DELAY = 5;
 
     mapping(bytes32 eventKey => mapping(uint32 round => Draw)) public draws;
@@ -140,7 +140,7 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
     }
 
     /// @notice Stores the seed once the seed block exists. Anyone may call it.
-    /// The EVM keeps only the last 256 block hashes, so this must run within about 8 minutes on Polygon.
+    /// The EVM keeps only the last 256 block hashes, so this must run within about 8 minutes on Base or Polygon.
     function seedDraw(bytes32 eventKey, uint32 round) external returns (bytes32 seed) {
         Draw storage d = draws[eventKey][round];
         if (d.commitment == bytes32(0)) revert DrawNotCommitted(eventKey, round);

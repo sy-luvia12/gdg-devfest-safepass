@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 // Look up a ticket and its event on-chain without trusting the SafePass server. Needs no key.
 //   node scripts/lookup.js --ticket <Firestore ticket id> [--event <Firestore event id>]
-//                          [--network amoy|localhost] [--rpc <url>] [--contract <address>]
+//                          [--network baseSepolia|amoy|localhost] [--rpc <url>] [--contract <address>]
 // The contract address defaults to deployments/<network>.json; anyone can rerun this against any RPC.
 const fs = require('node:fs');
 const path = require('node:path');
 const { Contract, JsonRpcProvider, keccak256, toUtf8Bytes } = require('ethers');
 
-const NETWORKS = {
-  amoy: { rpc: 'https://polygon-amoy-bor-rpc.publicnode.com', explorer: 'https://amoy.polygonscan.com' },
-  localhost: { rpc: 'http://127.0.0.1:8545', explorer: null },
-};
+const { NETWORKS: TESTNETS, DEFAULT_NETWORK } = require('./networks');
+
+const NETWORKS = { ...TESTNETS, localhost: { rpc: 'http://127.0.0.1:8545', explorer: null } };
 const ABI = [
   'function ticketStatus(uint256 tokenId) view returns (uint8 status, address owner, bytes32 eventKey)',
   'function eventInfo(bytes32 eventKey) view returns (uint32 capacity, uint32 active, bool exists)',
@@ -57,7 +56,7 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.ticket && !args.event) throw new Error('give --ticket and/or --event');
-  const network = args.network ?? 'amoy';
+  const network = args.network ?? DEFAULT_NETWORK;
   const net = NETWORKS[network];
   if (!net && !args.rpc) throw new Error(`unknown network ${network}; pass --rpc`);
   const contract =

@@ -380,24 +380,24 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 ### 설정 (Functions params)
 | 이름 | 종류 | 값 |
 | --- | --- | --- |
-| `CHAIN_CONTRACT_ADDRESS` | string | `contracts/deployments/amoy.json`의 address. 비어 있으면 체인 꺼짐 |
-| `CHAIN_RPC_URL` | secret | Amoy RPC URL. Alchemy·Infura URL에는 API 키가 들어 있어 비밀값으로 둔다 |
+| `CHAIN_CONTRACT_ADDRESS` | string | `contracts/deployments/baseSepolia.json`의 address. 비어 있으면 체인 꺼짐 |
+| `CHAIN_RPC_URL` | secret | Base Sepolia RPC URL(공개 기본값 `https://base-sepolia-rpc.publicnode.com`). Alchemy·Infura URL에는 API 키가 들어 있어 비밀값으로 둔다 |
 | `CHAIN_MINTER_KEY` | secret | minter 개인키 |
 | `CHAIN_WALLET_MNEMONIC` | secret | 학생 주소 파생용 니모닉 |
 
 ### 켜는 순서 (go-live)
 비밀값은 저장소 밖 파일에만 두고 명령줄에 직접 쓰지 않는다.
-1. 컨트랙트 배포와 소스 검증: `contracts/README.md`의 Amoy 배포 런북. 결과 `contracts/deployments/amoy.json`을 커밋한다.
+1. 컨트랙트 배포와 소스 검증: `contracts/README.md`의 테스트넷 배포 런북(기본 Base Sepolia, chainId 84532). 결과 `contracts/deployments/baseSepolia.json`을 커밋한다.
 2. 사전 점검(읽기 전용, 거래 없음):
    ```bash
    MINTER_KEY_FILE=... MNEMONIC_FILE=... npx --prefix functions tsx functions/scripts/chain-preflight.ts
    ```
    RPC 체인 ID, 컨트랙트 존재, ERC-5192, minter의 MINTER_ROLE, 가스 잔고(처리 가능한 티켓 수), 니모닉 형식을 확인한다. 하나라도 실패하면 exit 1. 출력에는 주소와 잔고만 나오고 키, 니모닉, RPC URL은 나오지 않는다.
 3. Secret 등록(팀 확인 후): `firebase functions:secrets:set CHAIN_RPC_URL`, `CHAIN_MINTER_KEY`, `CHAIN_WALLET_MNEMONIC`. 값은 프롬프트에 붙여 넣거나 `--data-file`로 넘긴다.
-4. `functions/.env.ttv-festival-pass`에 `CHAIN_CONTRACT_ADDRESS=<amoy.json의 address>`를 넣는다(공개값).
+4. `functions/.env.ttv-festival-pass`에 `CHAIN_CONTRACT_ADDRESS=<baseSepolia.json의 address>`를 넣는다(공개값).
 5. functions 재배포(팀 확인 후): `firebase deploy --only functions`.
-6. 웹: `apps/web/.env.local`에 `VITE_CHAIN_CONTRACT`, `VITE_CHAIN_EXPLORER=https://amoy.polygonscan.com`을 넣고 빌드·배포한다.
-7. 확인: 입장권 1장을 발급해 `chain.status`가 `done`이 되고 Polygonscan 링크가 열리는지 본다. 체인을 켜기 전에 쌓인 op는 `retryChainOps`로 처리한다.
+6. 웹: `apps/web/.env.local`에 `VITE_CHAIN_CONTRACT`, `VITE_CHAIN_EXPLORER=https://sepolia.basescan.org`을 넣고 빌드·배포한다.
+7. 확인: 입장권 1장을 발급해 `chain.status`가 `done`이 되고 Basescan 링크가 열리는지 본다. 체인을 켜기 전에 쌓인 op는 `retryChainOps`로 처리한다.
 
 되돌리기: `CHAIN_CONTRACT_ADDRESS`를 비우고 재배포하면 체인이 꺼진다. 발급·검표·취소는 그대로 동작하고 op는 `pending`으로 쌓인다.
 
