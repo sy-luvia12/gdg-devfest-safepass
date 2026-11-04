@@ -19,6 +19,7 @@ const STEPS: { key: Step; label: string }[] = [
 ];
 const SCHOOL_ID = /^[a-z0-9-]{2,32}$/;
 const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /** 처음 세팅: 학교 정보 → 재학생 시트 → 행사 등록으로. 팀 계정은 ?new로 새 학교 스페이스를 연다 */
 export function SetupPage() {
@@ -34,6 +35,8 @@ export function SetupPage() {
     domain: existing?.domain ?? '',
     brandColor: existing?.brandColor ?? '#6B4EFF',
   });
+  // 직접 입력하는 hex. 다 치기 전에는 색 선택기에 반영하지 않는다
+  const [colorText, setColorText] = useState(form.brandColor.toUpperCase());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<RosterView | null>(null);
@@ -54,6 +57,7 @@ export function SetupPage() {
     const domain = form.domain.trim().toLowerCase().replace(/^@/, '');
     if (!SCHOOL_ID.test(form.id)) return setError('학교 ID는 영문 소문자·숫자·- 2~32자예요 (예: korea)');
     if (!DOMAIN.test(domain)) return setError('학교 메일 도메인을 확인해 주세요 (예: korea.ac.kr)');
+    if (!HEX.test(colorText)) return setError('상징색은 #과 6자리 hex로 넣어 주세요 (예: #8B0029)');
     setSaving(true);
     try {
       await upsertSchool(form.id, { name: form.name, domain, brandColor: form.brandColor });
@@ -109,15 +113,35 @@ export function SetupPage() {
               onChange={set('domain')}
               hint="이 도메인 메일만 가입할 수 있어요"
             />
-            <label className="flex items-center gap-3 text-label text-ink-2">
-              <input
-                type="color"
-                value={form.brandColor}
-                onChange={set('brandColor')}
-                className="h-10 w-14 cursor-pointer rounded-md border border-line bg-bg"
+            <div className="flex items-end gap-3">
+              <label className="flex flex-col gap-2 text-label text-ink-2">
+                <span className="sr-only">상징색 고르기</span>
+                <input
+                  type="color"
+                  value={form.brandColor}
+                  onChange={(e) => {
+                    set('brandColor')(e);
+                    setColorText(e.target.value.toUpperCase());
+                  }}
+                  className="h-[52px] w-16 cursor-pointer rounded-md border border-line bg-bg"
+                />
+              </label>
+              <TextField
+                className="flex-1"
+                label="학교 상징색"
+                placeholder="#8B0029"
+                maxLength={7}
+                value={colorText}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  const text = (raw.startsWith('#') ? raw : `#${raw}`).toUpperCase();
+                  setColorText(text);
+                  setError(null);
+                  if (HEX.test(text)) setForm((f) => ({ ...f, brandColor: text }));
+                }}
+                hint="색을 고르거나 hex 코드를 직접 넣어요"
               />
-              학교 상징색 <span className="tabular text-ink-3">{form.brandColor.toUpperCase()}</span>
-            </label>
+            </div>
             {error && <p className="text-caption text-danger">{error}</p>}
             <Button type="submit" loading={saving} disabled={!form.name.trim() || !form.domain.trim()}>
               다음
