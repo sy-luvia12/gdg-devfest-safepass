@@ -1,6 +1,6 @@
 import type { DocumentData, DocumentSnapshot, Timestamp, Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { REASSIGN_MODES, type DeviceKey, type DeviceProof, type ReassignMode, type Role } from '../api';
+import { REASSIGN_MODES, type DeviceKey, type DeviceProof, type IssueReason, type ReassignMode, type Role } from '../api';
 import { parseDeviceKey } from '../domain/device';
 import type { FestivalEvent, Ticket } from '../domain/ticket';
 import { db } from '../firebase';
@@ -25,10 +25,17 @@ export function requireAuth(request: CallableRequest<unknown>): Caller {
   };
 }
 
-export async function requireRole(tx: Transaction, uid: string, allowed: readonly Role[]): Promise<DocumentData> {
+export async function requireRole(
+  tx: Transaction,
+  uid: string,
+  allowed: readonly Role[],
+  reason?: IssueReason,
+): Promise<DocumentData> {
   const snap = await tx.get(db.doc(`users/${uid}`));
   if (!snap.exists) throw new HttpsError('not-found', 'User profile missing. Call ensureUser first.');
-  if (!allowed.includes(snap.get('role'))) throw new HttpsError('permission-denied', 'Role not allowed.');
+  if (!allowed.includes(snap.get('role'))) {
+    throw new HttpsError('permission-denied', 'Role not allowed.', reason ? { reason } : undefined);
+  }
   return snap.data()!;
 }
 
@@ -65,7 +72,8 @@ export function readDeviceKey(data: unknown): DeviceKey {
 
 export function readDeviceProof(data: unknown): DeviceProof | null {
   const proof = record(data).deviceProof;
-  if (proof === undefined) return null;
+  // The Firebase JS SDK turns an undefined field into null on the wire, so both mean "no proof".
+  if (proof === undefined || proof === null) return null;
   const { signedAt, signature } = (typeof proof === 'object' && proof !== null ? proof : {}) as Record<string, unknown>;
   if (typeof signedAt !== 'number' || typeof signature !== 'string') {
     throw new HttpsError('invalid-argument', 'deviceProof must be { signedAt: number, signature: string }.');

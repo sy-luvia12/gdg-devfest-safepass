@@ -138,6 +138,17 @@ describe('prototype demo scenario', () => {
 
   it('an outsider gmail account is permission-denied', async () => {
     expect(await codeOf(outsider.issueTicket({ eventId: EVENT }))).toBe('functions/permission-denied');
+    expect(await reasonOf(outsider.issueTicket({ eventId: EVENT }))).toBe('DOMAIN');
+  });
+
+  it('a staff account asking for a ticket is denied with reason ROLE', async () => {
+    expect(await codeOf(staff.issueTicket({ eventId: EVENT }))).toBe('functions/permission-denied');
+    expect(await reasonOf(staff.issueTicket({ eventId: EVENT }))).toBe('ROLE');
+  });
+
+  it('a null deviceProof (the SDK turns undefined into null) counts as no proof', async () => {
+    const res = await alice.refreshQrToken({ ticketId: aliceTicket, deviceProof: null as never });
+    expect(res.qrPayload).toMatch(/^TTV1:/);
   });
 
   it('staff admits a fresh QR and sees holder info and enteredCount 1', async () => {

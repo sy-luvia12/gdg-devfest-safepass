@@ -610,6 +610,17 @@ export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   return s.tickets.find((t) => t.eventId === eventId && t.ownerUid === user.uid) ?? null;
 }
 
+export function subscribeMyTicket(eventId: string, cb: (ticket: Ticket | null) => void, onError?: () => void): () => void {
+  return subscribe((s) => {
+    const uid = currentUid();
+    if (!uid) {
+      onError?.();
+      return null;
+    }
+    return { ticket: s.tickets.find((t) => t.eventId === eventId && t.ownerUid === uid) ?? null };
+  }, (v) => cb(v.ticket));
+}
+
 export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
   await wait();
   const s = load();
@@ -621,9 +632,9 @@ export async function refreshQrToken(ticketId: string): Promise<{ token: string;
   return { token: t.qrToken, expiresAt: t.qrExpiresAt };
 }
 
-/** QR 내용. 실제 백엔드는 TTV1: 접두사 (firebaseApi.ts) */
+/** QR 내용. 실제 백엔드와 같은 TTV1: 접두사 (firebaseApi.ts) */
 export function formatQrPayload(ticketId: string, token: string): string {
-  return `safepass:${ticketId}:${token}`;
+  return `TTV1:${ticketId}:${token}`;
 }
 
 export async function getTicketHistory(ticketId: string): Promise<TicketHistoryItem[]> {
@@ -714,7 +725,7 @@ export async function verifyEntry(qrPayload: string, _eventId?: string): Promise
   const staff = requireUser(s, ['staff', 'admin']);
   const event = myEvent(s, staff);
 
-  const match = /^safepass:([^:]+):([^:]+)$/.exec(qrPayload.trim());
+  const match = /^TTV1:([^:]+):([^:]+)$/.exec(qrPayload.trim());
   const found = match ? s.tickets.find((t) => t.id === match[1]) : undefined;
   const fail = (result: VerifyResult['result'], t?: Ticket): VerifyResult => {
     addLog(s, event, staff, result === 'wrong_event' ? 'invalid' : result, t);

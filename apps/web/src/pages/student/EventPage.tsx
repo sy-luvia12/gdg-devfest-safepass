@@ -17,7 +17,7 @@ type Data = { event: Event; ticket: Ticket | null };
 export function EventPage() {
   const eventId = useEventId();
   const navigate = useNavigate();
-  const { school, events } = useAuth();
+  const { school, events, user } = useAuth();
   const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -44,6 +44,8 @@ export function EventPage() {
       setIssueError(
         code === 'cancelled_before'
           ? '이 축제 입장권을 취소한 적이 있어서 다시 받을 수 없어요'
+          : code === 'wrong_role'
+          ? '학생 계정으로만 받을 수 있어요'
           : code === 'sold_out'
           ? '모두 발급되었어요'
           : code === 'not_school_account'
@@ -129,6 +131,8 @@ export function EventPage() {
           <Button onClick={() => navigate('/ticket')}>내 입장권 보기</Button>
         ) : cancelledBefore ? (
           <Button disabled>취소한 입장권은 다시 받을 수 없어요</Button>
+        ) : user && user.role !== 'student' ? (
+          <Button disabled>학생 계정으로만 받을 수 있어요</Button>
         ) : soldOut ? (
           <Button disabled>모두 발급되었어요</Button>
         ) : (

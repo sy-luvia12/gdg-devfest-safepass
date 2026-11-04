@@ -48,6 +48,7 @@ export const resetDeviceByEmail: typeof mock.resetDeviceByEmail = real ? fb.rese
 // 입장권
 export const issueTicket: typeof mock.issueTicket = real ? fb.issueTicket : mock.issueTicket;
 export const getMyTicket: typeof mock.getMyTicket = real ? fb.getMyTicket : mock.getMyTicket;
+export const subscribeMyTicket: typeof mock.subscribeMyTicket = real ? fb.subscribeMyTicket : mock.subscribeMyTicket;
 export const refreshQrToken: typeof mock.refreshQrToken = real ? fb.refreshQrToken : mock.refreshQrToken;
 export const formatQrPayload: typeof mock.formatQrPayload = real ? fb.formatQrPayload : mock.formatQrPayload;
 export const getTicketHistory: typeof mock.getTicketHistory = real ? empty([]) : mock.getTicketHistory;

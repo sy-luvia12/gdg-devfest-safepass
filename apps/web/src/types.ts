@@ -177,6 +177,7 @@ export class ApiError extends Error {
     | 'unauthenticated'
     | 'not_in_roster'
     | 'invalid_state'
+    | 'wrong_role' // 학생이 아닌 계정(스태프·학생회)으로 입장권을 받으려 함
     | 'device_blocked' // 다른 기기에 등록된 계정
     | 'cancelled_before' // 이 행사 입장권을 취소한 적이 있음
     | 'unknown';
