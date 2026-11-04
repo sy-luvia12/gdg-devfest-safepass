@@ -270,6 +270,9 @@ export type OpsStudent = {
   resetRequested: boolean;
 };
 
+/** 행사 담당자 계정. pending: 아직 로그인 전 (처음 구글 로그인할 때 적용) */
+export type OpsEventAdmin = { email: string; name: string; schoolId: string; pending: boolean };
+
 export type DeviceResetRequest = {
   id: string;
   uid: string;

@@ -62,6 +62,8 @@ export const opsListRoster: typeof mock.opsListRoster = real ? fb.opsListRoster 
 export const opsEditRoster: typeof mock.opsEditRoster = real ? fb.opsEditRoster : mock.opsEditRoster;
 export const opsListStudents: typeof mock.opsListStudents = real ? fb.opsListStudents : mock.opsListStudents;
 export const opsResetDevice: typeof mock.opsResetDevice = real ? fb.opsResetDevice : mock.opsResetDevice;
+export const opsListEventAdmins: typeof mock.opsListEventAdmins = real ? fb.opsListEventAdmins : mock.opsListEventAdmins;
+export const opsSetEventAdmin: typeof mock.opsSetEventAdmin = real ? fb.opsSetEventAdmin : mock.opsSetEventAdmin;
 
 // 재학생 승인 · 기기 (백엔드 다음 단계 2.2, 2.3)
 export const submitVerification: typeof mock.submitVerification = real ? notYet : mock.submitVerification;

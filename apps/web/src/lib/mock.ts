@@ -14,6 +14,7 @@ import {
   type EventTheme,
   type OpenSchool,
   type OpsEditResult,
+  type OpsEventAdmin,
   type OpsRoster,
   type OpsRosterEdit,
   type OpsRosterKind,
@@ -1396,4 +1397,43 @@ export async function opsResetDevice(uid: string): Promise<void> {
   user.deviceName = undefined;
   for (const r of s.deviceResets) if (r.uid === uid) r.status = 'done';
   save(s);
+}
+
+/** mock: 이미 있는 계정(학생회)만 보여준다. 새 메일은 로그인 전 상태로 기억한다 */
+const MOCK_PENDING_ADMINS = 'safepass-mock-pending-admins';
+function pendingAdmins(): OpsEventAdmin[] {
+  try {
+    return JSON.parse(localStorage.getItem(MOCK_PENDING_ADMINS) ?? '[]') as OpsEventAdmin[];
+  } catch {
+    return [];
+  }
+}
+
+export async function opsListEventAdmins(): Promise<OpsEventAdmin[]> {
+  await wait();
+  const s = load();
+  requireOperator(s);
+  const active = s.users
+    .filter((u) => u.role === 'admin' && u.adminSchoolId)
+    .map((u) => ({ email: u.email, name: u.name, schoolId: u.adminSchoolId!, pending: false }));
+  return [...active, ...pendingAdmins()].sort((a, b) => a.schoolId.localeCompare(b.schoolId) || a.email.localeCompare(b.email));
+}
+
+export async function opsSetEventAdmin(email: string, schoolId: string | null): Promise<void> {
+  await wait();
+  const s = load();
+  requireOperator(s);
+  const addr = email.trim().toLowerCase();
+  if (!/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(addr)) throw new ApiError('invalid_state');
+  if (schoolId && !s.schools.some((sc) => sc.id === schoolId)) throw new ApiError('not_found');
+  const user = userByEmail(s, addr);
+  if (user?.role === 'admin' && !user.adminSchoolId) throw new ApiError('invalid_state');
+  const rest = pendingAdmins().filter((a) => a.email !== addr);
+  if (user) {
+    Object.assign(user, schoolId ? { role: 'admin', adminSchoolId: schoolId } : { role: 'student', adminSchoolId: undefined });
+    save(s);
+  } else if (schoolId) {
+    rest.push({ email: addr, name: addr.split('@')[0], schoolId, pending: true });
+  }
+  localStorage.setItem(MOCK_PENDING_ADMINS, JSON.stringify(rest));
 }

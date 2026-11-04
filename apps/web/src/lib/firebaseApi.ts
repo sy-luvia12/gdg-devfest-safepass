@@ -50,6 +50,7 @@ import {
   type ScanLog,
   type OpenSchool,
   type OpsEditResult,
+  type OpsEventAdmin,
   type OpsRoster,
   type OpsRosterEdit,
   type OpsRosterKind,
@@ -311,6 +312,16 @@ export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRo
 
 export async function opsListStudents(schoolId: string): Promise<OpsStudent[]> {
   return (await run(() => call('opsListStudents')({ schoolId }))).data.students;
+}
+
+export async function opsListEventAdmins(): Promise<OpsEventAdmin[]> {
+  const { data } = await run(() => call('opsListEventAdmins')());
+  return data.admins.map((a) => ({ email: a.email, name: a.name, schoolId: a.schoolId, pending: a.status === 'PENDING_SIGNUP' }));
+}
+
+/** 행사 담당자 지정 (schoolId) / 해제 (null). 팀 관리자·운영진 계정은 바꾸지 못한다 (invalid_state) */
+export async function opsSetEventAdmin(email: string, schoolId: string | null): Promise<void> {
+  await run(() => call('opsSetEventAdmin')({ email, schoolId }));
 }
 
 /** 학생 기기 등록을 지운다 (resetDevice). 다음에 로그인한 기기가 새로 등록된다 */

@@ -12,6 +12,7 @@ import { StaffPage } from '@/pages/admin/StaffPage';
 import { StudentRosterPage } from '@/pages/admin/StudentRosterPage';
 import { TicketsPage } from '@/pages/admin/TicketsPage';
 import { MePage } from '@/pages/common/MePage';
+import { OpsAdminsPage } from '@/pages/ops/OpsAdminsPage';
 import { OpsDevicesPage } from '@/pages/ops/OpsDevicesPage';
 import { OpsEventPage } from '@/pages/ops/OpsEventPage';
 import { OpsHomePage } from '@/pages/ops/OpsHomePage';
@@ -114,6 +115,7 @@ export const router = createBrowserRouter([
       { path: '/ops', element: <OpsHomePage /> },
       { path: '/ops/schools/:schoolId', element: <OpsSchoolPage /> },
       { path: '/ops/events/:eventId', element: <OpsEventPage /> },
+      { path: '/ops/admins', element: <OpsAdminsPage /> },
       { path: '/ops/devices', element: <OpsDevicesPage /> },
     ],
   },

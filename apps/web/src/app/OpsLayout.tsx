@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { LayoutGrid, LogOut, School as SchoolIcon, ShieldHalf, Smartphone, SquareArrowOutUpRight } from 'lucide-react';
+import { LayoutGrid, LogOut, School as SchoolIcon, ShieldHalf, Smartphone, SquareArrowOutUpRight, UserCog } from 'lucide-react';
 import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { cx } from '@/components/cx';
 import { OpsState } from '@/components/ops/ui';
@@ -85,7 +85,8 @@ export function OpsLayout() {
           {(schools ?? []).map((s) =>
             item(`/ops/schools/${s.id}`, s.name, <SchoolIcon size={16} strokeWidth={1.75} />),
           )}
-          <p className="hidden px-3 pb-1 pt-4 text-caption text-ops-ink-3 md:block">학생</p>
+          <p className="hidden px-3 pb-1 pt-4 text-caption text-ops-ink-3 md:block">계정</p>
+          {item('/ops/admins', '행사 관리자 지정', <UserCog size={16} strokeWidth={1.75} />)}
           {item('/ops/devices', '기기 초기화', <Smartphone size={16} strokeWidth={1.75} />)}
         </nav>
         <main className="min-w-0 flex-1">
