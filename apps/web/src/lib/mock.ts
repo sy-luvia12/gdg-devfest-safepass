@@ -13,12 +13,19 @@ import {
   type EventStats,
   type EventTheme,
   type OpenSchool,
+  type OpsEditResult,
+  type OpsRoster,
+  type OpsRosterEdit,
+  type OpsRosterKind,
+  type OpsRosterRow,
+  type OpsStudent,
   type PrecheckResult,
   type QrRefresh,
   type Reassignment,
   type ReassignMode,
   type RosterEntry,
   type RosterImport,
+  type RosterSkipReason,
   type RosterView,
   type ScanLog,
   type ScanResult,
@@ -34,13 +41,15 @@ import {
   type WaitlistEntry,
 } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v6';
+const STATE_KEY = 'safepass-mock-v7';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
 const LATENCY_MS = 300;
 
-type Roster = { sheetUrl: string; importedAt: number; entries: RosterEntry[] };
+type StudentRow = { email: string; name: string; studentId: string };
+type EventRow = { name: string; studentId: string };
+type Roster<R = StudentRow | EventRow> = { sheetUrl: string; importedAt: number; entries: R[] };
 
 type MockState = {
   schools: School[];
@@ -52,8 +61,8 @@ type MockState = {
   reassignments: Reassignment[];
   waitlists: Record<string, WaitlistEntry[]>; // eventId → 대기 명단
   scanLogs: ScanLog[];
-  rosters: Record<string, Roster>; // eventId → 행사 명단
-  studentRosters: Record<string, Roster>; // schoolId → 재학생 명단
+  rosters: Record<string, Roster<EventRow>>; // eventId → 행사 명단 (이름·학번)
+  studentRosters: Record<string, Roster<StudentRow>>; // schoolId → 재학생 명단 (이름·학번·메일)
   deviceResets: DeviceResetRequest[];
   seq: number;
 };
@@ -159,6 +168,8 @@ MOCK_SCHOOL_ACCOUNTS.push({
   accounts: [{ uid: `${NEW_SPACE.id}-admin`, label: '학생회 처음 세팅' }],
 });
 export const MOCK_OUTSIDER = { uid: 'outsider', label: '개인 Gmail (외부인)' };
+/** mock 운영진 계정. 아이디 ops / 비밀번호 ops (mock 전용, 실제 배포는 시드에서 정한 값) */
+export const MOCK_OPS = { uid: 'ops', id: 'ops', password: 'ops' };
 const DEFAULT_ACCOUNT = 'hanbit-s1';
 
 const photo = (uid: string) => `/mock/${uid}.svg`;
@@ -303,6 +314,18 @@ function seed(): MockState {
     deviceStatus: 'registered',
   });
   s.users.push({
+    uid: MOCK_OPS.uid,
+    schoolId: '',
+    name: '어둠의 운영진',
+    studentId: '',
+    email: 'ops@ops.safepass.app',
+    photoUrl: '/mock/outsider.svg',
+    role: 'admin',
+    operator: true,
+    verifyStatus: 'approved',
+    deviceStatus: 'registered',
+  });
+  s.users.push({
     uid: 'outsider',
     schoolId: '',
     name: '외부인',
@@ -388,7 +411,7 @@ function findEvent(s: MockState, eventId: string): Event {
 const summaryOf = (r: Roster | undefined) => r && { sheetUrl: r.sheetUrl, importedAt: r.importedAt, count: r.entries.length };
 
 /** 학교 학생 + 가짜 학생 (명단 불러오기 mock) */
-function rosterEntries(s: MockState, schoolId: string, domain: string): RosterEntry[] {
+function rosterEntries(s: MockState, schoolId: string, domain: string): StudentRow[] {
   const students = s.users
     .filter((u) => u.schoolId === schoolId && u.role === 'student')
     .map((u) => ({ email: u.email, name: u.name, studentId: u.studentId }));
@@ -506,6 +529,8 @@ export async function listSchools(): Promise<School[]> {
   const s = load();
   const uid = currentUid();
   const user = s.users.find((u) => u.uid === uid);
+  // 운영진은 모든 학교
+  if (user?.operator) return [...s.schools].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   return s.schools.filter((sc) => sc.id === user?.schoolId);
 }
 
@@ -533,9 +558,10 @@ export async function upsertSchool(schoolId: string, input: SchoolInput): Promis
 }
 
 function rosterView(r: Roster | undefined): RosterView {
+  const entries: RosterEntry[] = [...(r?.entries ?? [])];
   return {
     summary: summaryOf(r) ?? null,
-    entries: [...(r?.entries ?? [])].sort((a, b) => a.studentId.localeCompare(b.studentId)).slice(0, 200),
+    entries: entries.sort((a, b) => a.studentId.localeCompare(b.studentId)).slice(0, 200),
     serviceAccountEmail: 'ttv-festival-pass@appspot.gserviceaccount.com',
   };
 }
@@ -573,7 +599,7 @@ export async function getEventRoster(eventId: string): Promise<RosterView> {
   return rosterView(s.rosters[eventId]);
 }
 
-/** 행사 명단(당첨자) 불러오기. mock은 재학생 명단의 앞쪽 절반 + 학교 학생 계정 */
+/** 행사 명단(당첨자) 불러오기. 시트는 이름·학번만. mock은 재학생 명단의 학교 학생 + 가짜 학생 절반, 그리고 맞지 않는 줄 2개 */
 export async function importEventRoster(eventId: string, sheetUrl: string): Promise<RosterImport> {
   await wait();
   await wait();
@@ -581,13 +607,20 @@ export async function importEventRoster(eventId: string, sheetUrl: string): Prom
   const event = findEvent(s, eventId);
   requireSchoolAdmin(s, event.schoolId);
   checkSheetUrl(sheetUrl);
-  const pool = event.schoolIds.flatMap((id) => s.studentRosters[id]?.entries ?? []);
+  const pool = s.studentRosters[event.schoolId]?.entries ?? [];
   const students = pool.filter((r) => !r.email.startsWith('member'));
   const winners = pool.filter((r) => r.email.startsWith('member')).filter((_, i) => i % 2 === 0);
-  const roster = { sheetUrl: sheetUrl.trim(), importedAt: Date.now(), entries: [...students, ...winners] };
+  const entries = [...students, ...winners].map(({ name, studentId }) => ({ name, studentId }));
+  const roster = { sheetUrl: sheetUrl.trim(), importedAt: Date.now(), entries };
   s.rosters[eventId] = roster;
   save(s);
-  return { summary: summaryOf(roster)!, skipped: [] };
+  return {
+    summary: summaryOf(roster)!,
+    skipped: [
+      { row: entries.length + 2, reason: 'NOT_IN_STUDENT_ROSTER' },
+      { row: entries.length + 3, reason: 'NAME_MISMATCH' },
+    ],
+  };
 }
 
 /** 행사 등록. 주최 학교(schoolIds[0]) 관리자만 */
@@ -903,7 +936,8 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   const cancelledBefore = s.reassignments.some((r) => r.eventId === eventId && r.fromUid === user.uid);
   if (cancelledBefore && !event.allowReissueAfterCancel) throw new ApiError('cancelled_before');
   if (event.settings.requireRoster) {
-    const inRoster = s.rosters[eventId]?.entries.some((r) => r.email.toLowerCase() === user.email.toLowerCase());
+    const name = user.name.replace(/\s+/g, '');
+    const inRoster = s.rosters[eventId]?.entries.some((r) => r.studentId === user.studentId && r.name.replace(/\s+/g, '') === name);
     if (!inRoster) throw new ApiError('not_in_roster');
   }
   if (event.issuedCount >= event.capacity) throw new ApiError('sold_out');
@@ -1251,4 +1285,114 @@ export function mockSelectedAccount(): string {
 
 export function mockReset() {
   save(seed());
+}
+
+// ---------- 운영진 콘솔 (/ops) ----------
+
+export async function signInAsOperator(id: string, password: string): Promise<User> {
+  await wait();
+  if (id.trim().toLowerCase() !== MOCK_OPS.id || password !== MOCK_OPS.password) throw new ApiError('wrong_password');
+  const s = load();
+  const user = s.users.find((u) => u.uid === MOCK_OPS.uid);
+  if (!user) throw new ApiError('unknown');
+  sessionStorage.setItem(SESSION_KEY, user.uid);
+  return user;
+}
+
+function requireOperator(s: MockState): User {
+  const user = requireUser(s, ['admin']);
+  if (!user.operator) throw new ApiError('wrong_role');
+  return user;
+}
+
+const sameName = (a: string, b: string) => a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
+const STUDENT_ID = /^[A-Za-z0-9-]{1,32}$/;
+
+export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<OpsRoster> {
+  await wait();
+  const s = load();
+  requireOperator(s);
+  if (kind === 'school') {
+    if (!s.schools.some((sc) => sc.id === id)) throw new ApiError('not_found');
+    const r = s.studentRosters[id];
+    const rows: OpsRosterRow[] = [...(r?.entries ?? [])]
+      .sort((a, b) => a.studentId.localeCompare(b.studentId))
+      .map((e) => ({ ...e, claimed: !!claimedBy(s, id, e.studentId) }));
+    return { rows, summary: summaryOf(r) ?? null };
+  }
+  const event = findEvent(s, id);
+  const school = s.studentRosters[event.schoolId]?.entries ?? [];
+  const r = s.rosters[id];
+  const rows: OpsRosterRow[] = [...(r?.entries ?? [])]
+    .sort((a, b) => a.studentId.localeCompare(b.studentId))
+    .map((e) => {
+      const m = school.find((x) => x.studentId === e.studentId);
+      const match = !m ? 'NOT_IN_STUDENT_ROSTER' : sameName(m.name, e.name) ? 'OK' : 'NAME_MISMATCH';
+      return { name: e.name, studentId: e.studentId, ...(m ? { email: m.email } : {}), match };
+    });
+  return { rows, summary: summaryOf(r) ?? null, schoolId: event.schoolId };
+}
+
+export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRosterEdit): Promise<OpsEditResult> {
+  await wait();
+  const s = load();
+  requireOperator(s);
+  const school = kind === 'school' ? s.schools.find((sc) => sc.id === id) : undefined;
+  if (kind === 'school' && !school) throw new ApiError('not_found');
+  if (kind === 'event') findEvent(s, id);
+
+  const skipped: { index: number; reason: RosterSkipReason }[] = [];
+  const byId = new Map<string, StudentRow | EventRow>();
+  edit.upserts.forEach((u, index) => {
+    const row = { name: u.name.trim(), studentId: u.studentId.trim(), email: (u.email ?? '').trim().toLowerCase() };
+    if (!row.name && !row.studentId && !row.email) return;
+    if (!row.name || !row.studentId || (kind === 'school' && !row.email)) return skipped.push({ index, reason: 'MISSING_FIELD' });
+    if (!STUDENT_ID.test(row.studentId)) return skipped.push({ index, reason: 'BAD_STUDENT_ID' });
+    if (kind === 'school' && domainOf(row.email) !== school!.domain) return skipped.push({ index, reason: 'BAD_DOMAIN' });
+    byId.set(row.studentId, kind === 'school' ? row : { name: row.name, studentId: row.studentId });
+  });
+
+  const now = Date.now();
+  const current = kind === 'school' ? s.studentRosters[id] : s.rosters[id];
+  const before: (StudentRow | EventRow)[] = current?.entries ?? [];
+  const removed = new Set(edit.deletes.filter((d) => !byId.has(d)));
+  if (edit.replace) for (const e of before) if (!byId.has(e.studentId)) removed.add(e.studentId);
+  const deleted = before.filter((e) => removed.has(e.studentId)).length;
+  const kept = before.filter((e) => !removed.has(e.studentId) && !byId.has(e.studentId));
+  const entries = [...kept, ...byId.values()];
+  const roster = { sheetUrl: current?.sheetUrl ?? '', importedAt: now, entries };
+  if (kind === 'school') s.studentRosters[id] = roster as Roster<StudentRow>;
+  else s.rosters[id] = roster as Roster<EventRow>;
+  save(s);
+  return { saved: byId.size, deleted, skipped, summary: summaryOf(roster)! };
+}
+
+export async function opsListStudents(schoolId: string): Promise<OpsStudent[]> {
+  await wait();
+  const s = load();
+  requireOperator(s);
+  return s.users
+    .filter((u) => u.schoolId === schoolId && u.role === 'student')
+    .map((u) => ({
+      uid: u.uid,
+      name: u.name,
+      studentId: u.studentId,
+      email: u.email,
+      deviceRegistered: !!u.deviceName,
+      resetRequested: s.deviceResets.some((r) => r.uid === u.uid && r.status === 'pending'),
+    }))
+    .sort((a, b) => a.studentId.localeCompare(b.studentId));
+}
+
+export async function opsResetDevice(uid: string): Promise<void> {
+  await wait();
+  const s = load();
+  requireOperator(s);
+  const user = s.users.find((u) => u.uid === uid);
+  if (!user) throw new ApiError('not_found');
+  // 등록을 지운다. 다음에 로그인한 기기가 새로 등록된다
+  user.deviceStatus = 'registered';
+  user.deviceName = undefined;
+  for (const r of s.deviceResets) if (r.uid === uid) r.status = 'done';
+  save(s);
 }

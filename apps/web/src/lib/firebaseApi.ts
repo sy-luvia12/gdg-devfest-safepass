@@ -5,6 +5,7 @@ import {
   GoogleAuthProvider,
   isSignInWithEmailLink,
   sendSignInLinkToEmail,
+  signInWithEmailAndPassword,
   signInWithEmailLink,
   signInWithPopup,
   signOut as fbSignOut,
@@ -48,6 +49,11 @@ import {
   type RosterView,
   type ScanLog,
   type OpenSchool,
+  type OpsEditResult,
+  type OpsRoster,
+  type OpsRosterEdit,
+  type OpsRosterKind,
+  type OpsStudent,
   type PrecheckResult,
   type School,
   type SchoolInput,
@@ -124,6 +130,7 @@ function toUser(
     role: p.role,
     adminSchoolId: p.adminSchoolId,
     staffSchoolId: p.staffSchoolId,
+    operator: p.operator === true ? true : undefined,
     // 재학생 명단이 있는 학교의 학생만 가입 단계를 본다 (profileToUser). 그 밖에는 통과로 본다
     verifyStatus,
     deviceStatus,
@@ -258,6 +265,52 @@ export async function signInWithSchoolAccount(): Promise<User> {
 
 export async function signOut(): Promise<void> {
   await fbSignOut(auth);
+}
+
+// ---------- 운영진 (어둠의 운영진) ----------
+
+/** 운영진 아이디는 이 도메인의 메일 주소로 Firebase 이메일·비밀번호 계정이 된다 (시드가 만든다) */
+const OPS_EMAIL_DOMAIN = 'ops.safepass.app';
+export const opsEmailOf = (id: string) => `${id.trim().toLowerCase()}@${OPS_EMAIL_DOMAIN}`;
+
+/** 아이디·비밀번호로 운영진 계정에 들어간다. 운영진이 아닌 계정이면 로그아웃하고 wrong_password */
+export async function signInAsOperator(id: string, password: string): Promise<User> {
+  if (!/^[a-z0-9._-]{1,40}$/i.test(id.trim()) || !password) throw new ApiError('wrong_password');
+  try {
+    await signInWithEmailAndPassword(auth, opsEmailOf(id), password);
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? '';
+    if (code === 'auth/too-many-requests') throw new ApiError('too_many_attempts');
+    if (code.startsWith('auth/')) throw new ApiError('wrong_password');
+    throw toApiError(e);
+  }
+  try {
+    const { data } = await call('ensureUser')();
+    if (data.role !== 'admin' || !data.operator) throw new ApiError('wrong_password');
+    return toUser(data, '');
+  } catch (e) {
+    await fbSignOut(auth);
+    throw toApiError(e);
+  }
+}
+
+export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<OpsRoster> {
+  const { data } = await run(() => call('opsListRoster')({ kind, id }));
+  return { rows: data.rows, summary: data.summary && fromApiSummary(data.summary), schoolId: data.schoolId };
+}
+
+export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRosterEdit): Promise<OpsEditResult> {
+  const { data } = await run(() => call('opsEditRoster')({ kind, id, ...edit }));
+  return { saved: data.saved, deleted: data.deleted, skipped: data.skipped, summary: fromApiSummary(data.summary) };
+}
+
+export async function opsListStudents(schoolId: string): Promise<OpsStudent[]> {
+  return (await run(() => call('opsListStudents')({ schoolId }))).data.students;
+}
+
+/** 학생 기기 등록을 지운다 (resetDevice). 다음에 로그인한 기기가 새로 등록된다 */
+export async function opsResetDevice(uid: string): Promise<void> {
+  await run(() => call('resetDevice')({ uid }));
 }
 
 export async function getCurrentUser(): Promise<User | null> {
