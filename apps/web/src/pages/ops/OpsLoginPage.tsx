@@ -3,7 +3,6 @@ import { ShieldHalf } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { OpsButton, OpsInput, OpsNotice, OpsState } from '@/components/ops/ui';
-import { USE_MOCK } from '@/lib/api';
 import { ApiError } from '@/types';
 
 /** 운영진 로그인: 정해진 아이디·비밀번호 (메일 링크 없음) */
@@ -71,7 +70,6 @@ export function OpsLoginPage() {
         <OpsButton type="submit" variant="primary" size="md" loading={submitting} disabled={!id || !password} className="mt-2 w-full">
           들어가기
         </OpsButton>
-        {USE_MOCK && <p className="text-center text-caption text-ops-ink-3">mock: 아이디 ops / 비밀번호 ops</p>}
         <Link to="/" className="text-center text-caption text-ops-ink-3 underline underline-offset-4">
           일반 로그인으로
         </Link>

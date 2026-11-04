@@ -243,7 +243,8 @@ export type OpsRosterRow = {
   match?: 'OK' | 'NOT_IN_STUDENT_ROSTER' | 'NAME_MISMATCH';
 };
 
-export type OpsRoster = { rows: OpsRosterRow[]; summary: RosterSummary | null; schoolId?: string };
+/** editable: 행사 명단은 행사 담당자가 시트로 한 번 불러온 뒤에만 고칠 수 있다 (재학생 명단은 항상 true) */
+export type OpsRoster = { rows: OpsRosterRow[]; summary: RosterSummary | null; schoolId?: string; editable: boolean };
 
 /** 명단 고치기. upserts는 학번 기준으로 추가·덮어쓰기, deletes는 지울 학번, replace면 upserts에 없는 줄을 모두 지운다 */
 export type OpsRosterEdit = {

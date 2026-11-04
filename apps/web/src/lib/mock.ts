@@ -1318,7 +1318,7 @@ export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<Op
     const rows: OpsRosterRow[] = [...(r?.entries ?? [])]
       .sort((a, b) => a.studentId.localeCompare(b.studentId))
       .map((e) => ({ ...e, claimed: !!claimedBy(s, id, e.studentId) }));
-    return { rows, summary: summaryOf(r) ?? null };
+    return { rows, summary: summaryOf(r) ?? null, editable: true };
   }
   const event = findEvent(s, id);
   const school = s.studentRosters[event.schoolId]?.entries ?? [];
@@ -1330,7 +1330,7 @@ export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<Op
       const match = !m ? 'NOT_IN_STUDENT_ROSTER' : sameName(m.name, e.name) ? 'OK' : 'NAME_MISMATCH';
       return { name: e.name, studentId: e.studentId, ...(m ? { email: m.email } : {}), match };
     });
-  return { rows, summary: summaryOf(r) ?? null, schoolId: event.schoolId };
+  return { rows, summary: summaryOf(r) ?? null, schoolId: event.schoolId, editable: !!r?.sheetUrl };
 }
 
 export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRosterEdit): Promise<OpsEditResult> {
@@ -1339,7 +1339,8 @@ export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRo
   requireOperator(s);
   const school = kind === 'school' ? s.schools.find((sc) => sc.id === id) : undefined;
   if (kind === 'school' && !school) throw new ApiError('not_found');
-  if (kind === 'event') findEvent(s, id);
+  // 행사 명단은 행사 담당자가 시트로 한 번 불러온 뒤에만 고친다
+  if (kind === 'event' && !(findEvent(s, id) && s.rosters[id]?.sheetUrl)) throw new ApiError('invalid_state');
 
   const skipped: { index: number; reason: RosterSkipReason }[] = [];
   const byId = new Map<string, StudentRow | EventRow>();

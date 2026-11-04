@@ -296,7 +296,12 @@ export async function signInAsOperator(id: string, password: string): Promise<Us
 
 export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<OpsRoster> {
   const { data } = await run(() => call('opsListRoster')({ kind, id }));
-  return { rows: data.rows, summary: data.summary && fromApiSummary(data.summary), schoolId: data.schoolId };
+  return {
+    rows: data.rows,
+    summary: data.summary && fromApiSummary(data.summary),
+    schoolId: data.schoolId,
+    editable: data.editable,
+  };
 }
 
 export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRosterEdit): Promise<OpsEditResult> {

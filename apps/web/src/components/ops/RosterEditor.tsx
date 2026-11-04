@@ -3,6 +3,7 @@ import { ClipboardPaste, Download, Pencil, Plus, Search, Trash2, X } from 'lucid
 import { formatDateTime } from '@/app/format';
 import { opsEditRoster, opsListRoster } from '@/lib/api';
 import type { OpsEditResult, OpsRoster, OpsRosterKind, OpsRosterRow, RosterSkipReason } from '@/types';
+import { cx } from '../cx';
 import { downloadCsv, emptyDraft, parsePasted, type Draft } from './rosterText';
 import { OpsBadge, OpsButton, OpsInput, OpsNotice, OpsPanel, OpsState } from './ui';
 
@@ -165,12 +166,16 @@ export function RosterEditor({ kind, id, label }: Props) {
             className="w-full pl-9"
           />
         </div>
-        <OpsButton icon={<Plus size={15} strokeWidth={1.75} />} onClick={() => setAdding((v) => !v)}>
-          줄 추가
-        </OpsButton>
-        <OpsButton icon={<ClipboardPaste size={15} strokeWidth={1.75} />} onClick={() => setPasteOpen((v) => !v)}>
-          시트에서 붙여넣기
-        </OpsButton>
+        {data.editable && (
+          <>
+            <OpsButton icon={<Plus size={15} strokeWidth={1.75} />} onClick={() => setAdding((v) => !v)}>
+              줄 추가
+            </OpsButton>
+            <OpsButton icon={<ClipboardPaste size={15} strokeWidth={1.75} />} onClick={() => setPasteOpen((v) => !v)}>
+              시트에서 붙여넣기
+            </OpsButton>
+          </>
+        )}
         <OpsButton
           icon={<Download size={15} strokeWidth={1.75} />}
           disabled={data.rows.length === 0}
@@ -180,6 +185,11 @@ export function RosterEditor({ kind, id, label }: Props) {
         </OpsButton>
       </div>
 
+      {!data.editable && (
+        <OpsNotice tone="muted">
+          행사 담당자가 행사 관리 화면에서 구글 시트로 명단을 한 번 불러와야 해요. 그 뒤부터 여기서 고칠 수 있어요
+        </OpsNotice>
+      )}
       {notice && <OpsNotice tone={notice.tone}>{notice.text}</OpsNotice>}
 
       {pasteOpen && (
@@ -229,7 +239,16 @@ export function RosterEditor({ kind, id, label }: Props) {
 
       <OpsPanel className="overflow-hidden">
         {rows.length === 0 ? (
-          <OpsState kind="empty" title={query ? '검색 결과가 없어요' : '명단이 비어 있어요. 줄을 추가하거나 시트에서 붙여 넣어요'} />
+          <OpsState
+            kind="empty"
+            title={
+              query
+                ? '검색 결과가 없어요'
+                : data.editable
+                  ? '명단이 비어 있어요. 줄을 추가하거나 시트에서 붙여 넣어요'
+                  : '아직 불러온 명단이 없어요'
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-label">
@@ -289,7 +308,7 @@ export function RosterEditor({ kind, id, label }: Props) {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex justify-end gap-1">
+                        <div className={cx('flex justify-end gap-1', !data.editable && 'hidden')}>
                           <OpsButton
                             variant="ghost"
                             aria-label={`${r.name} 수정`}

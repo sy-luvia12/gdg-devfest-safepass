@@ -57,9 +57,7 @@ export function OpsHomePage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <OpsBadge tone={school.studentRoster ? 'accent' : 'warn'}>
-                    재학생 {school.studentRoster ? `${school.studentRoster.count}명` : '없음'}
-                  </OpsBadge>
+                  <OpsBadge tone={school.studentRoster?.count ? 'accent' : 'warn'}>재학생 {school.studentRoster?.count ?? 0}명</OpsBadge>
                   <ChevronRight size={16} strokeWidth={1.75} className="text-ops-ink-3" />
                 </div>
               </Link>
@@ -79,8 +77,13 @@ export function OpsHomePage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {e.settings.requireRoster && <OpsBadge tone="muted">명단 발급</OpsBadge>}
-                      <OpsBadge tone={e.roster ? 'accent' : 'muted'}>행사 명단 {e.roster ? `${e.roster.count}명` : '없음'}</OpsBadge>
+                      {e.settings.requireRoster ? (
+                        <OpsBadge tone={e.roster?.sheetUrl ? 'accent' : 'warn'}>
+                          행사 명단 {e.roster?.sheetUrl ? `${e.roster.count}명` : '시트 전'}
+                        </OpsBadge>
+                      ) : (
+                        <OpsBadge tone="muted">모든 재학생</OpsBadge>
+                      )}
                     </div>
                   </Link>
                 ))

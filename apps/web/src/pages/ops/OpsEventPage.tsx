@@ -61,11 +61,18 @@ export function OpsEventPage() {
         <OpsBadge tone="muted">
           발급 {event.issuedCount}/{event.capacity} · 입장 {event.enteredCount}
         </OpsBadge>
-        <OpsBadge tone={event.settings.requireRoster ? 'accent' : 'warn'}>
-          {event.settings.requireRoster ? '명단에 있는 학생만 발급' : '명단 발급 꺼짐 (누구나 발급)'}
-        </OpsBadge>
+        <OpsBadge tone="accent">{event.settings.requireRoster ? '행사 명단에 있는 학생만 발급' : '모든 재학생 대상'}</OpsBadge>
       </div>
-      <RosterEditor kind="event" id={event.id} label={`${eventTitle(event)}_행사명단`} />
+      {event.settings.requireRoster ? (
+        <RosterEditor kind="event" id={event.id} label={`${eventTitle(event)}_행사명단`} />
+      ) : (
+        <OpsPanel>
+          <OpsState
+            kind="empty"
+            title={`모든 재학생 대상 행사라 행사 명단이 필요 없어요. ${school?.name ?? '학교'} 재학생 명단으로 가입한 학생은 누구나 받을 수 있어요`}
+          />
+        </OpsPanel>
+      )}
     </>
   );
 }
