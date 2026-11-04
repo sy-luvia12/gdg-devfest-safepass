@@ -254,7 +254,7 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 
 ## 구현 상태 (실제 연동 vs 화면만)
 - 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia)와 아웃박스(`functions/src/chain`)가 있다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
-- 기기 묶기: 로그인 때 기기 키를 등록하고 QR 갱신 요청에 서명한다. 서버는 `events.requireDevice`가 켜진 행사에서만 확인한다(시드 기본 꺼짐). 검표(`verifyEntry`)는 서명을 보지 않는다. 꺼진 행사에서는 같은 계정으로 다른 폰에 로그인해도 QR이 뜨므로 데모에서 이 장면은 빼거나 `requireDevice`를 켠다.
+- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인만 `events.requireDevice`가 켜진 행사에서 일어나고(시드 기본 꺼짐), 검표(`verifyEntry`)는 서명을 보지 않는다.
 - 관리자·스태프 권한은 전역 `role`이다. 학교 단위로 나누지 않았다(이후 과제).
 - 아직 화면과 mock뿐: 재학생 승인, 사진·학생증 업로드, 구글 시트 명단·대기 명단 등록, 테마·검표 설정 저장, 개인정보 파기
 - 하지 않는 것: reCAPTCHA, App Check, Gemini, 결제, 개인 간 양도
