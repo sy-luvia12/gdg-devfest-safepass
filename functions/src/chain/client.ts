@@ -2,7 +2,8 @@ import { Contract, isError, JsonRpcProvider, Wallet, type ContractTransactionRes
 import { FESTIVAL_TICKET_ABI } from './abi';
 import { eventKeyOf, tokenIdOf, type Reason } from './ids';
 
-export type ChainErrorCode = 'INSUFFICIENT_FUNDS' | 'TX_FAILED';
+// SEED_EXPIRED: a lottery round's seed block hash is gone (over 256 blocks); the round is void, never re-committed.
+export type ChainErrorCode = 'INSUFFICIENT_FUNDS' | 'TX_FAILED' | 'SEED_EXPIRED';
 
 export class ChainError extends Error {
   constructor(
@@ -114,13 +115,14 @@ export function createChainClient(cfg: ChainConfig): ChainClient {
         if (d.commitment !== commitment) throw new ChainError('TX_FAILED', `round ${round} is seeded with another commitment`);
         return { seed: d.seed, seedBlock: d.seedBlock, commitTx, seedTx };
       }
-      const head = await provider.getBlockNumber();
-      const expired = d.commitment !== ZERO_HASH && head > d.seedBlock + BLOCKHASH_WINDOW;
-      if (d.commitment === ZERO_HASH || expired) {
+      if (d.commitment === ZERO_HASH) {
         commitTx = await send(() => ticket.commitDraw(key, round, commitment));
         d = await read();
       } else if (d.commitment !== commitment) {
         throw new ChainError('TX_FAILED', `round ${round} is committed with another commitment`);
+      } else if ((await provider.getBlockNumber()) > d.seedBlock + BLOCKHASH_WINDOW) {
+        // Never re-commit: that would be a second seed for the same round.
+        throw new ChainError('SEED_EXPIRED', `round ${round} missed its seed window`);
       }
       // SEED_DELAY is 5 blocks (about 10 s on Base Sepolia). Polling stays well inside a function timeout.
       for (let i = 0; i < 120 && (await provider.getBlockNumber()) <= d.seedBlock; i++) await new Promise((r) => setTimeout(r, 1000));

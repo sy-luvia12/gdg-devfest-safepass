@@ -31,7 +31,7 @@ interface DrawEntryDoc {
 export interface DrawDoc {
   eventId: string;
   round: number;
-  status: 'snapshot' | 'committing' | 'seeded' | 'announced';
+  status: 'snapshot' | 'committing' | 'seeded' | 'announced' | 'void';
   announceAtMs: number;
   announceOnSeed: boolean;
   entries: DrawEntryDoc[];
@@ -62,6 +62,23 @@ export function poolTicket(tx: Transaction, ticketRef: DocumentReference, reassi
   tx.update(ticketRef, { status: 'pooled', ownerUid: null, qrToken: null, qrExpiresAt: null, drawRound: null, offer: null, reassignmentId });
 }
 
+/**
+ * The issueTicket rules a lottery winner must also meet: a student, one ticket per event, not someone who
+ * cancelled this event's ticket (unless the event allows reissue), and on the event roster when it has one.
+ */
+async function mayTakeTicket(db: Firestore, tx: Transaction, eventId: string, eventData: FirebaseFirestore.DocumentData, uid: string, email: string) {
+  const user = await tx.get(db.doc(`users/${uid}`));
+  if (user.get('role') !== 'student') return false;
+  const held = await tx.get(db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', uid).limit(1));
+  if (!held.empty) return false;
+  if (eventData.allowReissueAfterCancel !== true) {
+    const cancelled = await tx.get(db.collection('reassignments').where('fromUid', '==', uid).where('eventId', '==', eventId).limit(1));
+    if (!cancelled.empty) return false;
+  }
+  if (eventData.requireRoster === true && !(await tx.get(db.doc(`events/${eventId}/roster/${email}`))).exists) return false;
+  return true;
+}
+
 async function eligibleEntries(db: Firestore, tx: Transaction, eventId: string) {
   const eventSnap = await tx.get(db.doc(`events/${eventId}`));
   const event = { allowedDomains: (eventSnap.get('allowedDomains') as string[] | undefined) ?? [], reassignMode: eventSnap.get('reassignMode') as string };
@@ -72,8 +89,7 @@ async function eligibleEntries(db: Firestore, tx: Transaction, eventId: string) 
     if (!isDomainAllowed(event, email)) continue;
     const account = (await tx.get(db.collection('users').where('email', '==', email).limit(1))).docs[0];
     if (!account) continue;
-    const held = await tx.get(db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', account.id).limit(1));
-    if (!held.empty) continue;
+    if (!(await mayTakeTicket(db, tx, eventId, eventSnap.data() ?? {}, account.id, email))) continue;
     out.push({ email, uid: account.id });
   }
   return { event, eventSnap, entries: out };
@@ -151,6 +167,23 @@ export async function commitRound(db: Firestore, eventId: string, round: number)
   });
 }
 
+/**
+ * The seed block hash expired before seedDraw (the processor was down for over 256 blocks). The round is void
+ * and never re-committed: a re-commit would give the operator a second seed after seeing the first. Its tickets
+ * go back to the pool for a new round with a new snapshot; the void commit stays visible on chain.
+ */
+export async function voidRound(db: Firestore, eventId: string, round: number): Promise<void> {
+  await db.runTransaction(async (tx) => {
+    const ref = drawRef(db, eventId, round);
+    const draw = (await tx.get(ref)).data() as DrawDoc | undefined;
+    if (!draw || draw.status !== 'committing') return;
+    const tickets = await Promise.all(draw.ticketIds.map((id) => tx.get(db.doc(`tickets/${id}`))));
+    for (const t of tickets) if (t.get('status') === 'pooled') tx.update(t.ref, { drawRound: null });
+    tx.update(ref, { status: 'void' });
+    tx.update(planRef(db, eventId), { status: 'skipped', lastAnnounceAtMs: draw.announceAtMs });
+  });
+}
+
 /** Called once the seed is on chain: works out the winners. Announces at once for runDrawNow rounds. */
 export async function applySeed(
   db: Firestore,
@@ -186,11 +219,8 @@ export async function announceRound(db: Firestore, eventId: string, round: numbe
     const expiresAt = Timestamp.fromMillis(claimDeadline(lotterySettingsOf(event.lottery), nowMs));
     const tickets = await Promise.all(draw.ticketIds.map((id) => tx.get(db.doc(`tickets/${id}`))));
     const waitlist = await Promise.all(draw.entries.map((e) => tx.get(db.doc(`events/${eventId}/waitlist/${e.email}`))));
-    const holders = new Set<string>();
-    for (const w of draw.winners) {
-      const held = await tx.get(db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', w.uid).limit(1));
-      if (!held.empty) holders.add(w.uid);
-    }
+    const holders = new Set<string>(); // winners who may no longer take a ticket
+    for (const w of draw.winners) if (!(await mayTakeTicket(db, tx, eventId, event, w.uid, w.email))) holders.add(w.uid);
 
     const offered = new Set<string>();
     for (const w of draw.winners) {
@@ -235,9 +265,10 @@ export async function claimOffer(db: Firestore, eventId: string, uid: string, em
     const ticket = await tx.get(ticketRef);
     if (ticket.get('status') !== 'offered' || ticket.get('offer.uid') !== uid) return { ok: false, reason: 'NO_OFFER' };
     if ((ms(ticket.get('offer.expiresAt')) ?? 0) < nowMs) return { ok: false, reason: 'EXPIRED' };
-    // One ticket per student: someone who got a ticket another way since the draw gives the offer back.
-    const held = await tx.get(db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', uid).limit(1));
-    if (!held.empty) {
+    // The issueTicket rules still hold at claim time (e.g. a ticket taken another way since the draw):
+    // otherwise the offer goes back and the ticket returns to the pool.
+    const eventData = (await tx.get(db.doc(`events/${eventId}`))).data() ?? {};
+    if (!(await mayTakeTicket(db, tx, eventId, eventData, uid, email))) {
       tx.update(ticketRef, { status: 'pooled', offer: null, drawRound: null });
       tx.update(entryRef, { status: 'withdrawn', offerTicketId: null, offerExpiresAt: null });
       return { ok: false, reason: 'NO_OFFER' };

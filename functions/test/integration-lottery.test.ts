@@ -96,6 +96,8 @@ describe('lottery event', () => {
   });
 
   it('runDrawNow is admin only and refuses a second open round', async () => {
+    // The seller who cancelled is on the waitlist too, but like issueTicket the draw refuses someone who cancelled.
+    await db.doc(`events/${EVENT}/waitlist/${SELLER}`).set({ order: 99, status: 'waiting', assignedTicketId: null });
     expect(await waiters[0].runDrawNow({ eventId: EVENT }).then(() => 'resolved', (e) => e.code)).toBe('functions/permission-denied');
     const r = await chief.runDrawNow({ eventId: EVENT });
     expect(r).toEqual({ ok: true, round: 1, tickets: 1, entries: 4 }); // the never-signed-in ghost is left out

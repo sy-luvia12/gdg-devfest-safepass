@@ -9,7 +9,7 @@ import { processChainOp, walletAddressFor, WaitingForPrevious } from '../src/cha
 import { preflightChain } from '../src/chain/preflight';
 import { deriveAddress } from '../src/chain/wallets';
 import { buildSnapshot, drawWinners, merkleProof, newSalt, verifyProof } from '../src/lottery/draw';
-import { drawRef, snapshotRound } from '../src/lottery/rounds';
+import { drawRef, planRef, snapshotRound } from '../src/lottery/rounds';
 
 // Hardhat's default account 0 (deployer and minter in scripts/deploy.js). Public test key, local chain only.
 const MINTER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -224,7 +224,7 @@ describe('lottery round through processChainOp', () => {
     const eventId = id('lev');
     await db.doc(`events/${eventId}`).set({ capacity: 5, reassignMode: 'lottery', allowedDomains: ['korea.ac.kr'] });
     for (let i = 0; i < 4; i++) {
-      await db.doc(`users/${id(`lw${i}`)}`).set({ email: `${id(`lw${i}`)}@korea.ac.kr`, name: `w${i}` });
+      await db.doc(`users/${id(`lw${i}`)}`).set({ email: `${id(`lw${i}`)}@korea.ac.kr`, name: `w${i}`, role: 'student' });
       await db.doc(`events/${eventId}/waitlist/${id(`lw${i}`)}@korea.ac.kr`).set({ order: i, status: 'waiting' });
     }
     for (const t of ['lt1', 'lt2']) await db.doc(`tickets/${id(t)}`).set({ eventId, status: 'pooled', ownerUid: null, drawRound: null });
@@ -252,5 +252,32 @@ describe('lottery round through processChainOp', () => {
     // A repeat finds the round seeded and changes nothing.
     await db.doc(`chainOps/draw-${eventId}-1`).update({ status: 'pending' });
     expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+  }, 120_000);
+
+  it('voids a round whose seed window passed instead of committing it a second time', async () => {
+    const eventId = id('lev2');
+    await db.doc(`events/${eventId}`).set({ capacity: 5, reassignMode: 'lottery', allowedDomains: ['korea.ac.kr'] });
+    await db.doc(`users/${id('vw')}`).set({ email: `${id('vw')}@korea.ac.kr`, name: 'v', role: 'student' });
+    await db.doc(`events/${eventId}/waitlist/${id('vw')}@korea.ac.kr`).set({ order: 0, status: 'waiting' });
+    await db.doc(`tickets/${id('vt')}`).set({ eventId, status: 'pooled', ownerUid: null, drawRound: null });
+    await client.ensureEvent(eventId, 5);
+    expect((await snapshotRound(db, eventId, { nowMs: Date.now(), announceAtMs: Date.now(), announceOnSeed: true, commitNow: true })).ok).toBe(true);
+    const draw = (await drawRef(db, eventId, 1).get()).data()!;
+
+    // The commit reached the chain, then the processor stayed down for longer than the 256-block window.
+    const provider = new JsonRpcProvider(RPC, undefined, { cacheTimeout: -1 });
+    const minter = new Contract(CONTRACT, FESTIVAL_TICKET_ABI, new Wallet(MINTER_KEY, provider));
+    await (await minter.commitDraw(eventKeyOf(eventId), 1, draw.commitment)).wait();
+    await provider.send('hardhat_mine', ['0x120']);
+
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+    expect((await drawRef(db, eventId, 1).get()).get('status')).toBe('void');
+    expect((await planRef(db, eventId).get()).get('status')).toBe('skipped');
+    expect((await db.doc(`tickets/${id('vt')}`).get()).get('drawRound')).toBeNull();
+    const [commitment, , seed] = await reader.draws(eventKeyOf(eventId), 1);
+    expect(commitment).toBe(draw.commitment); // no second commit
+    expect(seed).toBe(`0x${'0'.repeat(64)}`);
+    const commits = await reader.queryFilter(reader.filters.DrawCommitted(eventKeyOf(eventId), 1));
+    expect(commits).toHaveLength(1);
   }, 120_000);
 });

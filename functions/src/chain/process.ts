@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { ChainError, redact, type ChainClient } from './client';
-import { applySeed } from '../lottery/rounds';
+import { applySeed, voidRound } from '../lottery/rounds';
 import { chainOpId, type ChainOpDoc } from './outbox';
 import { deriveAddress } from './wallets';
 
@@ -126,6 +126,11 @@ async function processDrawOp(
     if (e instanceof ChainError && e.code === 'INSUFFICIENT_FUNDS') {
       await opRef.update({ status: 'blocked', error: e.code, attempts: FieldValue.increment(1) });
       return 'blocked';
+    }
+    if (e instanceof ChainError && e.code === 'SEED_EXPIRED') {
+      await voidRound(deps.db, op.eventId, op.round);
+      await opRef.update({ status: 'done', error: e.code, doneAt: FieldValue.serverTimestamp() });
+      return 'done';
     }
     await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
     throw e;
