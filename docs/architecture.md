@@ -97,7 +97,7 @@ markUsed(tokenId) onlyMinter                 // 입장 후 이전 불가 처리
 ### 2.4 봇 차단
 
 - 모든 callable 함수에 App Check(reCAPTCHA Enterprise)를 강제한다.
-- 구현: 서버는 `ENFORCE_APP_CHECK` 파라미터(기본 꺼짐), 프론트는 `VITE_APPCHECK_SITE_KEY`가 있을 때만 시작한다. 켜는 순서는 `docs/api.md` 12장.
+- 구현: 서버는 `ENFORCE_APP_CHECK` 환경 변수(기본 꺼짐), 프론트는 `VITE_APPCHECK_SITE_KEY`가 있을 때만 시작한다. 켜는 순서는 `docs/api.md` 12장.
 
 ### 2.5 Google Sheets 명단
 
