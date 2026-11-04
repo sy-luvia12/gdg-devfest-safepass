@@ -1,4 +1,4 @@
-import type { RosterEntry, RosterSkipReason } from '../api';
+import type { PrecheckReason, RosterEntry, RosterSkipReason } from '../api';
 import { emailDomain } from './ticket';
 
 // A roster row as stored under schools/{id}/roster/{studentId} and events/{id}/roster/{email}.
@@ -68,4 +68,27 @@ export function matchStudent(row: RosterRow, name: string, email: string): Stude
   if (normalizeName(row.name) !== normalizeName(name)) return 'NAME_MISMATCH';
   if (row.email.toLowerCase() !== email.trim().toLowerCase()) return 'EMAIL_MISMATCH';
   return 'OK';
+}
+
+// The check before an email link is sent. row is the school roster row of the typed student id (null if absent).
+// With name it is a sign-up (the row must be free), without name a sign-in by student id (the row must be claimed).
+export function decidePrecheck(
+  row: (RosterRow & { claimedBy?: string }) | null,
+  input: { email: string; name?: string },
+): 'OK' | Exclude<PrecheckReason, 'NO_SCHOOL'> {
+  if (!row) return 'NOT_IN_ROSTER';
+  if (input.name !== undefined) {
+    const match = matchStudent(row, input.name, input.email);
+    if (match === 'NAME_MISMATCH') return 'NOT_IN_ROSTER';
+    if (match === 'EMAIL_MISMATCH') return 'EMAIL_MISMATCH';
+    return row.claimedBy ? 'STUDENT_ID_TAKEN' : 'OK';
+  }
+  if (row.email.toLowerCase() !== input.email.trim().toLowerCase()) return 'EMAIL_MISMATCH';
+  return row.claimedBy ? 'OK' : 'NOT_REGISTERED';
+}
+
+// A face photo as the sign-up form sends it: a base64 JPEG data URL within the size limit.
+export function isProfilePhoto(value: string, maxBytes: number): boolean {
+  const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  return !!m && Math.floor((m[1].length * 3) / 4) <= maxBytes;
 }

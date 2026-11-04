@@ -16,6 +16,8 @@ export interface UserProfile {
   /** Set once verifyStudentRoster matched this account to its school roster row. */
   schoolId?: string;
   rosterVerified?: boolean;
+  /** Set once the student sent a face photo with submitProfilePhoto. Sign-up is complete with both flags. */
+  photoSubmitted?: boolean;
 }
 
 export type EnsureUserResponse = UserProfile;
@@ -31,8 +33,9 @@ export interface IssueTicketResponse {
 // failed-precondition CANCELLED_BEFORE: this student cancelled a ticket for the event and the event does not set
 // allowReissueAfterCancel. permission-denied ROLE: the caller is not a student. permission-denied DOMAIN: the mail
 // domain (or an unverified mail) cannot join this event. failed-precondition NOT_IN_ROSTER: the event sets
-// requireRoster and the student's email is not on its roster.
-export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'ROLE', 'DOMAIN', 'NOT_IN_ROSTER'] as const;
+// requireRoster and the student's email is not on its roster. failed-precondition NOT_REGISTERED: the student's
+// school has a roster and the student has not finished sign-up (roster check and face photo).
+export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'ROLE', 'DOMAIN', 'NOT_IN_ROSTER', 'NOT_REGISTERED'] as const;
 export type IssueReason = (typeof ISSUE_REASONS)[number];
 
 export const REASSIGN_MODES = ['queue', 'random'] as const;
@@ -282,6 +285,44 @@ export interface VerifyStudentRosterRequest {
 }
 export type VerifyStudentRosterResponse = { ok: true; profile: UserProfile } | { ok: false; reason: VerifyStudentReason };
 
+// ---------- Student sign-up and sign-in by email link (no sign-in needed for these two) ----------
+
+// Schools whose student roster is loaded, for the sign-up school picker.
+export interface OpenSchool {
+  id: string;
+  name: string;
+  domain: string;
+}
+export interface ListOpenSchoolsResponse {
+  schools: OpenSchool[];
+}
+
+// Checked before the email link is sent. With name it is a sign-up check (row free to claim); without name it is a
+// sign-in by student id (row already claimed). The school is found from the email domain.
+// NO_SCHOOL: the domain belongs to no school with a roster. A wrong name answers NOT_IN_ROSTER, so the check does not
+// tell which student ids exist.
+export const PRECHECK_REASONS = ['NO_SCHOOL', 'NOT_IN_ROSTER', 'EMAIL_MISMATCH', 'STUDENT_ID_TAKEN', 'NOT_REGISTERED'] as const;
+export type PrecheckReason = (typeof PRECHECK_REASONS)[number];
+export interface PrecheckStudentRequest {
+  email: string;
+  studentId: string;
+  name?: string;
+}
+export type PrecheckStudentResponse =
+  | { ok: true; schoolId: string; schoolName: string }
+  | { ok: false; reason: PrecheckReason };
+
+// The last sign-up step, after verifyStudentRoster. A JPEG data URL of at most PROFILE_PHOTO_MAX_BYTES, shown to the
+// ticket checker next to the QR.
+export const PROFILE_PHOTO_MAX_BYTES = 300_000;
+export interface SubmitProfilePhotoRequest {
+  photoDataUrl: string;
+}
+export interface SubmitProfilePhotoResponse {
+  ok: true;
+  profile: UserProfile;
+}
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -305,4 +346,7 @@ export interface Callables {
   importEventRoster: [ImportEventRosterRequest, ImportRosterResponse];
   getEventRoster: [GetEventRosterRequest, GetRosterResponse];
   verifyStudentRoster: [VerifyStudentRosterRequest, VerifyStudentRosterResponse];
+  listOpenSchools: [void, ListOpenSchoolsResponse];
+  precheckStudent: [PrecheckStudentRequest, PrecheckStudentResponse];
+  submitProfilePhoto: [SubmitProfilePhotoRequest, SubmitProfilePhotoResponse];
 }

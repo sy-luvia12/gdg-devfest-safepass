@@ -11,7 +11,18 @@ export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(callableO
 
   return db.runTransaction(async (tx) => {
     const existing = await tx.get(userRef);
-    if (existing.exists) return profileOf(caller.uid, existing.data()!);
+    if (existing.exists) {
+      const d = existing.data()!;
+      // Every sign-in checks the roster again: a student who left the roster (graduated, on leave) signs up again.
+      if (d.role === 'student' && d.rosterVerified && d.schoolId && d.studentId) {
+        const row = await tx.get(db.doc(`schools/${d.schoolId}/roster/${d.studentId}`));
+        if (!row.exists || row.get('claimedBy') !== caller.uid) {
+          tx.update(userRef, { rosterVerified: false });
+          return profileOf(caller.uid, { ...d, rosterVerified: false });
+        }
+      }
+      return profileOf(caller.uid, d);
+    }
 
     const seed = caller.email && !caller.email.includes('/') ? await tx.get(db.doc(`seedProfiles/${caller.email}`)) : null;
     const s = seed?.data();
@@ -41,5 +52,6 @@ export function profileOf(uid: string, d: DocumentData): UserProfile {
     ...(d.adminSchoolId ? { adminSchoolId: d.adminSchoolId } : {}),
     ...(d.schoolId ? { schoolId: d.schoolId } : {}),
     ...(d.rosterVerified ? { rosterVerified: true } : {}),
+    ...(d.photoSubmitted ? { photoSubmitted: true } : {}),
   };
 }

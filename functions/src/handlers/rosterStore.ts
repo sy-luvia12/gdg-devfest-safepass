@@ -1,7 +1,14 @@
-import { FieldValue, type CollectionReference, type DocumentReference } from 'firebase-admin/firestore';
+import {
+  FieldValue,
+  type CollectionReference,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Transaction,
+} from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ROSTER_PREVIEW, type GetRosterResponse, type ImportRosterResponse, type RosterSummary, type SheetReason } from '../api';
 import { parseRosterRows, parseSheetId, type RosterRow } from '../domain/roster';
+import { emailDomain } from '../domain/ticket';
 import { db } from '../firebase';
 import { readSheetValues, serviceAccountEmail } from '../sheets/readSheet';
 
@@ -64,3 +71,11 @@ export const eventRosterPlace = (eventId: string): RosterPlace => ({
   summaryField: 'roster',
   keyOf: (r) => r.email,
 });
+
+// The school whose mail domains include this email's domain. Sign-in finds the school this way, so a domain
+// belongs to one school (upsertSchool keeps it so).
+export async function schoolForEmail(email: string, tx?: Transaction): Promise<DocumentSnapshot | null> {
+  const q = db.collection('schools').where('domains', 'array-contains', emailDomain(email)).limit(1);
+  const snap = tx ? await tx.get(q) : await q.get();
+  return snap.docs[0] ?? null;
+}
