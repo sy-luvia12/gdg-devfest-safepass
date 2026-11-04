@@ -1,0 +1,100 @@
+import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { ChainError, redact, type ChainClient } from './client';
+import { chainOpId, type ChainOpDoc } from './outbox';
+import { deriveAddress } from './wallets';
+
+export interface ChainDeps {
+  db: Firestore;
+  /** null while the chain is not configured: ops stay pending and can be replayed later. */
+  client: ChainClient | null;
+  mnemonic: string | null;
+}
+
+export type ProcessOutcome = 'done' | 'skipped' | 'blocked' | 'disabled';
+
+/** Thrown so the trigger retries later: the op before this one has not reached the chain yet. */
+export class WaitingForPrevious extends Error {}
+
+/** The student's address. The index is given out once per user from a counter and kept on the user. */
+export async function walletAddressFor(db: Firestore, mnemonic: string, uid: string): Promise<string> {
+  return db.runTransaction(async (tx) => {
+    const userRef = db.doc(`users/${uid}`);
+    const user = await tx.get(userRef);
+    const known = user.get('walletAddress');
+    if (typeof known === 'string') return known;
+    const counterRef = db.doc('counters/wallets');
+    const index = ((await tx.get(counterRef)).get('next') as number | undefined) ?? 0;
+    const address = deriveAddress(mnemonic, index);
+    tx.set(counterRef, { next: index + 1 }, { merge: true });
+    tx.set(userRef, { walletIndex: index, walletAddress: address }, { merge: true });
+    return address;
+  });
+}
+
+export async function processChainOp(deps: ChainDeps, opId: string): Promise<ProcessOutcome> {
+  const { db, client, mnemonic } = deps;
+  const opRef = db.doc(`chainOps/${opId}`);
+  const snap = await opRef.get();
+  const op = snap.data() as ChainOpDoc | undefined;
+  if (!op || op.status === 'done') return 'skipped';
+  if (!client || !mnemonic) return 'disabled';
+  if (op.seq > 1) {
+    const prev = await db.doc(`chainOps/${chainOpId(op.ticketId, op.seq - 1)}`).get();
+    if (prev.get('status') !== 'done') throw new WaitingForPrevious(`${opId} waits for op ${op.seq - 1}`);
+  }
+
+  const ticketRef = db.doc(`tickets/${op.ticketId}`);
+  try {
+    let txHash: string | null;
+    const ticketUpdate: Record<string, unknown> = {};
+    switch (op.kind) {
+      case 'mint': {
+        const capacity = ((await db.doc(`events/${op.eventId}`).get()).get('capacity') as number | undefined) ?? 0;
+        await client.ensureEvent(op.eventId, capacity);
+        const to = await walletAddressFor(db, mnemonic, op.toUid);
+        const r = await client.mint({ ticketId: op.ticketId, eventId: op.eventId, to });
+        txHash = r.txHash;
+        ticketUpdate['chain.tokenId'] = r.tokenId;
+        ticketUpdate['chain.contractOwner'] = to;
+        if (r.txHash) ticketUpdate['chain.mintTx'] = r.txHash;
+        break;
+      }
+      case 'reassign': {
+        const to = await walletAddressFor(db, mnemonic, op.toUid);
+        txHash = (await client.reassign({ ticketId: op.ticketId, to, reason: op.reason })).txHash;
+        ticketUpdate['chain.contractOwner'] = to;
+        break;
+      }
+      case 'release':
+        txHash = (await client.release({ ticketId: op.ticketId, reason: op.reason })).txHash;
+        ticketUpdate['chain.contractOwner'] = null;
+        break;
+      case 'markUsed':
+        txHash = (await client.markUsed(op.ticketId)).txHash;
+        break;
+    }
+
+    await db.runTransaction(async (tx) => {
+      const latest = (await tx.get(ticketRef)).get('chainSeq') === op.seq;
+      tx.update(opRef, { status: 'done', txHash, error: null, doneAt: FieldValue.serverTimestamp() });
+      tx.update(ticketRef, {
+        ...ticketUpdate,
+        ...(txHash ? { 'chain.lastTx': txHash } : {}),
+        'chain.status': latest ? 'done' : 'pending',
+      });
+      if ((op.kind === 'reassign' || op.kind === 'release') && txHash) {
+        tx.update(db.doc(`reassignments/${op.reassignmentId}`), { txHash });
+      }
+    });
+    return 'done';
+  } catch (e) {
+    if (e instanceof ChainError && e.code === 'INSUFFICIENT_FUNDS') {
+      // Retrying cannot help until someone funds the minter, so the op parks until retryChainOps.
+      await opRef.update({ status: 'blocked', error: e.code, attempts: FieldValue.increment(1) });
+      await ticketRef.update({ 'chain.status': 'blocked' });
+      return 'blocked';
+    }
+    await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
+    throw e;
+  }
+}

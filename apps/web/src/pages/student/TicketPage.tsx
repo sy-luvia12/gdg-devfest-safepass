@@ -8,7 +8,7 @@ import { BottomBar, Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { StateView } from '@/components/StateView';
 import { TicketCard } from '@/components/TicketCard';
-import { cancelTicket, formatQrPayload, getEvent, getMyTicket, refreshQrToken } from '@/lib/api';
+import { cancelTicket, formatQrPayload, getEvent, getMyTicket, refreshQrToken, subscribeMyTicket } from '@/lib/api';
 import { ApiError, type CancelResult, type Event, type Ticket } from '@/types';
 
 const REFRESH_BEFORE_MS = 5_000;
@@ -41,6 +41,19 @@ export function TicketPage() {
   }, [eventId]);
   useEffect(load, [load]);
 
+  // 재배정·입장·취소가 새로고침 없이 반영되도록 내 입장권을 구독한다.
+  // 문서에는 QR이 없으므로, 같은 입장권이면 화면이 이미 받은 QR을 그대로 둔다.
+  useEffect(() => {
+    return subscribeMyTicket(eventId, (next) => {
+      setTicket((prev) => {
+        if (prev && next && prev.id === next.id && prev.status === 'issued' && next.status === 'issued') {
+          return { ...next, qrToken: prev.qrToken, qrExpiresAt: prev.qrExpiresAt, qrSignature: prev.qrSignature };
+        }
+        return next;
+      });
+    });
+  }, [eventId]);
+
   // 만료 5초 전에 새 토큰을 받는다. 그 사이 검표·취소로 바뀌었을 수 있어 티켓도 다시 읽는다.
   const ticketId = ticket?.id;
   const issued = ticket?.status === 'issued';
@@ -54,8 +67,8 @@ export function TicketPage() {
         const latest = await getMyTicket(eventId);
         if (stop) return;
         if (!latest || latest.status !== 'issued') return setTicket(latest);
-        const { token, expiresAt: next } = await refreshQrToken(latest.id);
-        if (!stop) setTicket({ ...latest, qrToken: token, qrExpiresAt: next });
+        const { token, expiresAt: next, signature } = await refreshQrToken(latest.id);
+        if (!stop) setTicket({ ...latest, qrToken: token, qrExpiresAt: next, qrSignature: signature });
       } catch (e) {
         if (stop) return;
         // 다른 기기에 등록된 계정이면 내 정보를 다시 읽어 기기 확인 화면으로 보낸다
@@ -173,7 +186,7 @@ export function TicketPage() {
         {import.meta.env.DEV && ticket.status === 'issued' && (
           <button
             type="button"
-            onClick={() => navigator.clipboard?.writeText(formatQrPayload(ticket.id, ticket.qrToken))}
+            onClick={() => navigator.clipboard?.writeText(formatQrPayload(ticket.id, ticket.qrToken, ticket.qrSignature))}
             className="flex items-center justify-center gap-1 text-caption text-ink-3"
           >
             <Copy size={14} strokeWidth={1.75} />

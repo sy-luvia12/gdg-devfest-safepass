@@ -11,7 +11,7 @@ import { ResultSheet, type SheetState } from '@/components/ResultSheet';
 import { ScanFrame } from '@/components/ScanFrame';
 import { SchoolSwitcher } from '@/components/SchoolSwitcher';
 import { StateView } from '@/components/StateView';
-import { subscribeStaffStats, verifyEntry } from '@/lib/api';
+import { confirmEntry, subscribeStaffStats, verifyEntry } from '@/lib/api';
 import type { StaffStats } from '@/types';
 
 const READER_ID = 'qr-reader';
@@ -28,6 +28,9 @@ export function ScanPage() {
   const [stats, setStats] = useState<StaffStats | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState(false);
+  const pendingRef = useRef<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState('');
 
@@ -40,6 +43,7 @@ export function ScanPage() {
     setVerifyError(false);
     try {
       const r = await verifyEntry(payload, eventId);
+      pendingRef.current = r.result === 'needs_confirm' ? (r.ticketId ?? null) : null;
       setSheet({ result: r.result, user: r.user, nftTokenId: r.nftTokenId, usedAt: r.usedAt });
     } catch {
       setVerifyError(true);
@@ -77,7 +81,26 @@ export function ScanPage() {
 
   useEffect(() => subscribeStaffStats(eventId, setStats), [eventId]);
 
+  const onConfirm = async (match: boolean) => {
+    const ticketId = pendingRef.current;
+    if (!ticketId || confirming) return;
+    setConfirming(true);
+    setConfirmError(false);
+    try {
+      const r = await confirmEntry(ticketId, match);
+      pendingRef.current = null;
+      setSheet((prev) => ({ result: r.result, user: prev?.user }));
+    } catch {
+      // 시트는 그대로 두어 다시 누를 수 있게 한다
+      setConfirmError(true);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const onNext = () => {
+    pendingRef.current = null;
+    setConfirmError(false);
     setSheet(null);
     setManual('');
     busyRef.current = false;
@@ -157,7 +180,7 @@ export function ScanPage() {
         <ul className="flex flex-col gap-3">
           <Guide icon={Sun} text="학생에게 화면 밝기를 최대로 올려 달라고 해 주세요" />
           <Guide icon={ImageOff} text="캡처한 화면은 만료된 QR로 거부돼요" />
-          <Guide icon={UserCheck} text="입장 처리되면 학생 사진이 떠요. 얼굴을 한 번 확인해 주세요" />
+          <Guide icon={UserCheck} text="학생 사진이 뜨면 얼굴을 확인해 주세요. 같으면 입장 처리돼요" />
         </ul>
 
         <div className="border-t border-line pt-4">
@@ -186,7 +209,7 @@ export function ScanPage() {
         </div>
       </main>
 
-      {sheet && <ResultSheet state={sheet} onNext={onNext} />}
+      {sheet && <ResultSheet state={sheet} onNext={onNext} onConfirm={onConfirm} confirming={confirming} error={confirmError} />}
     </>
   );
 }

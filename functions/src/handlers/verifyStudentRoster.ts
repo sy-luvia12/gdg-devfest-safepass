@@ -3,11 +3,12 @@ import type { VerifyStudentReason, VerifyStudentRosterResponse } from '../api';
 import { isStudentId, matchStudent } from '../domain/roster';
 import { db } from '../firebase';
 import { readDocId, readString, requireAuth } from './boundary';
+import { callableOptions } from './callableOptions';
 import { profileOf } from './ensureUser';
 
 // Sign-up check against the school roster. The student types name and student id; the signed-in Google account
 // proves the email, which must be the one on that row. The row then belongs to this account only.
-export const verifyStudentRoster = onCall<unknown, Promise<VerifyStudentRosterResponse>>(async (request) => {
+export const verifyStudentRoster = onCall<unknown, Promise<VerifyStudentRosterResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const schoolId = readDocId(request.data, 'schoolId');
   const name = readString(request.data, 'name').trim();

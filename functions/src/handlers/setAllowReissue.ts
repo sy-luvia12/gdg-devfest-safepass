@@ -2,9 +2,10 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { SetAllowReissueResponse } from '../api';
 import { db } from '../firebase';
 import { readDocId, requireAuth, requireRole } from './boundary';
+import { callableOptions } from './callableOptions';
 
 // Test events only: lets a student who cancelled take a ticket again. Real events keep it off.
-export const setAllowReissue = onCall<unknown, Promise<SetAllowReissueResponse>>(async (request) => {
+export const setAllowReissue = onCall<unknown, Promise<SetAllowReissueResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const eventId = readDocId(request.data, 'eventId');
   const allow = (request.data as { allow?: unknown } | null)?.allow;

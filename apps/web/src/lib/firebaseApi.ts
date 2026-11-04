@@ -19,12 +19,15 @@ import type { Callables, GetRosterResponse, ImportRosterResponse, RosterSummary 
 import {
   ApiError,
   type CancelResult,
+  type ConfirmResult,
   type DeviceResetRequest,
   type Event,
   type EventInput,
   type EventStats,
   type ReassignMode,
   type Reassignment,
+  type QrRefresh,
+  type QrSignature,
   type RosterImport,
   type RosterSummary,
   type RosterView,
@@ -38,7 +41,7 @@ import {
   type VerifyResult,
   type WaitlistEntry,
 } from '@/types';
-import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
+import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signQr, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
 
 /** 학교에 행사가 없을 때 처음 보여줄 행사 */
@@ -61,7 +64,7 @@ function toApiError(e: unknown): ApiError {
     if (reason === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
     if (reason === 'NOT_IN_ROSTER') return new ApiError('not_in_roster');
     if (reason && reason in SHEET_ERRORS) return new ApiError(SHEET_ERRORS[reason as SheetReason]);
-    if (code === 'permission-denied') return new ApiError('not_school_account');
+    if (code === 'permission-denied') return new ApiError(reason === 'ROLE' ? 'wrong_role' : 'not_school_account');
     if (code === 'resource-exhausted') return new ApiError('sold_out');
     if (code === 'not-found') return new ApiError('not_found');
     if (code === 'unauthenticated') return new ApiError('unauthenticated');
@@ -141,6 +144,18 @@ function toTicket(id: string, d: DocumentData): Ticket {
     qrExpiresAt: 0,
     issuedAt: millis(d.issuedAt),
     usedAt: d.usedAt ? millis(d.usedAt) : undefined,
+    chain: toChain(d.chain),
+  };
+}
+
+function toChain(c: unknown): Ticket['chain'] {
+  if (!c || typeof c !== 'object') return undefined;
+  const { status, tokenId, lastTx } = c as Record<string, unknown>;
+  if (status !== 'pending' && status !== 'done' && status !== 'blocked') return undefined;
+  return {
+    status,
+    tokenId: typeof tokenId === 'string' ? tokenId : undefined,
+    lastTx: typeof lastTx === 'string' ? lastTx : undefined,
   };
 }
 
@@ -353,6 +368,27 @@ export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   return d ? toTicket(d.id, d.data()) : null;
 }
 
+/** 내 입장권 실시간 구독. 재배정·입장·취소가 새로고침 없이 바로 반영된다 */
+export function subscribeMyTicket(
+  eventId: string,
+  cb: (ticket: Ticket | null) => void,
+  onError?: () => void,
+): () => void {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    onError?.();
+    return () => {};
+  }
+  return onSnapshot(
+    query(collection(db, 'tickets'), where('ownerUid', '==', uid), where('eventId', '==', eventId), limit(1)),
+    (snap) => {
+      const d = snap.docs[0];
+      cb(d ? toTicket(d.id, d.data()) : null);
+    },
+    () => onError?.(),
+  );
+}
+
 /** 1인 1매. 이미 있으면 기존 입장권을 돌려준다 */
 export async function issueTicket(eventId: string): Promise<Ticket> {
   try {
@@ -366,19 +402,28 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   return ticket;
 }
 
-async function requestQr(ticketId: string, uid: string) {
-  let deviceProof;
+async function requestQr(ticketId: string, uid: string): Promise<QrRefresh> {
+  // 키 생성·서명이 실패하면(WebCrypto 없는 http 등) deviceProof 키 자체를 뺀다. undefined를 보내면 SDK가 null로 바꾼다
+  let proof: Awaited<ReturnType<typeof signRefresh>> | undefined;
   try {
-    deviceProof = await signRefresh((await getDeviceKeys(uid)).keys, ticketId);
+    proof = await signRefresh((await getDeviceKeys(uid)).keys, ticketId);
   } catch {
-    deviceProof = undefined;
+    proof = undefined;
   }
-  const { data } = await call('refreshQrToken')({ ticketId, deviceProof });
-  return { token: data.qrPayload.split(':')[2] ?? '', expiresAt: data.expiresAt };
+  const { data } = await call('refreshQrToken')(proof ? { ticketId, deviceProof: proof } : { ticketId });
+  const token = data.qrPayload.split(':')[2] ?? '';
+  // 서명을 못 붙여도 서명 없는 QR(TTV1)로 계속 보여준다. 서버가 서명을 요구하면 그때 검표에서 거부된다
+  let signature: QrSignature | undefined;
+  try {
+    signature = await signQr((await getDeviceKeys(uid)).keys, ticketId, token);
+  } catch {
+    signature = undefined;
+  }
+  return { token, expiresAt: data.expiresAt, signature };
 }
 
 /** 기기 서명을 붙여 새 QR을 받는다. 다른 기기에 등록된 계정이면 ApiError('device_blocked') */
-export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
+export async function refreshQrToken(ticketId: string): Promise<QrRefresh> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new ApiError('unauthenticated');
   try {
@@ -399,7 +444,8 @@ export async function refreshQrToken(ticketId: string): Promise<{ token: string;
 }
 
 /** QR 내용 (docs/api.md 7장) */
-export function formatQrPayload(ticketId: string, token: string): string {
+export function formatQrPayload(ticketId: string, token: string, signature?: QrSignature): string {
+  if (signature) return `TTV2:${ticketId}:${token}:${signature.signedAt}:${signature.signature}`;
   return `TTV1:${ticketId}:${token}`;
 }
 
@@ -420,18 +466,42 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
 let myOkCount = 0;
 const myCountListeners = new Set<() => void>();
 
-/** 찍는 순간 입장 처리한다. 사진은 확인용으로 보여주기만 한다 */
+function countMyEntry() {
+  myOkCount += 1;
+  myCountListeners.forEach((f) => f());
+}
+
+/** 2단계 검표가 꺼진 행사는 찍는 순간 입장 처리한다. 켜진 행사는 needs_confirm으로 돌려주고 confirmEntry를 기다린다 */
 export async function verifyEntry(qrPayload: string, eventId?: string): Promise<VerifyResult> {
   try {
     const { data } = await call('verifyEntry')({ qrPayload, eventId });
     if (data.ok) {
-      myOkCount += 1;
-      myCountListeners.forEach((f) => f());
-      return { result: 'ok', ticketId: data.ticketId, user: { ...data.holder, photoUrl: data.holder.photoUrl ?? '' } };
+      const user = { ...data.holder, photoUrl: data.holder.photoUrl ?? '' };
+      if (data.needsConfirm) return { result: 'needs_confirm', ticketId: data.ticketId, user };
+      countMyEntry();
+      return { result: 'ok', ticketId: data.ticketId, user };
     }
     if (data.reason === 'USED') return { result: 'used' };
     if (data.reason === 'WRONG_EVENT') return { result: 'wrong_event' };
+    if (data.reason === 'SIGNATURE_INVALID') return { result: 'signature_invalid' };
     if (data.reason === 'EXPIRED' || data.reason === 'TOKEN_MISMATCH') return { result: 'expired' };
+    return { result: 'invalid' };
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 2단계 검표의 스태프 답. match true면 입장 처리, false면 mismatch로 기록 */
+export async function confirmEntry(ticketId: string, match: boolean): Promise<ConfirmResult> {
+  try {
+    const { data } = await call('confirmEntry')({ ticketId, match });
+    if (data.ok) {
+      countMyEntry();
+      return { result: 'ok' };
+    }
+    if (data.reason === 'MISMATCH') return { result: 'mismatch' };
+    if (data.reason === 'USED') return { result: 'used' };
+    if (data.reason === 'NO_PENDING_CHECK') return { result: 'no_pending' };
     return { result: 'invalid' };
   } catch (e) {
     throw toApiError(e);

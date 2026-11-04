@@ -18,7 +18,7 @@ import {
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Callables, DeviceKey } from '../src/api';
-import { refreshProofMessage } from '../src/domain/device';
+import { qrSignatureMessage, refreshProofMessage } from '../src/domain/device';
 
 const PROJECT = process.env.GCLOUD_PROJECT ?? 'demo-ttv';
 const EVENT = 'demo-festival';
@@ -47,6 +47,7 @@ async function signIn(email: string): Promise<Client> {
     issueTicket: call('issueTicket'),
     refreshQrToken: call('refreshQrToken'),
     verifyEntry: call('verifyEntry'),
+    confirmEntry: call('confirmEntry'),
     cancelTicket: call('cancelTicket'),
     registerDevice: call('registerDevice'),
     resetDevice: call('resetDevice'),
@@ -138,6 +139,17 @@ describe('prototype demo scenario', () => {
 
   it('an outsider gmail account is permission-denied', async () => {
     expect(await codeOf(outsider.issueTicket({ eventId: EVENT }))).toBe('functions/permission-denied');
+    expect(await reasonOf(outsider.issueTicket({ eventId: EVENT }))).toBe('DOMAIN');
+  });
+
+  it('a staff account asking for a ticket is denied with reason ROLE', async () => {
+    expect(await codeOf(staff.issueTicket({ eventId: EVENT }))).toBe('functions/permission-denied');
+    expect(await reasonOf(staff.issueTicket({ eventId: EVENT }))).toBe('ROLE');
+  });
+
+  it('a null deviceProof (the SDK turns undefined into null) counts as no proof', async () => {
+    const res = await alice.refreshQrToken({ ticketId: aliceTicket, deviceProof: null as never });
+    expect(res.qrPayload).toMatch(/^TTV1:/);
   });
 
   it('staff admits a fresh QR and sees holder info and enteredCount 1', async () => {
@@ -290,6 +302,43 @@ describe('prototype demo scenario', () => {
     const log = await db.collection('reassignments').where('ticketId', '==', carolTicket).get();
     expect(log.docs.map((d) => d.get('mode'))).toEqual(['random']);
   });
+
+  it('every ticket change queues its chain op in order, in the same transaction (docs/api.md 8)', async () => {
+    const opsOf = async (ticketId: string) =>
+      (await db.collection('chainOps').where('ticketId', '==', ticketId).get()).docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Record<string, unknown>)
+        .sort((a, b) => (a.seq as number) - (b.seq as number));
+
+    // Issued, then admitted.
+    expect((await opsOf(aliceTicket)).map((o) => [o.id, o.kind, o.status])).toEqual([
+      [`${aliceTicket}-1`, 'mint', 'pending'],
+      [`${aliceTicket}-2`, 'markUsed', 'pending'],
+    ]);
+    expect((await db.doc(`tickets/${aliceTicket}`).get()).data()).toMatchObject({ chainSeq: 2, chain: { status: 'pending' } });
+
+    // Issued, reassigned to the waitlist in queue mode, then released with nobody eligible.
+    const bobOps = await opsOf(bobTicket);
+    const reassignments = await db.collection('reassignments').where('ticketId', '==', bobTicket).get();
+    const idFor = (toUid: string | null) => reassignments.docs.find((d) => d.get('toUid') === toUid)!.id;
+    expect(bobOps).toMatchObject([
+      { kind: 'mint', toUid: await uidOf(BOB), seq: 1 },
+      { kind: 'reassign', toUid: await uidOf(CAROL), reason: 1, reassignmentId: idFor(await uidOf(CAROL)), seq: 2 },
+      { kind: 'release', reason: 3, reassignmentId: idFor(null), seq: 3 },
+    ]);
+    // The chain is off in this emulator run, so nothing reached the chain and the ops wait.
+    expect(bobOps.every((o) => o.status === 'pending' && o.txHash === null)).toBe(true);
+  });
+
+  it('a ticket issued before the chain existed gets its mint queued ahead of its next op', async () => {
+    const ref = db.collection('tickets').doc();
+    await ref.set({ eventId: EVENT, ownerUid: await uidOf(DAVE), nftNumber: '#0999', status: 'issued', qrToken: null, qrExpiresAt: null });
+    expect((await dave.cancelTicket({ ticketId: ref.id })).ok).toBe(true);
+    const ops = (await db.collection('chainOps').where('ticketId', '==', ref.id).get()).docs.map((d) => d.data());
+    const [first, second, ...rest] = ops.sort((a, b) => a.seq - b.seq);
+    expect(first).toMatchObject({ seq: 1, kind: 'mint', toUid: await uidOf(DAVE) });
+    expect(second).toMatchObject({ seq: 2, kind: expect.stringMatching(/^(reassign|release)$/) });
+    expect(rest).toEqual([]);
+  });
 });
 
 describe('hand-made event documents', () => {
@@ -441,6 +490,216 @@ describe('staff management', () => {
     expect((await db.doc('seedProfiles/gate2@gmail.com').get()).get('role')).toBe('staff');
   });
 });
+
+describe('two-step entry check', () => {
+  const TWO = 'two-step-event';
+  const checks = (ticketId: string) => db.doc(`entryChecks/${ticketId}`);
+  const logsFor = async (ticketId: string) =>
+    (await db.collection('scanLogs').where('ticketId', '==', ticketId).get()).docs.map((d) => d.data());
+  let aliceTicket: string, daveTicket: string, erinTicket: string;
+  let aliceQr: string;
+
+  beforeAll(async () => {
+    await db.doc(`events/${TWO}`).set({
+      name: 'Two Step',
+      capacity: 10,
+      faceValue: 0,
+      allowedDomains: ['korea.ac.kr', 'yonsei.ac.kr'],
+      issuedCount: 0,
+      nftSeq: 0,
+      enteredCount: 0,
+      twoStepCheck: true,
+    });
+    aliceTicket = (await alice.issueTicket({ eventId: TWO })).ticketId;
+    daveTicket = (await dave.issueTicket({ eventId: TWO })).ticketId;
+    erinTicket = (await erin.issueTicket({ eventId: TWO })).ticketId;
+  });
+
+  it('verifyEntry returns the holder for confirmation, admits nobody and logs nothing yet', async () => {
+    aliceQr = (await alice.refreshQrToken({ ticketId: aliceTicket })).qrPayload;
+    expect(await staff.verifyEntry({ qrPayload: aliceQr })).toEqual({
+      ok: true,
+      ticketId: aliceTicket,
+      holder: { name: 'Alice Kim', studentId: '2024000001', photoUrl: 'https://example.com/a.png' },
+      enteredCount: 0,
+      capacity: 10,
+      needsConfirm: true,
+    });
+    expect((await db.doc(`tickets/${aliceTicket}`).get()).get('status')).toBe('issued');
+    expect((await db.doc(`events/${TWO}`).get()).get('enteredCount')).toBe(0);
+    expect(await logsFor(aliceTicket)).toEqual([]);
+    const check = (await checks(aliceTicket).get()).data()!;
+    expect(check).toMatchObject({ ticketId: aliceTicket, eventId: TWO, staffUid: await uidOf(STAFF) });
+    expect(check.expiresAt.toMillis()).toBeGreaterThan(Date.now());
+  });
+
+  it('only the staff member who verified can confirm, and a student cannot', async () => {
+    expect(await confirmReason(chief.confirmEntry({ ticketId: aliceTicket, match: true }))).toBe('NO_PENDING_CHECK');
+    expect(await codeOf(alice.confirmEntry({ ticketId: aliceTicket, match: true }))).toBe('functions/permission-denied');
+    expect(await codeOf(staff.confirmEntry({ ticketId: aliceTicket, match: 'yes' as never }))).toBe('functions/invalid-argument');
+    expect((await checks(aliceTicket).get()).exists).toBe(true);
+  });
+
+  it('"different" records a mismatch scan, keeps the ticket issued and its QR valid', async () => {
+    expect(await staff.confirmEntry({ ticketId: aliceTicket, match: false })).toEqual({ ok: false, reason: 'MISMATCH' });
+    expect(await logsFor(aliceTicket)).toEqual([
+      expect.objectContaining({
+        result: 'mismatch',
+        eventId: TWO,
+        studentName: 'Alice Kim',
+        studentId: '2024000001',
+        staffUid: await uidOf(STAFF),
+        staffName: 'Gate Staff',
+      }),
+    ]);
+    expect((await checks(aliceTicket).get()).exists).toBe(false);
+    expect((await db.doc(`tickets/${aliceTicket}`).get()).get('status')).toBe('issued');
+    expect((await db.doc(`events/${TWO}`).get()).get('enteredCount')).toBe(0);
+    expect(await confirmReason(staff.confirmEntry({ ticketId: aliceTicket, match: true }))).toBe('NO_PENDING_CHECK');
+  });
+
+  it('"same" admits exactly like the one-step check', async () => {
+    expect(await staff.verifyEntry({ qrPayload: aliceQr })).toMatchObject({ ok: true, needsConfirm: true });
+    expect(await staff.confirmEntry({ ticketId: aliceTicket, match: true })).toEqual({
+      ok: true,
+      ticketId: aliceTicket,
+      enteredCount: 1,
+      capacity: 10,
+    });
+    expect((await db.doc(`tickets/${aliceTicket}`).get()).data()).toMatchObject({ status: 'used', qrToken: null, qrExpiresAt: null });
+    expect((await db.doc(`events/${TWO}`).get()).get('enteredCount')).toBe(1);
+    expect((await db.doc(`qrTokens/${aliceTicket}`).get()).exists).toBe(false);
+    expect((await checks(aliceTicket).get()).exists).toBe(false);
+    expect((await logsFor(aliceTicket)).map((l) => l.result).sort()).toEqual(['mismatch', 'ok']);
+    const ops = await db.collection('chainOps').where('ticketId', '==', aliceTicket).get();
+    expect(ops.docs.map((d) => d.get('kind')).sort()).toEqual(['markUsed', 'mint']);
+    expect(await staff.verifyEntry({ qrPayload: aliceQr })).toEqual({ ok: false, reason: 'USED' });
+    expect(await confirmReason(staff.confirmEntry({ ticketId: aliceTicket, match: true }))).toBe('NO_PENDING_CHECK');
+  });
+
+  it('confirming without a verified scan, or after the window, is NO_PENDING_CHECK', async () => {
+    expect(await confirmReason(staff.confirmEntry({ ticketId: erinTicket, match: true }))).toBe('NO_PENDING_CHECK');
+    const { qrPayload } = await erin.refreshQrToken({ ticketId: erinTicket });
+    await staff.verifyEntry({ qrPayload });
+    await checks(erinTicket).update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+    expect(await confirmReason(staff.confirmEntry({ ticketId: erinTicket, match: true }))).toBe('NO_PENDING_CHECK');
+    expect((await db.doc(`tickets/${erinTicket}`).get()).get('status')).toBe('issued');
+  });
+
+  it('a ticket that was used between verify and confirm is USED, and an unknown one NOT_FOUND', async () => {
+    const { qrPayload } = await dave.refreshQrToken({ ticketId: daveTicket });
+    await staff.verifyEntry({ qrPayload });
+    await db.doc(`tickets/${daveTicket}`).update({ status: 'used', usedAt: Timestamp.now() });
+    expect(await confirmReason(staff.confirmEntry({ ticketId: daveTicket, match: true }))).toBe('USED');
+    expect((await db.doc(`events/${TWO}`).get()).get('enteredCount')).toBe(1);
+
+    const { qrPayload: erinQr } = await erin.refreshQrToken({ ticketId: erinTicket });
+    await staff.verifyEntry({ qrPayload: erinQr });
+    await db.doc(`tickets/${erinTicket}`).update({ status: 'cancelled', ownerUid: null });
+    expect(await confirmReason(staff.confirmEntry({ ticketId: erinTicket, match: true }))).toBe('NOT_FOUND');
+  });
+
+  it('without twoStepCheck the response and effects are the one-step ones', async () => {
+    const ONE = 'one-step-event';
+    await db.doc(`events/${ONE}`).set({
+      name: 'One Step',
+      capacity: 10,
+      faceValue: 0,
+      allowedDomains: ['korea.ac.kr'],
+      issuedCount: 0,
+      nftSeq: 0,
+      enteredCount: 0,
+    });
+    const ticketId = (await frank.issueTicket({ eventId: ONE })).ticketId;
+    const { qrPayload } = await frank.refreshQrToken({ ticketId });
+    const res = await staff.verifyEntry({ qrPayload });
+    expect(res).toEqual({ ok: true, ticketId, holder: expect.any(Object), enteredCount: 1, capacity: 10 });
+    expect(res).not.toHaveProperty('needsConfirm');
+    expect((await db.doc(`tickets/${ticketId}`).get()).get('status')).toBe('used');
+    expect((await checks(ticketId).get()).exists).toBe(false);
+    expect((await logsFor(ticketId)).map((l) => l.result)).toEqual(['ok']);
+  });
+});
+
+describe('signed QR', () => {
+  const SIGNED = 'signed-event';
+  let ticketId: string;
+  let token: string;
+  const keys = () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const signWith = (message: string) => sign('sha256', Buffer.from(message), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+    return {
+      jwk: publicKey.export({ format: 'jwk' }) as unknown as DeviceKey,
+      qr: (signedAt = Date.now(), tok = token) => `TTV2:${ticketId}:${tok}:${signedAt}:${signWith(qrSignatureMessage(ticketId, tok, signedAt))}`,
+      proof: (signedAt = Date.now()) => ({ signedAt, signature: signWith(refreshProofMessage(ticketId, signedAt)) }),
+    };
+  };
+  const device = keys();
+
+  beforeAll(async () => {
+    await db.doc(`events/${SIGNED}`).set({
+      name: 'Signed',
+      capacity: 10,
+      faceValue: 0,
+      allowedDomains: ['korea.ac.kr', 'yonsei.ac.kr'],
+      issuedCount: 0,
+      nftSeq: 0,
+      enteredCount: 0,
+      requireDevice: true,
+    });
+    ticketId = (await bob.issueTicket({ eventId: SIGNED })).ticketId;
+    await bob.registerDevice({ publicKeyJwk: device.jwk });
+    const { qrPayload } = await bob.refreshQrToken({ ticketId, deviceProof: device.proof() });
+    token = qrPayload.split(':')[2];
+  });
+
+  it('refuses an unsigned TTV1 QR on a requireDevice event and leaks no holder', async () => {
+    expect(await staff.verifyEntry({ qrPayload: `TTV1:${ticketId}:${token}` })).toEqual({ ok: false, reason: 'SIGNATURE_INVALID' });
+    const logs = (await db.collection('scanLogs').where('ticketId', '==', ticketId).get()).docs.map((d) => d.data());
+    expect(logs).toEqual([expect.objectContaining({ result: 'invalid', eventId: SIGNED })]);
+    expect((await db.doc(`tickets/${ticketId}`).get()).get('status')).toBe('issued');
+  });
+
+  it('refuses a signature by another key, a stale one and a tampered token', async () => {
+    const reject = { ok: false, reason: 'SIGNATURE_INVALID' };
+    expect(await staff.verifyEntry({ qrPayload: keys().qr() })).toEqual(reject);
+    expect(await staff.verifyEntry({ qrPayload: device.qr(Date.now() - 120_000) })).toEqual(reject);
+    const tampered = device.qr().replace(token, 'x'.repeat(22));
+    expect(await staff.verifyEntry({ qrPayload: tampered })).toEqual({ ok: false, reason: 'TOKEN_MISMATCH' });
+    const swapped = device.qr().split(':');
+    swapped[2] = token;
+    swapped[4] = keys().qr().split(':')[4];
+    expect(await staff.verifyEntry({ qrPayload: swapped.join(':') })).toEqual(reject);
+    expect((await db.doc(`tickets/${ticketId}`).get()).get('status')).toBe('issued');
+  });
+
+  it('refuses a TTV2 QR when the owner has no registered device', async () => {
+    await chief.resetDevice({ uid: await uidOf(BOB) });
+    expect(await staff.verifyEntry({ qrPayload: device.qr() })).toEqual({ ok: false, reason: 'SIGNATURE_INVALID' });
+    await bob.registerDevice({ publicKeyJwk: device.jwk });
+  });
+
+  it('admits a QR with a fresh signature from the owner device', async () => {
+    expect(await staff.verifyEntry({ qrPayload: device.qr() })).toMatchObject({ ok: true, ticketId, enteredCount: 1 });
+    expect(await staff.verifyEntry({ qrPayload: device.qr() })).toEqual({ ok: false, reason: 'USED' });
+  });
+
+  it('an event without requireDevice still takes TTV1, but not a TTV2 it cannot verify', async () => {
+    const OPEN = 'open-signed-event';
+    await db.doc(`events/${OPEN}`).set({ name: 'Open', capacity: 10, allowedDomains: ['korea.ac.kr'], issuedCount: 0, nftSeq: 0, enteredCount: 0 });
+    const id = (await alice.issueTicket({ eventId: OPEN })).ticketId;
+    const { qrPayload } = await alice.refreshQrToken({ ticketId: id });
+    const tok = qrPayload.split(':')[2];
+    const forged = `TTV2:${id}:${tok}:${Date.now()}:${keys().jwk.x}`;
+    expect(await staff.verifyEntry({ qrPayload: forged })).toEqual({ ok: false, reason: 'SIGNATURE_INVALID' });
+    expect(await staff.verifyEntry({ qrPayload })).toMatchObject({ ok: true, ticketId: id });
+  });
+});
+
+async function confirmReason(p: Promise<{ ok: boolean; reason?: string }>): Promise<string | undefined> {
+  const res = await p.catch(() => ({ ok: true, reason: 'threw' }));
+  return res.ok ? (res.reason ?? 'ok') : res.reason;
+}
 
 async function uidOf(email: string): Promise<string> {
   return (await db.collection('users').where('email', '==', email).get()).docs[0].id;

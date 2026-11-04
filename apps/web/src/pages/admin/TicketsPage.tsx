@@ -1,3 +1,4 @@
+import { ChainRecord } from '@/components/ChainRecord';
 import { useCallback, useEffect, useState } from 'react';
 import { Ticket as TicketIcon, Users, UserCheck, Package } from 'lucide-react';
 import { useAdmin } from '@/app/AdminLayout';
@@ -82,6 +83,7 @@ export function TicketsPage() {
             empty="조건에 맞는 입장권이 없어요"
             columns={[
               { header: 'NFT', cell: (r) => <span className="tabular">{r.nftTokenId}</span> },
+              { header: '체인', cell: (r) => <ChainRecord chain={r.chain} compact /> },
               { header: '이름', cell: (r) => r.ownerName },
               { header: '학번', cell: (r) => <span className="text-ink-2 tabular">{maskStudentId(r.ownerStudentId)}</span> },
               { header: '발급', cell: (r) => <span className="text-caption text-ink-2 tabular">{formatDateTime(r.issuedAt)}</span> },

@@ -2,12 +2,13 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { UpsertSchoolResponse } from '../api';
 import { db } from '../firebase';
 import { readDocId, readString, readStringList, requireAuth, requireSchoolAdmin } from './boundary';
+import { callableOptions } from './callableOptions';
 
 const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
 // Opens a school space or edits its name, mail domains and color. A school admin can only do this for its own school.
-export const upsertSchool = onCall<unknown, Promise<UpsertSchoolResponse>>(async (request) => {
+export const upsertSchool = onCall<unknown, Promise<UpsertSchoolResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const schoolId = readDocId(request.data, 'schoolId');
   const name = readString(request.data, 'name').trim();

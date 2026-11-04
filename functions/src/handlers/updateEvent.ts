@@ -12,9 +12,10 @@ import {
   requireAuth,
   requireSchoolAdmin,
 } from './boundary';
+import { callableOptions } from './callableOptions';
 
 // Edits an event's details. The schools taking part are fixed once the event exists.
-export const updateEvent = onCall<unknown, Promise<UpdateEventResponse>>(async (request) => {
+export const updateEvent = onCall<unknown, Promise<UpdateEventResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const eventId = readDocId(request.data, 'eventId');
   const text = (field: string) => readOptional(request.data, field, readString)?.trim();

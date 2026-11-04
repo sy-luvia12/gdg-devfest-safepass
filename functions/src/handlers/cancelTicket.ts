@@ -2,19 +2,23 @@ import { randomInt } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { CancelTicketResponse } from '../api';
+import { enqueueChainOps } from '../chain/outbox';
+import { REASON } from '../chain/ids';
 import { candidateOrder, isDomainAllowed } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, qrTokenRef, readDocId, requireAuth, ticketFromSnap } from './boundary';
+import { callableOptions } from './callableOptions';
 
 const unitRandom = () => randomInt(0, 2 ** 32) / 2 ** 32;
 
-export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(async (request) => {
+export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const ticketId = readDocId(request.data, 'ticketId');
   const ticketRef = db.doc(`tickets/${ticketId}`);
 
   return db.runTransaction(async (tx): Promise<CancelTicketResponse> => {
-    const ticket = ticketFromSnap(await tx.get(ticketRef));
+    const ticketSnap = await tx.get(ticketRef);
+    const ticket = ticketFromSnap(ticketSnap);
     if (!ticket) throw new HttpsError('not-found', 'Ticket not found.');
     if (ticket.ownerUid !== caller.uid) throw new HttpsError('permission-denied', 'Not your ticket.');
     if (ticket.status === 'used') return { ok: false, reason: 'TICKET_USED' };
@@ -42,7 +46,8 @@ export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(async
     }
 
     // eventId and fromUid let issueTicket refuse a student who cancelled. The names and number are for the admin list.
-    tx.create(db.collection('reassignments').doc(), {
+    const reassignmentRef = db.collection('reassignments').doc();
+    tx.create(reassignmentRef, {
       ticketId,
       eventId: ticket.eventId,
       nftNumber: ticket.nftNumber,
@@ -54,12 +59,22 @@ export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(async
       createdAt: FieldValue.serverTimestamp(),
     });
     tx.delete(qrTokenRef(ticketId));
+    const chainOp = recipient
+      ? ({
+          kind: 'reassign',
+          toUid: recipient.uid,
+          reason: event.reassignMode === 'random' ? REASON.CANCEL_RANDOM : REASON.CANCEL_QUEUE,
+          reassignmentId: reassignmentRef.id,
+        } as const)
+      : ({ kind: 'release', reason: REASON.CANCEL_RELEASED, reassignmentId: reassignmentRef.id } as const);
+    const { chainSeq } = enqueueChainOps(tx, ticketRef, ticketSnap.data()!, [chainOp]);
+    const chain = { chainSeq, 'chain.status': 'pending' };
     if (recipient) {
-      tx.update(ticketRef, { ownerUid: recipient.uid, qrToken: null, qrExpiresAt: null });
+      tx.update(ticketRef, { ownerUid: recipient.uid, qrToken: null, qrExpiresAt: null, ...chain });
       tx.update(waitlist.doc(recipient.email), { status: 'assigned', assignedTicketId: ticketId });
       return { ok: true, outcome: 'REASSIGNED' };
     }
-    tx.update(ticketRef, { status: 'cancelled', ownerUid: null, qrToken: null, qrExpiresAt: null });
+    tx.update(ticketRef, { status: 'cancelled', ownerUid: null, qrToken: null, qrExpiresAt: null, ...chain });
     tx.update(eventRef, { issuedCount: FieldValue.increment(-1) });
     return { ok: true, outcome: 'RELEASED' };
   });

@@ -1,11 +1,28 @@
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { onCall } from 'firebase-functions/v2/https';
-import type { VerifyEntryReason, VerifyEntryResponse } from '../api';
-import { decideEntry, parseQrPayload, scanResultFor } from '../domain/ticket';
+import { CONFIRM_WINDOW_MS, type VerifyEntryReason, type VerifyEntryResponse } from '../api';
+import { parseDeviceKey, qrSignatureIsValid } from '../domain/device';
+import { decideEntry, parseQrPayload, scanResultFor, type FestivalEvent, type QrPayload } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, qrTokenRef, readDocId, readString, requireAuth, requireRole, ticketFromSnap } from './boundary';
+import { callableOptions } from './callableOptions';
+import { admitTicket, entryCheckRef, holderOf, recordScan } from './entry';
 
-export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (request) => {
+// What a scan that passed every check leads to.
+type Verdict = { kind: 'admit' } | { kind: 'awaitConfirm' };
+
+function passedVerdict(event: FestivalEvent): Verdict {
+  return event.twoStepCheck ? { kind: 'awaitConfirm' } : { kind: 'admit' };
+}
+
+// The server-issued token is single use (deleted on entry), so a signed QR needs no nonce store.
+function signatureAllowed(qr: QrPayload, event: FestivalEvent, deviceKeyRaw: unknown, nowMs: number): boolean {
+  if (qr.version === 1) return !event.requireDevice;
+  const key = parseDeviceKey(deviceKeyRaw);
+  return key !== null && qrSignatureIsValid(key, qr, nowMs);
+}
+
+export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const raw = readString(request.data, 'qrPayload');
   const data = request.data as { eventId?: unknown } | null;
@@ -13,16 +30,16 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
 
   return db.runTransaction(async (tx): Promise<VerifyEntryResponse> => {
     const staff = await requireRole(tx, caller.uid, ['staff', 'admin']);
+    const nowMs = Date.now();
     const qr = parseQrPayload(raw);
-    const ticket = qr
-      ? ticketFromSnap(await tx.get(db.doc(`tickets/${qr.ticketId}`)), await tx.get(qrTokenRef(qr.ticketId)))
-      : null;
+    const ticketSnap = qr ? await tx.get(db.doc(`tickets/${qr.ticketId}`)) : null;
+    const ticket = qr && ticketSnap ? ticketFromSnap(ticketSnap, await tx.get(qrTokenRef(qr.ticketId))) : null;
     // A ticket for another school's event is refused before anything else, so it never counts as entered here.
     const decision: ReturnType<typeof decideEntry> | { ok: false; reason: VerifyEntryReason } = !qr
       ? { ok: false, reason: 'INVALID_FORMAT' }
       : ticket && expectedEventId && ticket.eventId !== expectedEventId
         ? { ok: false, reason: 'WRONG_EVENT' }
-        : decideEntry(ticket, qr.token, Date.now());
+        : decideEntry(ticket, qr.token, nowMs);
     // Another school's student stays out of this event's scan log.
     const otherEvent = !decision.ok && decision.reason === 'WRONG_EVENT';
     const owner = ticket && !otherEvent ? ((await tx.get(db.doc(`users/${ticket.ownerUid}`))).data() ?? null) : null;
@@ -30,33 +47,40 @@ export const verifyEntry = onCall<unknown, Promise<VerifyEntryResponse>>(async (
     const event = eventRef ? eventFromSnap(await tx.get(eventRef))! : null;
 
     // Logged under the scanner's event so that event's admin sees the refused attempt.
-    tx.create(db.collection('scanLogs').doc(), {
+    const scan = {
       eventId: expectedEventId ?? ticket?.eventId ?? null,
       ticketId: otherEvent ? null : (ticket?.id ?? null),
-      studentName: owner?.name ?? null,
-      studentId: owner?.studentId ?? null,
+      owner,
       staffUid: caller.uid,
       staffName: staff.name ?? '',
-      result: decision.ok ? 'ok' : scanResultFor(decision.reason),
-      scannedAt: FieldValue.serverTimestamp(),
-    });
-    if (!decision.ok) return decision;
-
-    tx.update(db.doc(`tickets/${decision.ticket.id}`), {
-      status: 'used',
-      usedAt: FieldValue.serverTimestamp(),
-      qrToken: null,
-      qrExpiresAt: null,
-    });
-    tx.update(eventRef!, { enteredCount: FieldValue.increment(1) });
-    tx.delete(qrTokenRef(decision.ticket.id));
-
-    return {
-      ok: true,
-      ticketId: decision.ticket.id,
-      holder: { name: owner?.name ?? '', studentId: owner?.studentId ?? '', photoUrl: owner?.photoUrl ?? null },
-      enteredCount: event!.enteredCount + 1,
-      capacity: event!.capacity,
     };
+    const reject = (reason: VerifyEntryReason): VerifyEntryResponse => {
+      recordScan(tx, { ...scan, result: scanResultFor(reason) });
+      return { ok: false, reason };
+    };
+    if (!decision.ok) return reject(decision.reason);
+
+    // The signature is checked last: a QR that fails an earlier rule keeps that rule's reason, and the holder is
+    // only ever returned for a QR that passed everything.
+    const deviceKeyRaw = qr!.version === 2 ? (await tx.get(db.doc(`devices/${decision.ticket.ownerUid}`))).get('publicKeyJwk') : null;
+    const verdict = signatureAllowed(qr!, event!, deviceKeyRaw, nowMs) ? passedVerdict(event!) : null;
+    if (!verdict) return reject('SIGNATURE_INVALID');
+
+    const base = { ok: true as const, ticketId: decision.ticket.id, holder: holderOf(owner), capacity: event!.capacity };
+    if (verdict.kind === 'awaitConfirm') {
+      tx.set(entryCheckRef(decision.ticket.id), {
+        ticketId: decision.ticket.id,
+        eventId: decision.ticket.eventId,
+        ownerUid: decision.ticket.ownerUid,
+        staffUid: caller.uid,
+        checkedAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(nowMs + CONFIRM_WINDOW_MS),
+      });
+      return { ...base, enteredCount: event!.enteredCount, needsConfirm: true };
+    }
+
+    recordScan(tx, { ...scan, result: 'ok' });
+    const enteredCount = admitTicket(tx, db.doc(`tickets/${decision.ticket.id}`), ticketSnap!.data()!, eventRef!, event!.enteredCount);
+    return { ...base, enteredCount };
   });
 });

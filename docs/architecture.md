@@ -26,7 +26,7 @@
 | 함수 | 하는 일 |
 | --- | --- |
 | `issueTicket` | 도메인(`allowedDomains`), 1인 1매, 정원을 확인하고 발급 |
-| `refreshQrToken` | 내 입장권 화면이 30초마다 호출. 새 토큰과 만료 시각을 `tickets`에 저장하고 반환 |
+| `refreshQrToken` | 내 입장권 화면이 25초마다 호출(토큰 유효 30초). 새 토큰과 만료 시각을 클라이언트가 읽을 수 없는 `qrTokens/{ticketId}`에 저장하고 `TTV1:{ticketId}:{token}`을 반환 |
 | `verifyEntry` | 토큰 일치·미사용·미만료를 확인하고, 트랜잭션으로 사용됨 처리와 `enteredCount+1`. 이름·학번·사진 반환 |
 | `cancelTicket` | 주인이 입장권을 취소하면 `reassignMode`에 따라 대기 명단의 다음 사람 또는 무작위 한 명에게 재배정. 이력을 `reassignments`에 기록. 대기자가 없으면 다시 발급 가능한 수량으로 돌린다 |
 
@@ -69,9 +69,9 @@ markUsed(tokenId) onlyMinter                 // 입장 후 이전 불가 처리
 
 1. 첫 로그인 때 WebCrypto로 ECDSA P-256 키쌍을 만든다. `extractable: false`로 만들어 IndexedDB에 저장한다.
 2. `registerDevice`로 공개키를 `devices/{uid}`에 등록한다. 이미 등록된 기기가 있으면 거절한다. 폰 교체 등으로 키를 잃으면 관리자가 `resetDevice`로 초기화해야만 다시 등록할 수 있다.
-3. 30초마다 `{ticketId, ts, nonce}`를 기기 키로 서명해 QR을 만든다.
-4. `verifyEntry`는 서명, ts 30초 이내, nonce 첫 사용(`usedNonces`, TTL 자동 삭제), 상태를 확인한다.
-5. 검표를 두 단계로 나눈다. 검증을 통과하면 사진을 먼저 보여주고, 스태프가 얼굴을 대조해 승인하면 `confirmEntry`로 사용됨 처리한다.
+3. QR 갱신 요청에 `TTV1-REFRESH:{ticketId}:{signedAt}` 서명을 보내고, 서버가 `events.requireDevice`가 켜진 행사에서만 확인한다.
+4. 폰이 토큰을 받을 때마다 `TTV2:{ticketId}:{token}:{signedAt}`에 서명해 `TTV2` QR을 만든다. `verifyEntry`는 서명과 60초 이내 여부를 확인한다. 서버 토큰이 입장 때 지워지므로 설계의 nonce 저장소(`usedNonces`)는 만들지 않았다. `requireDevice`가 켜진 행사는 서명 없는 QR을 거부한다(구현됨, 기본 꺼짐).
+5. 검표를 두 단계로 나눈다. `events.twoStepCheck`가 켜진 행사는 `verifyEntry`가 사진을 돌려주고 스태프가 승인하면 `confirmEntry`로 입장 처리한다(구현됨, 기본 꺼짐). 자세한 내용은 `docs/api.md` 12장. 검증을 통과하면 사진을 먼저 보여주고, 스태프가 얼굴을 대조해 승인하면 `confirmEntry`로 사용됨 처리한다.
 
 ### 2.3 학교 메일 인증과 재학생 승인
 
@@ -97,6 +97,7 @@ markUsed(tokenId) onlyMinter                 // 입장 후 이전 불가 처리
 ### 2.4 봇 차단
 
 - 모든 callable 함수에 App Check(reCAPTCHA Enterprise)를 강제한다.
+- 구현: 서버는 `ENFORCE_APP_CHECK` 파라미터(기본 꺼짐), 프론트는 `VITE_APPCHECK_SITE_KEY`가 있을 때만 시작한다. 켜는 순서는 `docs/api.md` 12장.
 
 ### 2.5 Google Sheets 명단
 
@@ -126,7 +127,7 @@ flowchart LR
     CF[Cloud Functions]
     AC[App Check]
   end
-  Chain[(Polygon Amoy<br/>FestivalTicket)]
+  Chain[(Base Sepolia<br/>FestivalTicket)]
   Sheets[Google Sheets]
 
   S & T & A --> AC --> CF
@@ -160,7 +161,7 @@ tell-the-vision/
 
 | 날짜 | 백엔드 | 디자인 + 프론트 |
 | --- | --- | --- |
-| 11/4 (수) | Hardhat 세팅, 컨트랙트, Amoy 배포, 발급 시 mint 연동 | 기기 키와 서명 QR, 검표 2단계(승인 버튼) |
+| 11/4 (수) | Hardhat 세팅, 컨트랙트, 테스트넷 배포, 발급 시 mint 연동 | 기기 키와 서명 QR, 검표 2단계(승인 버튼) |
 | 11/5 (목) | 취소 재배정의 체인 연동(`reassign`), 서명 검증, `confirmSchoolEmail`, `approveUser`, `importWaitlist` | 취소 화면과 결과 안내, 학교 메일 인증과 사진 업로드 온보딩, 관리자 승인 화면 |
 | 11/6 (금) | 데모 데이터 정리, 여유 시 App Check | 두 폰으로 리허설 |
 
@@ -169,7 +170,7 @@ tell-the-vision/
 
 ## 5. 팀 결정 필요
 
-- [ ] 테스트넷: Sepolia / Polygon Amoy(추천)
+- [x] 테스트넷: Base Sepolia (2026-11-04 결정. Amoy faucet이 메인넷 ETH 잔고를 요구해서 바꿈. Amoy도 `NETWORK=amoy`로 배포 가능)
 - [ ] 컨트랙트 개발 도구: Hardhat(추천) / Foundry
 - [ ] 서버의 블록체인 라이브러리: ethers.js(추천) / viem
 - [ ] RPC: Alchemy(추천) / Infura

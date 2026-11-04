@@ -34,23 +34,35 @@ export interface FestivalEvent {
   requireRoster: boolean;
   // Test events only: lets a student who cancelled take a ticket again.
   allowReissueAfterCancel: boolean;
+  // The scanner shows the holder's photo and a staff member confirms before anyone is admitted.
+  twoStepCheck: boolean;
 }
 
 export const QR_PREFIX = 'TTV1';
+export const QR_PREFIX_V2 = 'TTV2';
 export const QR_TTL_MS = 30_000;
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+export type UnsignedQr = { version: 1; ticketId: string; token: string };
+export type SignedQr = { version: 2; ticketId: string; token: string; signedAt: number; signature: string };
+export type QrPayload = UnsignedQr | SignedQr;
 
 export function formatQrPayload(ticketId: string, token: string): string {
   return `${QR_PREFIX}:${ticketId}:${token}`;
 }
 
-export function parseQrPayload(raw: string): { ticketId: string; token: string } | null {
+export function parseQrPayload(raw: string): QrPayload | null {
   const parts = raw.split(':');
-  if (parts.length !== 3) return null;
   const [prefix, ticketId, token] = parts;
-  if (prefix !== QR_PREFIX || !ID_PATTERN.test(ticketId) || !ID_PATTERN.test(token)) return null;
-  return { ticketId, token };
+  if (!ID_PATTERN.test(ticketId ?? '') || !ID_PATTERN.test(token ?? '')) return null;
+  if (prefix === QR_PREFIX && parts.length === 3) return { version: 1, ticketId, token };
+  if (prefix === QR_PREFIX_V2 && parts.length === 5) {
+    const [, , , signedAtRaw, signature] = parts;
+    if (!/^\d{1,16}$/.test(signedAtRaw) || !ID_PATTERN.test(signature)) return null;
+    return { version: 2, ticketId, token, signedAt: Number(signedAtRaw), signature };
+  }
+  return null;
 }
 
 // Admin-facing label for a verifyEntry outcome. The token mismatch is shown as expired, like the scanner screen does.
@@ -61,6 +73,7 @@ const scanResults: Record<VerifyEntryReason, ScanResult> = {
   TOKEN_MISMATCH: 'expired',
   EXPIRED: 'expired',
   USED: 'used',
+  SIGNATURE_INVALID: 'invalid',
 };
 
 export function scanResultFor(reason: VerifyEntryReason): ScanResult {

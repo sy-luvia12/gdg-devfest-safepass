@@ -1,5 +1,9 @@
 import type { Role, User } from '@/types';
 
+/** 블록 익스플로러와 컨트랙트 주소 (.env.local). 기본은 Polygon Amoy */
+export const CHAIN_EXPLORER = import.meta.env.VITE_CHAIN_EXPLORER || 'https://amoy.polygonscan.com';
+export const CHAIN_CONTRACT = import.meta.env.VITE_CHAIN_CONTRACT || '';
+
 /** 권한이 없는 경로에 들어왔을 때 돌려보낼 역할별 첫 화면 */
 export function homePathFor(role: Role): string {
   if (role === 'admin') return '/admin';

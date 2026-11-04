@@ -11,9 +11,10 @@ import {
   requireAuth,
   requireSchoolAdmin,
 } from './boundary';
+import { callableOptions } from './callableOptions';
 
 // The host school's admin registers an event. Students of every listed school can take its tickets.
-export const createEvent = onCall<unknown, Promise<CreateEventResponse>>(async (request) => {
+export const createEvent = onCall<unknown, Promise<CreateEventResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const schoolIds = [...new Set(readStringList(request.data, 'schoolIds'))];
   if (!schoolIds.every((id) => DOC_ID.test(id))) throw new HttpsError('invalid-argument', 'schoolIds are not valid ids.');

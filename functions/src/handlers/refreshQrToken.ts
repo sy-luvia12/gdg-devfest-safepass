@@ -6,8 +6,9 @@ import { deviceFailure, parseDeviceKey } from '../domain/device';
 import { formatQrPayload, QR_TTL_MS } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, qrTokenRef, readDeviceProof, readDocId, requireAuth, ticketFromSnap } from './boundary';
+import { callableOptions } from './callableOptions';
 
-export const refreshQrToken = onCall<unknown, Promise<RefreshQrTokenResponse>>(async (request) => {
+export const refreshQrToken = onCall<unknown, Promise<RefreshQrTokenResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const ticketId = readDocId(request.data, 'ticketId');
   const proof = readDeviceProof(request.data);

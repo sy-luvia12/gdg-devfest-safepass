@@ -5,12 +5,14 @@
 import {
   ApiError,
   type CancelResult,
+  type ConfirmResult,
   type DeviceResetRequest,
   type Event,
   type EventInput,
   type EventSettings,
   type EventStats,
   type EventTheme,
+  type QrRefresh,
   type Reassignment,
   type ReassignMode,
   type RosterEntry,
@@ -809,7 +811,18 @@ export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   return s.tickets.find((t) => t.eventId === eventId && t.ownerUid === user.uid) ?? null;
 }
 
-export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
+export function subscribeMyTicket(eventId: string, cb: (ticket: Ticket | null) => void, onError?: () => void): () => void {
+  return subscribe((s) => {
+    const uid = currentUid();
+    if (!uid) {
+      onError?.();
+      return null;
+    }
+    return { ticket: s.tickets.find((t) => t.eventId === eventId && t.ownerUid === uid) ?? null };
+  }, (v) => cb(v.ticket));
+}
+
+export async function refreshQrToken(ticketId: string): Promise<QrRefresh> {
   await wait();
   const s = load();
   const user = requireUser(s);
@@ -820,9 +833,9 @@ export async function refreshQrToken(ticketId: string): Promise<{ token: string;
   return { token: t.qrToken, expiresAt: t.qrExpiresAt };
 }
 
-/** QR 내용. 실제 백엔드는 TTV1: 접두사 (firebaseApi.ts) */
+/** QR 내용. 실제 백엔드와 같은 TTV1: 접두사 (firebaseApi.ts) */
 export function formatQrPayload(ticketId: string, token: string): string {
-  return `safepass:${ticketId}:${token}`;
+  return `TTV1:${ticketId}:${token}`;
 }
 
 export async function getTicketHistory(ticketId: string): Promise<TicketHistoryItem[]> {
@@ -913,9 +926,9 @@ export async function verifyEntry(qrPayload: string, _eventId?: string): Promise
   const staff = requireUser(s, ['staff', 'admin']);
   const event = myEvent(s, staff);
 
-  const match = /^safepass:([^:]+):([^:]+)$/.exec(qrPayload.trim());
+  const match = /^TTV1:([^:]+):([^:]+)$/.exec(qrPayload.trim());
   const found = match ? s.tickets.find((t) => t.id === match[1]) : undefined;
-  const fail = (result: VerifyResult['result'], t?: Ticket): VerifyResult => {
+  const fail = (result: ScanResult | 'wrong_event', t?: Ticket): VerifyResult => {
     addLog(s, event, staff, result === 'wrong_event' ? 'invalid' : result, t);
     save(s);
     return { result };
@@ -945,6 +958,28 @@ export async function verifyEntry(qrPayload: string, _eventId?: string): Promise
   addLog(s, event, staff, 'ok', ticket);
   save(s);
   return { result: 'ok', user: userView, nftTokenId: ticket.nftTokenId, ticketId: ticket.id };
+}
+
+/** mock은 needs_confirm을 돌려주지 않지만 계약을 맞춰 둔다 */
+export async function confirmEntry(ticketId: string, match: boolean): Promise<ConfirmResult> {
+  await wait();
+  const s = load();
+  const staff = requireUser(s, ['staff', 'admin']);
+  const event = myEvent(s, staff);
+  const ticket = s.tickets.find((t) => t.id === ticketId && t.eventId === event.id);
+  if (!ticket) return { result: 'invalid' };
+  if (ticket.status === 'used') return { result: 'used' };
+  if (!match) {
+    addLog(s, event, staff, 'mismatch', ticket);
+    save(s);
+    return { result: 'mismatch' };
+  }
+  ticket.status = 'used';
+  ticket.usedAt = Date.now();
+  event.enteredCount += 1;
+  addLog(s, event, staff, 'ok', ticket);
+  save(s);
+  return { result: 'ok' };
 }
 
 export function subscribeStaffStats(eventId: string, cb: (s: StaffStats) => void): () => void {

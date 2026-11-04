@@ -4,6 +4,7 @@ import { formatTime } from '@/app/format';
 import { formatQrPayload } from '@/lib/api';
 import type { Ticket, User } from '@/types';
 import { Avatar } from './Avatar';
+import { ChainRecord } from './ChainRecord';
 import { cx } from './cx';
 import { StatusBadge } from './StatusBadge';
 
@@ -21,7 +22,7 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
   const now = useNow(used ? null : 250);
   const leftMs = Math.max(0, ticket.qrExpiresAt - now);
   const leftSec = Math.ceil(leftMs / 1000);
-  const payload = formatQrPayload(ticket.id, ticket.qrToken);
+  const payload = formatQrPayload(ticket.id, ticket.qrToken, ticket.qrSignature);
 
   return (
     <article className="flex flex-col gap-5 rounded-xl bg-grad-ticket p-5 shadow-float">
@@ -66,7 +67,10 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
           <p className="text-heading text-ink">{owner.name}</p>
           <p className="text-caption text-ink-2 tabular">{owner.studentId}</p>
         </div>
-        <p className="text-caption text-ink-2 tabular">NFT {ticket.nftTokenId}</p>
+        <div className="flex flex-col items-end gap-1">
+          <p className="text-caption text-ink-2 tabular">NFT {ticket.nftTokenId}</p>
+          <ChainRecord chain={ticket.chain} compact />
+        </div>
       </div>
     </article>
   );

@@ -1,5 +1,6 @@
 import { createPublicKey, verify, type KeyObject } from 'node:crypto';
 import type { DeviceKey, DeviceProof, DeviceReason } from '../api';
+import { QR_PREFIX_V2, type SignedQr } from './ticket';
 
 export const PROOF_WINDOW_MS = 60_000;
 
@@ -28,18 +29,31 @@ export function refreshProofMessage(ticketId: string, signedAtMs: number): strin
   return `TTV1-REFRESH:${ticketId}:${signedAtMs}`;
 }
 
-function proofIsValid(key: DeviceKey, ticketId: string, proof: DeviceProof, nowMs: number): boolean {
-  if (!Number.isFinite(proof.signedAt) || Math.abs(nowMs - proof.signedAt) > PROOF_WINDOW_MS) return false;
+function signatureIsValid(key: DeviceKey, message: string, signedAt: number, signature: string, nowMs: number): boolean {
+  if (!Number.isFinite(signedAt) || Math.abs(nowMs - signedAt) > PROOF_WINDOW_MS) return false;
   try {
     return verify(
       'sha256',
-      Buffer.from(refreshProofMessage(ticketId, proof.signedAt)),
+      Buffer.from(message),
       { key: toKeyObject(key), dsaEncoding: 'ieee-p1363' },
-      Buffer.from(proof.signature, 'base64url'),
+      Buffer.from(signature, 'base64url'),
     );
   } catch {
     return false;
   }
+}
+
+function proofIsValid(key: DeviceKey, ticketId: string, proof: DeviceProof, nowMs: number): boolean {
+  return signatureIsValid(key, refreshProofMessage(ticketId, proof.signedAt), proof.signedAt, proof.signature, nowMs);
+}
+
+export function qrSignatureMessage(ticketId: string, token: string, signedAtMs: number): string {
+  return `${QR_PREFIX_V2}:${ticketId}:${token}:${signedAtMs}`;
+}
+
+export function qrSignatureIsValid(key: DeviceKey, qr: SignedQr, nowMs: number): boolean {
+  const message = qrSignatureMessage(qr.ticketId, qr.token, qr.signedAt);
+  return signatureIsValid(key, message, qr.signedAt, qr.signature, nowMs);
 }
 
 export function deviceFailure(

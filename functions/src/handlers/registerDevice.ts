@@ -3,8 +3,9 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { RegisterDeviceResponse } from '../api';
 import { db } from '../firebase';
 import { readDeviceKey, requireAuth } from './boundary';
+import { callableOptions } from './callableOptions';
 
-export const registerDevice = onCall<unknown, Promise<RegisterDeviceResponse>>(async (request) => {
+export const registerDevice = onCall<unknown, Promise<RegisterDeviceResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const key = readDeviceKey(request.data);
   const ref = db.doc(`devices/${caller.uid}`);

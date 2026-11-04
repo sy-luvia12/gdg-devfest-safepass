@@ -3,8 +3,9 @@ import { onCall } from 'firebase-functions/v2/https';
 import type { EnsureUserResponse, UserProfile } from '../api';
 import { db } from '../firebase';
 import { requireAuth } from './boundary';
+import { callableOptions } from './callableOptions';
 
-export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(async (request) => {
+export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const userRef = db.doc(`users/${caller.uid}`);
 
