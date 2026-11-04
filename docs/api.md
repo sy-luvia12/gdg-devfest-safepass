@@ -451,7 +451,7 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
   4. `match: true`이면 `verifyEntry`와 같은 방식으로 입장 처리(사용됨, `enteredCount + 1`, 토큰 삭제, 체인 `markUsed` 기록)하고 `scanLogs`에 `ok`를 기록한다.
 
 ### App Check
-- 서버: `ENFORCE_APP_CHECK` 파라미터(기본 `false`)가 모든 callable의 `enforceAppCheck`에 연결되어 있다(`functions/src/handlers/callableOptions.ts`).
+- 서버: 환경 변수 `ENFORCE_APP_CHECK`(기본 `false`)가 모든 callable의 `enforceAppCheck`에 연결되어 있다(`functions/src/handlers/callableOptions.ts`). Firebase Params가 아니라 `functions/.env.<프로젝트>` 파일에서 읽는다. SDK가 이 옵션의 `.value()`를 코드를 읽는 시점에 호출해서, Param으로 두면 배포와 에뮬레이터가 값을 묻고 멈춘다.
 - 프론트: `VITE_APPCHECK_SITE_KEY`가 있을 때만 reCAPTCHA Enterprise로 App Check를 시작한다. 로컬 개발은 `VITE_APPCHECK_DEBUG_TOKEN`을 쓴다.
 - 켜는 순서
   1. Firebase 콘솔의 App Check에서 웹 앱을 reCAPTCHA Enterprise로 등록하고 사이트 키를 만든다.
