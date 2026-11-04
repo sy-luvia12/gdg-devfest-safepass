@@ -22,7 +22,7 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
   const now = useNow(used ? null : 250);
   const leftMs = Math.max(0, ticket.qrExpiresAt - now);
   const leftSec = Math.ceil(leftMs / 1000);
-  const payload = formatQrPayload(ticket.id, ticket.qrToken);
+  const payload = formatQrPayload(ticket.id, ticket.qrToken, ticket.qrSignature);
 
   return (
     <article className="flex flex-col gap-5 rounded-xl bg-grad-ticket p-5 shadow-float">

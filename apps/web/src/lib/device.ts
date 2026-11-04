@@ -1,6 +1,7 @@
 // 기기 묶기 (docs/api.md 9장). 폰마다 꺼낼 수 없는 ECDSA P-256 키를 만들어 IndexedDB에 두고,
 // QR을 받을 때마다 `TTV1-REFRESH:{ticketId}:{signedAt}`에 서명해서 이 기기임을 증명한다.
 import type { DeviceKey, DeviceProof } from '../../../../functions/src/api';
+import type { QrSignature } from '../types';
 
 const DB_NAME = 'safepass-device';
 const STORE = 'keys';
@@ -62,11 +63,20 @@ function base64url(buf: ArrayBuffer): string {
 }
 
 /** WebCrypto ECDSA 서명은 r||s(IEEE P1363) 형식이라 서버가 그대로 검증한다 */
-export async function signRefresh(keys: CryptoKeyPair, ticketId: string): Promise<DeviceProof> {
+async function signNow(keys: CryptoKeyPair, message: (signedAt: number) => string): Promise<QrSignature> {
   const signedAt = Date.now();
-  const data = new TextEncoder().encode(`TTV1-REFRESH:${ticketId}:${signedAt}`);
+  const data = new TextEncoder().encode(message(signedAt));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, data);
   return { signedAt, signature: base64url(sig) };
+}
+
+export function signRefresh(keys: CryptoKeyPair, ticketId: string): Promise<DeviceProof> {
+  return signNow(keys, (signedAt) => `TTV1-REFRESH:${ticketId}:${signedAt}`);
+}
+
+/** 화면에 띄울 QR에 붙이는 서명. 토큰을 받을 때마다 새로 만든다 (서버는 60초 안의 서명만 받는다) */
+export function signQr(keys: CryptoKeyPair, ticketId: string, token: string): Promise<QrSignature> {
+  return signNow(keys, (signedAt) => `TTV2:${ticketId}:${token}:${signedAt}`);
 }
 
 /** 화면에 보여줄 이 기기 이름 (예: iPhone · Safari). 기기를 특정하는 정보는 쓰지 않는다 */
