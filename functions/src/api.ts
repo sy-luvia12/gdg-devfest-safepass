@@ -358,6 +358,8 @@ export interface OpsListRosterResponse {
   summary: RosterSummary | null;
   /** The event's host school, for 'event' */
   schoolId?: string;
+  /** false for an event roster the event admin has not loaded from a sheet yet: opsEditRoster refuses it */
+  editable: boolean;
 }
 export const OPS_EDIT_MAX = 3000;
 export interface OpsEditRosterRequest {

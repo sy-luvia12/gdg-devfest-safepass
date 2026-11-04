@@ -450,6 +450,12 @@ describe('operator console', () => {
   it('edits an event roster by name and student id, shows the school roster match, and tickets follow it', async () => {
     const ops = await login('ops@sch-ops.test');
     await seedRosterRow(A, { studentId: 'EVR1', name: '정지우', email: 'evr1@sch-a.test' });
+    // Until the event admin loads a sheet once, the console can read the event roster but not change it
+    expect(await ops.call('opsListRoster', { kind: 'event', id: OPS_EV })).toMatchObject({ rows: [], editable: false });
+    const early = ops.call('opsEditRoster', { kind: 'event', id: OPS_EV, upserts: [{ studentId: 'EVR1', name: '정지우' }], deletes: [] });
+    expect(await reasonOf(early)).toBe('NO_SHEET_IMPORT');
+    await db.doc(`events/${OPS_EV}`).update({ roster: { sheetUrl: 'https://docs.google.com/spreadsheets/d/imported', count: 0 } });
+
     await ops.call('opsEditRoster', {
       kind: 'event',
       id: OPS_EV,
@@ -465,13 +471,17 @@ describe('operator console', () => {
     expect(stored.data()).toEqual({ name: '정지우', studentId: 'EVR1' });
 
     const list = await ops.call('opsListRoster', { kind: 'event', id: OPS_EV });
-    expect(list.schoolId).toBe(A);
+    expect(list).toMatchObject({ schoolId: A, editable: true });
     expect(list.rows).toEqual([
       { name: '정지우', studentId: 'EVR1', email: 'evr1@sch-a.test', match: 'OK' },
       { name: '없는학생', studentId: 'EVR2', match: 'NOT_IN_STUDENT_ROSTER' },
       { name: '다른이름', studentId: 'OPS1', email: 'ops1-new@sch-a.test', match: 'NAME_MISMATCH' },
     ]);
-    expect((await db.doc(`events/${OPS_EV}`).get()).get('roster')).toMatchObject({ count: 3 });
+    // The console keeps the sheet address the event admin loaded
+    expect((await db.doc(`events/${OPS_EV}`).get()).get('roster')).toMatchObject({
+      count: 3,
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/imported',
+    });
 
     // The event admin's view has no emails
     const adminA = await login('admin@sch-a.test');

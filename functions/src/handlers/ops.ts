@@ -28,15 +28,25 @@ function readKind(data: unknown): OpsRosterKind {
 }
 
 // The roster place and, for an event, its host school. Throws not-found for a missing school or event.
-async function placeOf(kind: OpsRosterKind, id: string): Promise<{ place: RosterPlace; schoolId: string; domains: string[] }> {
+async function placeOf(
+  kind: OpsRosterKind,
+  id: string,
+): Promise<{ place: RosterPlace; schoolId: string; domains: string[]; sheetImported: boolean }> {
   if (kind === 'school') {
     const school = await db.doc(`schools/${id}`).get();
     if (!school.exists) throw new HttpsError('not-found', 'School not found.');
-    return { place: studentRosterPlace(id), schoolId: id, domains: (school.get('domains') as string[] | undefined) ?? [] };
+    return {
+      place: studentRosterPlace(id),
+      schoolId: id,
+      domains: (school.get('domains') as string[] | undefined) ?? [],
+      sheetImported: true,
+    };
   }
   const event = await db.doc(`events/${id}`).get();
   if (!event.exists) throw new HttpsError('not-found', 'Event not found.');
-  return { place: eventRosterPlace(id), schoolId: hostOf(event.get('schoolIds')), domains: [] };
+  // The event admin loads the event roster from a sheet at least once (importEventRoster sets roster.sheetUrl)
+  const sheetImported = !!(event.get('roster') as { sheetUrl?: string } | undefined)?.sheetUrl;
+  return { place: eventRosterPlace(id), schoolId: hostOf(event.get('schoolIds')), domains: [], sheetImported };
 }
 
 function summaryOf(v: unknown): RosterSummary | null {
@@ -50,7 +60,7 @@ export const opsListRoster = onCall<unknown, Promise<OpsListRosterResponse>>(cal
   const kind = readKind(request.data);
   const id = readDocId(request.data, 'id');
   await db.runTransaction((tx) => requireOperator(tx, caller.uid));
-  const { place, schoolId } = await placeOf(kind, id);
+  const { place, schoolId, sheetImported } = await placeOf(kind, id);
   const [parent, snap] = await Promise.all([place.parent.get(), place.rows.orderBy('studentId').limit(LIST_MAX).get()]);
   const summary = summaryOf(parent.get(place.summaryField));
 
@@ -61,7 +71,7 @@ export const opsListRoster = onCall<unknown, Promise<OpsListRosterResponse>>(cal
       email: d.get('email') ?? '',
       claimed: !!d.get('claimedBy'),
     }));
-    return { rows, summary };
+    return { rows, summary, editable: true };
   }
   const school = await schoolRowsFor(schoolId, snap.docs.map((d) => d.id));
   const rows: OpsRosterRow[] = snap.docs.map((d) => {
@@ -69,7 +79,7 @@ export const opsListRoster = onCall<unknown, Promise<OpsListRosterResponse>>(cal
     const match = school.get(row.studentId);
     return { ...row, ...(match?.email ? { email: match.email } : {}), match: matchEventRow(row, match ?? null) };
   });
-  return { rows, summary, schoolId };
+  return { rows, summary, schoolId, editable: sheetImported };
 });
 
 interface UpsertInput {
@@ -106,7 +116,11 @@ export const opsEditRoster = onCall<unknown, Promise<OpsEditRosterResponse>>(cal
   const deletes = readDeletes(request.data);
   const replace = (request.data as { replace?: unknown }).replace === true;
   await db.runTransaction((tx) => requireOperator(tx, caller.uid));
-  const { place, domains } = await placeOf(kind, id);
+  const { place, domains, sheetImported } = await placeOf(kind, id);
+  // An event roster starts from the event admin's sheet; the console only fixes it afterwards.
+  if (!sheetImported) {
+    throw new HttpsError('failed-precondition', 'The event admin has not loaded a roster sheet yet.', { reason: 'NO_SHEET_IMPORT' });
+  }
 
   // Check every row first; a later row with the same student id or email wins over an earlier one.
   const skipped: { index: number; reason: RosterSkipReason }[] = [];
