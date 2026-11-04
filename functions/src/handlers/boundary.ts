@@ -48,6 +48,13 @@ export async function requireSchoolAdmin(tx: Transaction, uid: string, schoolId:
   return user;
 }
 
+// The SafePass operator: an admin with no school and the operator flag (from its seed profile).
+export async function requireOperator(tx: Transaction, uid: string): Promise<DocumentData> {
+  const user = await requireRole(tx, uid, ['admin']);
+  if (user.operator !== true || user.adminSchoolId) throw new HttpsError('permission-denied', 'Operator only.');
+  return user;
+}
+
 // The school an operator works for: adminSchoolId for an admin, staffSchoolId for staff. Undefined means a
 // SafePass team account (or staff added before schools were scoped), which may work at every school.
 export function operatorSchoolId(user: DocumentData): string | undefined {

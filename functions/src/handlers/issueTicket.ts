@@ -2,6 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { IssueReason, IssueTicketResponse } from '../api';
 import { enqueueChainOps } from '../chain/outbox';
+import { isStudentId, normalizeName } from '../domain/roster';
 import { emailDomain, formatNftNumber } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
@@ -41,9 +42,15 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callabl
         throw new HttpsError('failed-precondition', 'A cancelled ticket cannot be taken again.', { reason });
       }
     }
-    if (event.requireRoster && !(await tx.get(db.doc(`events/${eventId}/roster/${caller.email}`))).exists) {
-      const reason: IssueReason = 'NOT_IN_ROSTER';
-      throw new HttpsError('failed-precondition', 'Not on this event roster.', { reason });
+    // Event rosters list names and student ids. The student's id and name (set at sign-up from the school roster,
+    // or by a seed profile) must match a row.
+    if (event.requireRoster) {
+      const studentId = typeof student.studentId === 'string' ? student.studentId : '';
+      const row = isStudentId(studentId) ? await tx.get(db.doc(`events/${eventId}/roster/${studentId}`)) : null;
+      if (!row?.exists || normalizeName(row.get('name') ?? '') !== normalizeName(student.name ?? '')) {
+        const reason: IssueReason = 'NOT_IN_ROSTER';
+        throw new HttpsError('failed-precondition', 'Not on this event roster.', { reason });
+      }
     }
     if (event.issuedCount >= event.capacity) throw new HttpsError('resource-exhausted', 'Event is full.');
 

@@ -1,7 +1,7 @@
 import type { PrecheckReason, RosterEntry, RosterSkipReason } from '../api';
 import { emailDomain } from './ticket';
 
-// A roster row as stored under schools/{id}/roster/{studentId} and events/{id}/roster/{email}.
+// A school roster row as stored under schools/{id}/roster/{studentId}.
 export type RosterRow = RosterEntry;
 
 export interface SkippedRow {
@@ -33,6 +33,14 @@ export const isStudentId = (value: string) => STUDENT_ID.test(value);
 
 export const normalizeName = (name: string) => name.replace(/\s+/g, '');
 
+// Why a student roster row cannot be stored, or null when it can. Shared by the sheet import and the operator console.
+export function studentRowProblem(row: RosterRow, allowedDomains: readonly string[]): RosterSkipReason | null {
+  if (!row.name || !row.studentId || !row.email) return 'MISSING_FIELD';
+  if (!STUDENT_ID.test(row.studentId)) return 'BAD_STUDENT_ID';
+  if (!allowedDomains.includes(emailDomain(row.email))) return 'BAD_DOMAIN';
+  return null;
+}
+
 // The first row is the header. Rows that cannot be used are skipped with a reason instead of failing the import.
 export function parseRosterRows(values: readonly (readonly unknown[])[], allowedDomains: readonly string[]): RosterParse {
   const header = (values[0] ?? []).map((v) => String(v ?? '').trim());
@@ -49,9 +57,8 @@ export function parseRosterRows(values: readonly (readonly unknown[])[], allowed
     const row = { name: cell(at.name), studentId: cell(at.studentId), email: cell(at.email).toLowerCase() };
     const sheetRow = i + 2;
     if (!row.name && !row.studentId && !row.email) return;
-    if (!row.name || !row.studentId || !row.email) return skipped.push({ row: sheetRow, reason: 'MISSING_FIELD' });
-    if (!STUDENT_ID.test(row.studentId)) return skipped.push({ row: sheetRow, reason: 'BAD_STUDENT_ID' });
-    if (!allowedDomains.includes(emailDomain(row.email))) return skipped.push({ row: sheetRow, reason: 'BAD_DOMAIN' });
+    const problem = studentRowProblem(row, allowedDomains);
+    if (problem) return skipped.push({ row: sheetRow, reason: problem });
     if (ids.has(row.studentId)) return skipped.push({ row: sheetRow, reason: 'DUPLICATE_STUDENT_ID' });
     if (emails.has(row.email)) return skipped.push({ row: sheetRow, reason: 'DUPLICATE_EMAIL' });
     ids.add(row.studentId);
@@ -59,6 +66,53 @@ export function parseRosterRows(values: readonly (readonly unknown[])[], allowed
     rows.push(row);
   });
   return { ok: true, rows, skipped };
+}
+
+// An event roster row: the event admin knows names and student ids, never emails. Stored under
+// events/{id}/roster/{studentId}; the email comes from the school roster when needed.
+export type EventRosterRow = { name: string; studentId: string };
+
+export type EventRosterParse =
+  // sheetRows[i] is the 1-based sheet row of rows[i], for reporting rows the school roster does not match.
+  | { ok: true; rows: EventRosterRow[]; sheetRows: number[]; skipped: SkippedRow[] }
+  | { ok: false; reason: 'MISSING_COLUMNS' };
+
+export function eventRowProblem(row: EventRosterRow): RosterSkipReason | null {
+  if (!row.name || !row.studentId) return 'MISSING_FIELD';
+  if (!STUDENT_ID.test(row.studentId)) return 'BAD_STUDENT_ID';
+  return null;
+}
+
+// Event roster sheets need 이름 and 학번. An email column, if present, is ignored.
+export function parseEventRosterRows(values: readonly (readonly unknown[])[]): EventRosterParse {
+  const header = (values[0] ?? []).map((v) => String(v ?? '').trim());
+  const at = { name: header.findIndex((h) => HEADERS.name.test(h)), studentId: header.findIndex((h) => HEADERS.studentId.test(h)) };
+  if (at.name < 0 || at.studentId < 0) return { ok: false, reason: 'MISSING_COLUMNS' };
+
+  const rows: EventRosterRow[] = [];
+  const sheetRows: number[] = [];
+  const skipped: SkippedRow[] = [];
+  const ids = new Set<string>();
+  values.slice(1).forEach((cells, i) => {
+    const cell = (c: number) => String(cells.at(c) ?? '').trim();
+    const row = { name: cell(at.name), studentId: cell(at.studentId) };
+    const sheetRow = i + 2;
+    if (!row.name && !row.studentId) return;
+    const problem = eventRowProblem(row);
+    if (problem) return skipped.push({ row: sheetRow, reason: problem });
+    if (ids.has(row.studentId)) return skipped.push({ row: sheetRow, reason: 'DUPLICATE_STUDENT_ID' });
+    ids.add(row.studentId);
+    rows.push(row);
+    sheetRows.push(sheetRow);
+  });
+  return { ok: true, rows, sheetRows, skipped };
+}
+
+// An event roster row against the host school's roster row of the same student id (null if absent).
+export type EventRowMatch = 'OK' | 'NOT_IN_STUDENT_ROSTER' | 'NAME_MISMATCH';
+export function matchEventRow(row: EventRosterRow, schoolRow: { name: string } | null): EventRowMatch {
+  if (!schoolRow) return 'NOT_IN_STUDENT_ROSTER';
+  return normalizeName(schoolRow.name) === normalizeName(row.name) ? 'OK' : 'NAME_MISMATCH';
 }
 
 export type StudentMatch = 'OK' | 'NAME_MISMATCH' | 'EMAIL_MISMATCH';

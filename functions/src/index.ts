@@ -23,3 +23,4 @@ export { verifyStudentRoster } from './handlers/verifyStudentRoster';
 export { listOpenSchools } from './handlers/listOpenSchools';
 export { precheckStudent } from './handlers/precheckStudent';
 export { submitProfilePhoto } from './handlers/submitProfilePhoto';
+export { opsListRoster, opsEditRoster, opsListStudents } from './handlers/ops';
