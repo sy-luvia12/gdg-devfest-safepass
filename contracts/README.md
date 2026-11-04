@@ -47,6 +47,23 @@ node contracts/scripts/lookup.js --ticket <ID> --network amoy        # Amoy에 �
   - `eventKey = keccak256(eventId)`
 - `ticketStatus`는 revert하지 않는다. 0 미발급, 1 유효, 2 입장 완료, 3 회수됨.
 
+## 취소표 추첨 형식 (`commitDraw` / `seedDraw`)
+컨트랙트는 회차마다 스냅샷 해시(`commitment`)와 시드(`seedBlock`의 블록 해시)만 저장한다. 스냅샷 형식과 당첨 규칙은 `functions/src/lottery/draw.ts`가 기준이다.
+
+```
+leaf        = keccak256(abi.encode(bytes32 eventKey, uint32 round, bytes32 keccak256(uid), bytes32 salt))
+root        = 오름차순 leaf의 머클 루트, 쌍은 정렬해서 해시 (OpenZeppelin MerkleProof와 같음)
+ticketsHash = keccak256(abi.encode(uint256[] tokenIds 오름차순))
+commitment  = keccak256(abi.encode(bytes32 eventKey, uint32 round, bytes32 root, bytes32 ticketsHash))
+score       = uint256(keccak256(abi.encode(bytes32 seed, bytes32 leaf)))
+당첨        = (score, leaf) 오름차순 앞의 k명, k = min(표 수, 응모자 수). j번째 당첨자가 tokenIds[j]
+```
+
+- `salt`는 응모마다 서버가 만드는 무작위 32바이트다. 본인만 받으므로 leaf로는 누구인지 알 수 없다.
+- 시험 벡터: `test/vectors/draw.json`. 서버(`functions/test/lottery.test.ts`), Solidity와 OpenZeppelin(`test/draw-format.test.js`), 브라우저 검증 모듈이 모두 같은 값을 내야 한다. 형식을 바꾸면 `npx tsx functions/scripts/draw-vectors.ts --write`로 다시 만든다.
+- 데모 회차: `deployments/draw-demo.baseSepolia.json`. 실제 행사에 쓰지 않는 전용 행사 키(`safepass-draw-demo`)에 가짜 응모자 10명, 표 2장으로 한 회차를 돌린 결과다. 가짜 응모자라 salt까지 공개했다. 실제 회차는 공연 전에 salt를 공개하지 않는다. 다시 돌리려면 `MINTER_KEY_FILE=<키 파일> npx tsx functions/scripts/draw-demo.ts` (다음 회차 번호로 커밋한다).
+- 시드는 커밋 뒤 5블록째의 블록 해시다. 256블록(약 8분) 안에 `seedDraw`를 부르지 않으면 같은 회차를 다시 커밋해야 하고, 그 기록도 체인에 남는다.
+
 ## 배포 현황
 | 네트워크 | 주소 | 배포 tx | 소스 검증 |
 |---|---|---|---|

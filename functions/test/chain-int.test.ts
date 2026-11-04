@@ -8,6 +8,7 @@ import { REASON, tokenIdOf } from '../src/chain/ids';
 import { processChainOp, walletAddressFor, WaitingForPrevious } from '../src/chain/process';
 import { preflightChain } from '../src/chain/preflight';
 import { deriveAddress } from '../src/chain/wallets';
+import { buildSnapshot, drawWinners, merkleProof, newSalt, verifyProof } from '../src/lottery/draw';
 
 // Hardhat's default account 0 (deployer and minter in scripts/deploy.js). Public test key, local chain only.
 const MINTER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -187,4 +188,32 @@ describe('go-live preflight on a local chain', () => {
     expect(byName(r).rpc.ok).toBe(false);
     expect(JSON.stringify(r)).not.toContain('secret-key-path');
   }, 30_000);
+});
+
+describe('lottery round on a local chain', () => {
+  it('commits the snapshot, seeds it from a later block hash and draws the same winners anyone can recompute', async () => {
+    const eventId = id('ev-draw');
+    await client.ensureEvent(eventId, 10);
+    const entries = Array.from({ length: 6 }, (_, i) => ({ uid: `waiter-${i}`, salt: newSalt() }));
+    const tokenIds = [tokenIdOf(id('dt1')), tokenIdOf(id('dt2'))];
+    const snap = buildSnapshot({ eventId, round: 1, entries, tokenIds });
+
+    const provider = new JsonRpcProvider(RPC, undefined, { cacheTimeout: -1 });
+    const minter = new Contract(CONTRACT, FESTIVAL_TICKET_ABI, new Wallet(MINTER_KEY, provider));
+    const receipt = await (await minter.commitDraw(snap.eventKey, 1, snap.commitment)).wait();
+    const committed = receipt.logs.map((l: { topics: string[]; data: string }) => minter.interface.parseLog(l)).find((l: { name?: string } | null) => l?.name === 'DrawCommitted');
+    const seedBlock = Number(committed.args.seedBlock);
+
+    await provider.send('hardhat_mine', ['0x6']);
+    await (await minter.seedDraw(snap.eventKey, 1)).wait();
+    const [commitment, storedSeedBlock, seed] = await reader.draws(snap.eventKey, 1);
+    expect(commitment).toBe(snap.commitment);
+    expect(Number(storedSeedBlock)).toBe(seedBlock);
+    expect(seed).toBe((await provider.getBlock(seedBlock))!.hash);
+
+    const winners = drawWinners({ seed, leaves: snap.leaves, tokenIds });
+    expect(winners).toHaveLength(2);
+    expect(drawWinners({ seed, leaves: [...snap.leaves].reverse(), tokenIds: [...tokenIds].reverse() })).toEqual(winners);
+    for (const w of winners) expect(verifyProof(w.leaf, merkleProof(snap.leaves, w.leaf), snap.root)).toBe(true);
+  }, 60_000);
 });
