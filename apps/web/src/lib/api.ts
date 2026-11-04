@@ -50,7 +50,7 @@ export const issueTicket: typeof mock.issueTicket = real ? fb.issueTicket : mock
 export const getMyTicket: typeof mock.getMyTicket = real ? fb.getMyTicket : mock.getMyTicket;
 export const subscribeMyTicket: typeof mock.subscribeMyTicket = real ? fb.subscribeMyTicket : mock.subscribeMyTicket;
 export const refreshQrToken: typeof mock.refreshQrToken = real ? fb.refreshQrToken : mock.refreshQrToken;
-export const formatQrPayload: typeof mock.formatQrPayload = real ? fb.formatQrPayload : mock.formatQrPayload;
+export const formatQrPayload: typeof fb.formatQrPayload = real ? fb.formatQrPayload : mock.formatQrPayload;
 export const getTicketHistory: typeof mock.getTicketHistory = real ? empty([]) : mock.getTicketHistory;
 
 // 입장권 취소 → 대기 명단 재배정 (양도 대체)
@@ -58,6 +58,7 @@ export const cancelTicket: typeof mock.cancelTicket = real ? fb.cancelTicket : m
 
 // 검표
 export const verifyEntry: typeof mock.verifyEntry = real ? fb.verifyEntry : mock.verifyEntry;
+export const confirmEntry: typeof mock.confirmEntry = real ? fb.confirmEntry : mock.confirmEntry;
 export const subscribeStaffStats: typeof mock.subscribeStaffStats = real
   ? fb.subscribeStaffStats
   : mock.subscribeStaffStats;

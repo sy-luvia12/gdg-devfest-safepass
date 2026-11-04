@@ -1,6 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { deviceFailure, parseDeviceKey, PROOF_WINDOW_MS, refreshProofMessage } from '../src/domain/device';
+import { deviceFailure, parseDeviceKey, PROOF_WINDOW_MS, qrSignatureIsValid, qrSignatureMessage, refreshProofMessage } from '../src/domain/device';
+import { parseQrPayload, type SignedQr } from '../src/domain/ticket';
 
 const NOW = 1_700_000_000_000;
 
@@ -9,6 +10,16 @@ function newDevice() {
   return {
     jwk: publicKey.export({ format: 'jwk' }),
     key: parseDeviceKey(publicKey.export({ format: 'jwk' }))!,
+    signQr: (ticketId: string, token: string, signedAt: number): SignedQr => ({
+      version: 2,
+      ticketId,
+      token,
+      signedAt,
+      signature: sign('sha256', Buffer.from(qrSignatureMessage(ticketId, token, signedAt)), {
+        key: privateKey,
+        dsaEncoding: 'ieee-p1363',
+      }).toString('base64url'),
+    }),
     proof: (ticketId: string, signedAt: number) => ({
       signedAt,
       signature: sign('sha256', Buffer.from(refreshProofMessage(ticketId, signedAt)), {
@@ -65,5 +76,49 @@ describe('deviceFailure', () => {
     expect(deviceFailure(device.key, 't1', flipped, NOW)).toBe('DEVICE_PROOF_INVALID');
     expect(deviceFailure(device.key, 't1', { signedAt: NOW, signature: 'not a signature' }, NOW)).toBe('DEVICE_PROOF_INVALID');
     expect(deviceFailure(device.key, 't1', { signedAt: Number.NaN, signature: good.signature }, NOW)).toBe('DEVICE_PROOF_INVALID');
+  });
+});
+
+describe('signed QR', () => {
+  const device = newDevice();
+
+  it('signs exactly TTV2:{ticketId}:{token}:{signedAt}', () => {
+    expect(qrSignatureMessage('t1', 'tok', NOW)).toBe(`TTV2:t1:tok:${NOW}`);
+  });
+
+  it('accepts a fresh signature from the registered key, also through the parser', () => {
+    const qr = device.signQr('t1', 'tok', NOW);
+    expect(qrSignatureIsValid(device.key, qr, NOW)).toBe(true);
+    expect(qrSignatureIsValid(device.key, device.signQr('t1', 'tok', NOW - PROOF_WINDOW_MS), NOW)).toBe(true);
+    const parsed = parseQrPayload(`TTV2:t1:tok:${NOW}:${qr.signature}`);
+    expect(parsed).toEqual(qr);
+    expect(qrSignatureIsValid(device.key, parsed as SignedQr, NOW)).toBe(true);
+  });
+
+  it('rejects a signature from another key', () => {
+    expect(qrSignatureIsValid(device.key, newDevice().signQr('t1', 'tok', NOW), NOW)).toBe(false);
+  });
+
+  it('rejects a tampered token, ticket or signing time', () => {
+    const qr = device.signQr('t1', 'tok', NOW);
+    expect(qrSignatureIsValid(device.key, { ...qr, token: 'other' }, NOW)).toBe(false);
+    expect(qrSignatureIsValid(device.key, { ...qr, ticketId: 't2' }, NOW)).toBe(false);
+    expect(qrSignatureIsValid(device.key, { ...qr, signedAt: NOW + 1 }, NOW)).toBe(false);
+  });
+
+  it('rejects a stale or future signing time even with a valid signature', () => {
+    expect(qrSignatureIsValid(device.key, device.signQr('t1', 'tok', NOW - PROOF_WINDOW_MS - 1), NOW)).toBe(false);
+    expect(qrSignatureIsValid(device.key, device.signQr('t1', 'tok', NOW + PROOF_WINDOW_MS + 1), NOW)).toBe(false);
+  });
+
+  it('rejects a refresh proof replayed as a QR signature', () => {
+    const proof = device.proof('t1', NOW);
+    const qr: SignedQr = { version: 2, ticketId: 't1', token: 'tok', signedAt: NOW, signature: proof.signature };
+    expect(qrSignatureIsValid(device.key, qr, NOW)).toBe(false);
+  });
+
+  it('rejects a malformed signature without throwing', () => {
+    const qr = device.signQr('t1', 'tok', NOW);
+    expect(qrSignatureIsValid(device.key, { ...qr, signature: 'AAAA' }, NOW)).toBe(false);
   });
 });

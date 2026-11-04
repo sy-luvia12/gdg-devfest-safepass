@@ -23,6 +23,7 @@ const RESULT_LABEL: Record<ScanResult, string> = {
   expired: '만료',
   used: '중복',
   invalid: '확인 불가',
+  mismatch: '불일치',
 };
 
 /** 전체 입장 기록. 결과별로 거르고 이름·학번으로 찾는다 */

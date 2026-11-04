@@ -5,8 +5,9 @@ import { enqueueChainOps } from '../chain/outbox';
 import { emailDomain, formatNftNumber } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
+import { callableOptions } from './callableOptions';
 
-export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(async (request) => {
+export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const eventId = readDocId(request.data, 'eventId');
 

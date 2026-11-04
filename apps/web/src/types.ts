@@ -74,11 +74,19 @@ export type Ticket = {
   status: 'issued' | 'used';
   qrToken: string;
   qrExpiresAt: number; // epoch ms
+  /** 이 기기 키로 서명한 QR 증명. 서명할 수 없는 환경(WebCrypto 없음)에서는 없고 QR은 서명 없이 표시된다 */
+  qrSignature?: QrSignature;
   issuedAt: number;
   usedAt?: number;
   /** 온체인 기록 (functions TicketChainState). 체인 연동 전 입장권과 mock에는 없다 */
   chain?: TicketChain;
 };
+
+/** QR 서명 (functions DeviceProof와 같은 모양). signedAt: 서명한 시각 epoch ms */
+export type QrSignature = { signedAt: number; signature: string };
+
+/** refreshQrToken 결과. signature가 있으면 QR은 TTV2 */
+export type QrRefresh = { token: string; expiresAt: number; signature?: QrSignature };
 
 /** pending: 체인에 기록 중 / done: 기록 끝 / blocked: 서버 지갑 가스 부족으로 대기 */
 export type TicketChain = {
@@ -123,7 +131,8 @@ export type WaitlistEntry = {
   status: 'waiting' | 'assigned';
 };
 
-export type ScanResult = 'ok' | 'expired' | 'used' | 'invalid';
+/** mismatch: 2단계 검표에서 스태프가 "달라요"를 눌렀다 */
+export type ScanResult = 'ok' | 'expired' | 'used' | 'invalid' | 'mismatch';
 
 export type ScanLog = {
   id: string;
@@ -138,14 +147,24 @@ export type ScanLog = {
   at: number;
 };
 
-/** wrong_event: 다른 학교 행사의 입장권. 기록에는 invalid로 남는다 */
+/**
+ * wrong_event: 다른 학교 행사의 입장권. 기록에는 invalid로 남는다
+ * signature_invalid: 서명이 없거나 이 기기 키와 맞지 않는 QR
+ * needs_confirm: 2단계 검표. 아직 아무도 입장 처리되지 않았고 스태프의 답을 기다린다 (user, ticketId 있음)
+ * no_pending: confirmEntry에서 확인 대기가 없거나 시간이 지남
+ */
+export type VerifyOutcome = ScanResult | 'wrong_event' | 'signature_invalid' | 'needs_confirm' | 'no_pending';
+
 export type VerifyResult = {
-  result: ScanResult | 'wrong_event';
+  result: VerifyOutcome;
   user?: Pick<User, 'name' | 'studentId' | 'photoUrl'>;
   nftTokenId?: string;
   usedAt?: number;
   ticketId?: string;
 };
+
+/** confirmEntry 결과 */
+export type ConfirmResult = { result: 'ok' | 'mismatch' | 'used' | 'no_pending' | 'invalid' };
 
 export type EventStats = {
   enteredCount: number;

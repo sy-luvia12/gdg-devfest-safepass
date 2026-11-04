@@ -2,6 +2,7 @@ export { ensureUser } from './handlers/ensureUser';
 export { issueTicket } from './handlers/issueTicket';
 export { refreshQrToken } from './handlers/refreshQrToken';
 export { verifyEntry } from './handlers/verifyEntry';
+export { confirmEntry } from './handlers/confirmEntry';
 export { cancelTicket } from './handlers/cancelTicket';
 export { registerDevice } from './handlers/registerDevice';
 export { resetDevice } from './handlers/resetDevice';

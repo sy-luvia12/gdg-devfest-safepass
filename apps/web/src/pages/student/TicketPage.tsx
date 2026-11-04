@@ -47,7 +47,7 @@ export function TicketPage() {
     return subscribeMyTicket(eventId, (next) => {
       setTicket((prev) => {
         if (prev && next && prev.id === next.id && prev.status === 'issued' && next.status === 'issued') {
-          return { ...next, qrToken: prev.qrToken, qrExpiresAt: prev.qrExpiresAt };
+          return { ...next, qrToken: prev.qrToken, qrExpiresAt: prev.qrExpiresAt, qrSignature: prev.qrSignature };
         }
         return next;
       });
@@ -67,8 +67,8 @@ export function TicketPage() {
         const latest = await getMyTicket(eventId);
         if (stop) return;
         if (!latest || latest.status !== 'issued') return setTicket(latest);
-        const { token, expiresAt: next } = await refreshQrToken(latest.id);
-        if (!stop) setTicket({ ...latest, qrToken: token, qrExpiresAt: next });
+        const { token, expiresAt: next, signature } = await refreshQrToken(latest.id);
+        if (!stop) setTicket({ ...latest, qrToken: token, qrExpiresAt: next, qrSignature: signature });
       } catch (e) {
         if (stop) return;
         // 다른 기기에 등록된 계정이면 내 정보를 다시 읽어 기기 확인 화면으로 보낸다
@@ -186,7 +186,7 @@ export function TicketPage() {
         {import.meta.env.DEV && ticket.status === 'issued' && (
           <button
             type="button"
-            onClick={() => navigator.clipboard?.writeText(formatQrPayload(ticket.id, ticket.qrToken))}
+            onClick={() => navigator.clipboard?.writeText(formatQrPayload(ticket.id, ticket.qrToken, ticket.qrSignature))}
             className="flex items-center justify-center gap-1 text-caption text-ink-3"
           >
             <Copy size={14} strokeWidth={1.75} />

@@ -19,11 +19,14 @@ import type { Callables, UserProfile } from '../../../../functions/src/api';
 import {
   ApiError,
   type CancelResult,
+  type ConfirmResult,
   type DeviceResetRequest,
   type Event,
   type EventStats,
   type ReassignMode,
   type Reassignment,
+  type QrRefresh,
+  type QrSignature,
   type ScanLog,
   type School,
   type StaffStats,
@@ -33,7 +36,7 @@ import {
   type VerifyResult,
   type WaitlistEntry,
 } from '@/types';
-import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signRefresh } from './device';
+import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signQr, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
 
 /** 학교에 행사가 없을 때 처음 보여줄 행사 */
@@ -302,7 +305,7 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   return ticket;
 }
 
-async function requestQr(ticketId: string, uid: string) {
+async function requestQr(ticketId: string, uid: string): Promise<QrRefresh> {
   // 키 생성·서명이 실패하면(WebCrypto 없는 http 등) deviceProof 키 자체를 뺀다. undefined를 보내면 SDK가 null로 바꾼다
   let proof: Awaited<ReturnType<typeof signRefresh>> | undefined;
   try {
@@ -311,11 +314,19 @@ async function requestQr(ticketId: string, uid: string) {
     proof = undefined;
   }
   const { data } = await call('refreshQrToken')(proof ? { ticketId, deviceProof: proof } : { ticketId });
-  return { token: data.qrPayload.split(':')[2] ?? '', expiresAt: data.expiresAt };
+  const token = data.qrPayload.split(':')[2] ?? '';
+  // 서명을 못 붙여도 서명 없는 QR(TTV1)로 계속 보여준다. 서버가 서명을 요구하면 그때 검표에서 거부된다
+  let signature: QrSignature | undefined;
+  try {
+    signature = await signQr((await getDeviceKeys(uid)).keys, ticketId, token);
+  } catch {
+    signature = undefined;
+  }
+  return { token, expiresAt: data.expiresAt, signature };
 }
 
 /** 기기 서명을 붙여 새 QR을 받는다. 다른 기기에 등록된 계정이면 ApiError('device_blocked') */
-export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
+export async function refreshQrToken(ticketId: string): Promise<QrRefresh> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new ApiError('unauthenticated');
   try {
@@ -336,7 +347,8 @@ export async function refreshQrToken(ticketId: string): Promise<{ token: string;
 }
 
 /** QR 내용 (docs/api.md 7장) */
-export function formatQrPayload(ticketId: string, token: string): string {
+export function formatQrPayload(ticketId: string, token: string, signature?: QrSignature): string {
+  if (signature) return `TTV2:${ticketId}:${token}:${signature.signedAt}:${signature.signature}`;
   return `TTV1:${ticketId}:${token}`;
 }
 
@@ -357,18 +369,42 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
 let myOkCount = 0;
 const myCountListeners = new Set<() => void>();
 
-/** 찍는 순간 입장 처리한다. 사진은 확인용으로 보여주기만 한다 */
+function countMyEntry() {
+  myOkCount += 1;
+  myCountListeners.forEach((f) => f());
+}
+
+/** 2단계 검표가 꺼진 행사는 찍는 순간 입장 처리한다. 켜진 행사는 needs_confirm으로 돌려주고 confirmEntry를 기다린다 */
 export async function verifyEntry(qrPayload: string, eventId?: string): Promise<VerifyResult> {
   try {
     const { data } = await call('verifyEntry')({ qrPayload, eventId });
     if (data.ok) {
-      myOkCount += 1;
-      myCountListeners.forEach((f) => f());
-      return { result: 'ok', ticketId: data.ticketId, user: { ...data.holder, photoUrl: data.holder.photoUrl ?? '' } };
+      const user = { ...data.holder, photoUrl: data.holder.photoUrl ?? '' };
+      if (data.needsConfirm) return { result: 'needs_confirm', ticketId: data.ticketId, user };
+      countMyEntry();
+      return { result: 'ok', ticketId: data.ticketId, user };
     }
     if (data.reason === 'USED') return { result: 'used' };
     if (data.reason === 'WRONG_EVENT') return { result: 'wrong_event' };
+    if (data.reason === 'SIGNATURE_INVALID') return { result: 'signature_invalid' };
     if (data.reason === 'EXPIRED' || data.reason === 'TOKEN_MISMATCH') return { result: 'expired' };
+    return { result: 'invalid' };
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 2단계 검표의 스태프 답. match true면 입장 처리, false면 mismatch로 기록 */
+export async function confirmEntry(ticketId: string, match: boolean): Promise<ConfirmResult> {
+  try {
+    const { data } = await call('confirmEntry')({ ticketId, match });
+    if (data.ok) {
+      countMyEntry();
+      return { result: 'ok' };
+    }
+    if (data.reason === 'MISMATCH') return { result: 'mismatch' };
+    if (data.reason === 'USED') return { result: 'used' };
+    if (data.reason === 'NO_PENDING_CHECK') return { result: 'no_pending' };
     return { result: 'invalid' };
   } catch (e) {
     throw toApiError(e);

@@ -115,5 +115,6 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
     reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
     requireDevice: d.requireDevice === true,
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
+    twoStepCheck: d.twoStepCheck === true,
   };
 }

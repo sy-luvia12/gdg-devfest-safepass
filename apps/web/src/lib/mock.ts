@@ -5,11 +5,13 @@
 import {
   ApiError,
   type CancelResult,
+  type ConfirmResult,
   type DeviceResetRequest,
   type Event,
   type EventSettings,
   type EventStats,
   type EventTheme,
+  type QrRefresh,
   type Reassignment,
   type ReassignMode,
   type RosterEntry,
@@ -621,7 +623,7 @@ export function subscribeMyTicket(eventId: string, cb: (ticket: Ticket | null) =
   }, (v) => cb(v.ticket));
 }
 
-export async function refreshQrToken(ticketId: string): Promise<{ token: string; expiresAt: number }> {
+export async function refreshQrToken(ticketId: string): Promise<QrRefresh> {
   await wait();
   const s = load();
   const user = requireUser(s);
@@ -727,7 +729,7 @@ export async function verifyEntry(qrPayload: string, _eventId?: string): Promise
 
   const match = /^TTV1:([^:]+):([^:]+)$/.exec(qrPayload.trim());
   const found = match ? s.tickets.find((t) => t.id === match[1]) : undefined;
-  const fail = (result: VerifyResult['result'], t?: Ticket): VerifyResult => {
+  const fail = (result: ScanResult | 'wrong_event', t?: Ticket): VerifyResult => {
     addLog(s, event, staff, result === 'wrong_event' ? 'invalid' : result, t);
     save(s);
     return { result };
@@ -757,6 +759,28 @@ export async function verifyEntry(qrPayload: string, _eventId?: string): Promise
   addLog(s, event, staff, 'ok', ticket);
   save(s);
   return { result: 'ok', user: userView, nftTokenId: ticket.nftTokenId, ticketId: ticket.id };
+}
+
+/** mock은 needs_confirm을 돌려주지 않지만 계약을 맞춰 둔다 */
+export async function confirmEntry(ticketId: string, match: boolean): Promise<ConfirmResult> {
+  await wait();
+  const s = load();
+  const staff = requireUser(s, ['staff', 'admin']);
+  const event = myEvent(s, staff);
+  const ticket = s.tickets.find((t) => t.id === ticketId && t.eventId === event.id);
+  if (!ticket) return { result: 'invalid' };
+  if (ticket.status === 'used') return { result: 'used' };
+  if (!match) {
+    addLog(s, event, staff, 'mismatch', ticket);
+    save(s);
+    return { result: 'mismatch' };
+  }
+  ticket.status = 'used';
+  ticket.usedAt = Date.now();
+  event.enteredCount += 1;
+  addLog(s, event, staff, 'ok', ticket);
+  save(s);
+  return { result: 'ok' };
 }
 
 export function subscribeStaffStats(eventId: string, cb: (s: StaffStats) => void): () => void {

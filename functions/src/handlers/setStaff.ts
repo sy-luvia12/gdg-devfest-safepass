@@ -2,10 +2,11 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { SetStaffResponse } from '../api';
 import { db } from '../firebase';
 import { readString, requireAuth, requireRole } from './boundary';
+import { callableOptions } from './callableOptions';
 
 // An admin grants or removes the staff role by email. Someone who has not signed in yet gets it from
 // seedProfiles on their first sign-in. Admin accounts are never changed here.
-export const setStaff = onCall<unknown, Promise<SetStaffResponse>>(async (request) => {
+export const setStaff = onCall<unknown, Promise<SetStaffResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const email = readString(request.data, 'email').trim().toLowerCase();
   if (!/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(email)) throw new HttpsError('invalid-argument', 'email is not valid.');

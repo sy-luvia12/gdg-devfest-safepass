@@ -156,7 +156,7 @@ type WaitlistEntry = { email; name; order; status: 'waiting' | 'assigned' };
 
 type ScanLog = {
   id; eventId; ticketId?; userName?; userPhotoUrl?; studentId?; staffUid?;
-  result: 'ok' | 'expired' | 'used' | 'invalid';
+  result: 'ok' | 'expired' | 'used' | 'invalid' | 'mismatch';   // mismatch: 2단계 검표에서 "달라요"
   at;
 };
 
@@ -197,7 +197,8 @@ getTicketHistory(ticketId): Promise<TicketHistoryItem[]>   // 발급·재배정�
 cancelTicket(ticketId): Promise<'reassigned' | 'released' | 'used'>
 
 // 검표: 스캔하면 바로 입장 처리된다 (통과 시 사진·이름·학번을 크게 보여 스태프가 눈으로 대조)
-verifyEntry(qrPayload, eventId?): Promise<VerifyResult>   // 다른 행사 입장권이면 result 'wrong_event' (기록은 invalid)
+verifyEntry(qrPayload, eventId?): Promise<VerifyResult>   // 다른 행사 입장권이면 'wrong_event', 서명 문제면 'signature_invalid', 2단계 검표 행사면 'needs_confirm'(아직 입장 전)
+confirmEntry(ticketId, match): Promise<ConfirmResult>     // 'ok' | 'mismatch' | 'used' | 'no_pending' | 'invalid'
 subscribeStaffStats(eventId, cb): () => void        // 전체 입장 수, 내가 처리한 수
 getMyScanHistory(): Promise<ScanLog[]>
 
@@ -232,10 +233,12 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 - 학교 메일이 Google Workspace가 아닌 학교는 이후 이메일 링크 로그인으로 보완한다(이번 범위 아님).
 
 ### QR · 검표 규칙
-- QR 내용: `TTV1:{ticketId}:{qrToken}` (mock도 같은 형식). 검표 화면은 스캔한 문자열을 해석하지 않고 그대로 `verifyEntry`에 넘긴다.
+- QR 내용: `TTV1:{ticketId}:{qrToken}`(mock도 같은 형식). 기기 키가 있으면 폰이 `TTV2:{ticketId}:{qrToken}:{signedAt}:{signature}`로 서명해 보여 준다(`docs/api.md` 12장). 검표 화면은 스캔한 문자열을 해석하지 않고 그대로 `verifyEntry`에 넘긴다.
 - 토큰은 클라이언트가 읽을 수 없는 `qrTokens/{ticketId}`에 있다. 유효시간 30초, 화면은 25초마다 `refreshQrToken`을 호출한다.
 - 검표 통과 조건: 토큰 일치 + `status === 'issued'` + 미만료 + 검표 화면이 고른 행사와 같은 행사
-- 통과하면 그 자리에서 입장 처리된다(`status = 'used'`, `enteredCount + 1`). 스태프는 화면의 사진·이름·학번을 얼굴과 눈으로 대조한다. 2단계 검표(`confirmEntry`)는 없다.
+- 기본은 통과하면 그 자리에서 입장 처리된다(`status = 'used'`, `enteredCount + 1`). 스태프는 화면의 사진·이름·학번을 얼굴과 눈으로 대조한다.
+- **2단계 검표**(`events.twoStepCheck`, 기본 꺼짐): 켜진 행사는 `verifyEntry`가 `needsConfirm`과 사진을 돌려주고, 스태프가 "같아요"(`confirmEntry(ticketId, true)`)를 눌러야 입장 처리된다. "달라요"는 `mismatch`로 기록하고 입장권은 그대로 둔다. 확인 대기는 60초.
+- **서명 QR**: `requireDevice`가 켜진 행사는 서명 없는 QR(TTV1)을 `SIGNATURE_INVALID`로 거부한다.
 - 같은 QR을 다시 찍으면 `used`, 시간 지난·교체된 QR은 `expired`, 형식이 다르거나 없는 입장권은 `invalid`
 - 거부된 스캔도 `ScanLog`에 기록한다 (관리자 "거부된 시도")
 
@@ -254,7 +257,8 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 
 ## 구현 상태 (실제 연동 vs 화면만)
 - 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia)와 아웃박스(`functions/src/chain`)가 있다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
-- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인만 `events.requireDevice`가 켜진 행사에서 일어나고(시드 기본 꺼짐), 검표(`verifyEntry`)는 서명을 보지 않는다.
+- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
+- 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자·스태프 권한은 전역 `role`이다. 학교 단위로 나누지 않았다(이후 과제).
 - 아직 화면과 mock뿐: 재학생 승인, 사진·학생증 업로드, 구글 시트 명단·대기 명단 등록, 테마·검표 설정 저장, 개인정보 파기
 - 하지 않는 것: reCAPTCHA, App Check, Gemini, 결제, 개인 간 양도
