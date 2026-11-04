@@ -57,11 +57,26 @@ export interface RefreshQrTokenResponse {
   expiresAt: number;
 }
 
-export const SCAN_RESULTS = ['ok', 'expired', 'used', 'invalid'] as const;
+// mismatch: two-step check, the scanner compared the face and pressed "different" (confirmEntry match false).
+export const SCAN_RESULTS = ['ok', 'expired', 'used', 'invalid', 'mismatch'] as const;
 export type ScanResult = (typeof SCAN_RESULTS)[number];
 
+// Signed QR (events with requireDevice). The phone signs `TTV2:{ticketId}:{token}:{signedAt}` with its device key
+// (same algorithm as DeviceProof: ECDSA P-256, SHA-256, IEEE P1363, base64url) and shows
+// `TTV2:{ticketId}:{token}:{signedAt}:{signature}`. refreshQrToken still returns the unsigned TTV1 payload; the
+// client builds the TTV2 payload from its token. An event without requireDevice accepts TTV1 and TTV2.
+//
 // WRONG_EVENT: the ticket belongs to another event than the one the scanner is checking.
-export const VERIFY_ENTRY_REASONS = ['INVALID_FORMAT', 'NOT_FOUND', 'WRONG_EVENT', 'TOKEN_MISMATCH', 'EXPIRED', 'USED'] as const;
+// SIGNATURE_INVALID: the event requires a signed QR and this one is unsigned, signed by another key, or too old.
+export const VERIFY_ENTRY_REASONS = [
+  'INVALID_FORMAT',
+  'NOT_FOUND',
+  'WRONG_EVENT',
+  'TOKEN_MISMATCH',
+  'EXPIRED',
+  'USED',
+  'SIGNATURE_INVALID',
+] as const;
 export type VerifyEntryReason = (typeof VERIFY_ENTRY_REASONS)[number];
 
 export interface VerifyEntryRequest {
@@ -76,8 +91,28 @@ export type VerifyEntryResponse =
       holder: { name: string; studentId: string; photoUrl: string | null };
       enteredCount: number;
       capacity: number;
+      /** Two-step check (events.twoStepCheck): nobody is admitted yet. The scanner shows the photo and then calls
+       * confirmEntry within CONFIRM_WINDOW_MS. enteredCount is the count before this ticket. */
+      needsConfirm?: true;
     }
   | { ok: false; reason: VerifyEntryReason };
+
+// How long a verified ticket waits for the scanner's answer, in ms.
+export const CONFIRM_WINDOW_MS = 60_000;
+
+// match true admits the ticket (same transaction as the one-step verifyEntry). match false records a `mismatch`
+// scan and leaves the ticket issued. Only the staff member who verified it can confirm.
+// NO_PENDING_CHECK: no verifyEntry with needsConfirm for this ticket by this caller, or it is older than the window.
+export const CONFIRM_ENTRY_REASONS = ['MISMATCH', 'USED', 'NOT_FOUND', 'NO_PENDING_CHECK'] as const;
+export type ConfirmEntryReason = (typeof CONFIRM_ENTRY_REASONS)[number];
+
+export interface ConfirmEntryRequest {
+  ticketId: string;
+  match: boolean;
+}
+export type ConfirmEntryResponse =
+  | { ok: true; ticketId: string; enteredCount: number; capacity: number }
+  | { ok: false; reason: ConfirmEntryReason };
 
 export const CANCEL_REASONS = ['TICKET_USED'] as const;
 export type CancelReason = (typeof CANCEL_REASONS)[number];
@@ -157,6 +192,7 @@ export interface Callables {
   issueTicket: [IssueTicketRequest, IssueTicketResponse];
   refreshQrToken: [RefreshQrTokenRequest, RefreshQrTokenResponse];
   verifyEntry: [VerifyEntryRequest, VerifyEntryResponse];
+  confirmEntry: [ConfirmEntryRequest, ConfirmEntryResponse];
   cancelTicket: [CancelTicketRequest, CancelTicketResponse];
   registerDevice: [RegisterDeviceRequest, RegisterDeviceResponse];
   resetDevice: [ResetDeviceRequest, ResetDeviceResponse];
