@@ -55,9 +55,10 @@ export function EventsPage() {
   }, [events]);
   useEffect(load, [load]);
 
-  const open = ({ event, ticket }: Row) => {
+  // 입장권이 있어도 행사 설명부터 보여 준다. 입장권은 상세 화면의 "내 입장권 보기"로 간다
+  const open = ({ event }: Row) => {
     selectEvent(event.id);
-    navigate(ticket ? '/ticket' : '/event');
+    navigate('/event');
   };
 
   const header = (
