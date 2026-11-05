@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   CalendarDays,
   ClipboardList,
+  Dices,
   GraduationCap,
   ListOrdered,
   LayoutDashboard,
@@ -76,7 +77,13 @@ export function AdminLayout() {
   // 행사 담당자: 자기 학교 행사만, 학교 담당자 메뉴(재학생 명단·기기 초기화·스페이스)는 운영진만
   const operator = !!user?.operator;
   const eventAdmin = !operator;
-  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => operator || !i.teamOnly) }));
+  // 추첨 행사는 행사 명단 대신 추첨 결과를 본다 (같은 주소)
+  const nav = NAV.map((g) => ({
+    ...g,
+    items: g.items
+      .filter((i) => operator || !i.teamOnly)
+      .map((i) => (i.to === '/admin/roster' && event?.instantDraw ? { ...i, label: '추첨 결과', icon: Dices } : i)),
+  }));
 
   useEffect(() => {
     // 학교를 바꾸면 이전 행사 이름이 남지 않게 비운다

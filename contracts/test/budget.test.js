@@ -32,7 +32,8 @@ describe('gas budget constants', () => {
     await ethers.provider.send('hardhat_mine', ['0x6']);
     within(await used(c.seedDraw(ev, 1)), GAS.seedDraw);
     within(await used(c.recordAction(ev, 1, ethers.id('ref'))), GAS.recordAction);
-    within(await used(c.openEntry(ev, ethers.id('entry'), 5000)), GAS.openEntry);
+    // Rate 10000: the entry always wins, which is the costlier settle path (it also counts a winner)
+    within(await used(c.openEntry(ev, ethers.id('entry'), 10000)), GAS.openEntry);
     await ethers.provider.send('hardhat_mine', ['0x6']);
     within(await used(c.settleEntry(ev, ethers.id('entry'))), GAS.settleEntry);
   });

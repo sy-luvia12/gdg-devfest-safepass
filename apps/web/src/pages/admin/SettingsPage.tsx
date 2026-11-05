@@ -11,7 +11,9 @@ import { PageTitle } from '@/components/PageTitle';
 import { StateView } from '@/components/StateView';
 import { ThemeEditor } from '@/components/ThemeEditor';
 import { Toggle } from '@/components/Toggle';
-import { updateAllowReissue, updateEventSettings, updateReassignMode } from '@/lib/api';
+import { formatRate, updateAllowReissue, updateDrawSettings, updateEventSettings, updateReassignMode } from '@/lib/api';
+import { Button } from '@/components/Button';
+import { TextField } from '@/components/TextField';
 import type { EventSettings, ReassignMode } from '@/types';
 
 const MODES: { value: ReassignMode; icon: typeof ListOrdered; title: string; text: string }[] = [
@@ -24,7 +26,9 @@ export function SettingsPage() {
   const { event, setEvent } = useAdmin();
   const { school } = useAuth();
   const { setThemeEvent } = useTheme();
-  const [saving, setSaving] = useState<keyof EventSettings | 'reassignMode' | 'allowReissue' | null>(null);
+  const [saving, setSaving] = useState<keyof EventSettings | 'reassignMode' | 'allowReissue' | 'draw' | null>(null);
+  const [pool, setPool] = useState<string | null>(null);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
   if (!event || !school) return <StateView kind="loading" />;
@@ -66,6 +70,28 @@ export function SettingsPage() {
     }
   };
 
+  const poolValue = pool ?? String(event.drawPool ?? '');
+  const poolNumber = Number(poolValue);
+  const poolValid = /^\d+$/.test(poolValue) && poolNumber > 0 && poolNumber <= 1_000_000;
+  const rateOf = (p: number) => (p > event.capacity ? Math.max(1, Math.floor((event.capacity * 10_000) / p)) : 10_000);
+
+  const saveDraw = async (instantDraw: boolean) => {
+    if (instantDraw && !poolValid) {
+      setDrawError('재학생 수를 1 이상의 숫자로 넣어 주세요');
+      return;
+    }
+    setSaving('draw');
+    setDrawError(null);
+    try {
+      setEvent(await updateDrawSettings(event.id, { instantDraw, drawPool: poolValid ? poolNumber : (event.drawPool ?? 0) }));
+      setPool(null);
+    } catch {
+      setDrawError('저장하지 못했어요. 다시 시도해 주세요');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const deleteAt = new Date(new Date(event.date).getTime() + event.dataRetentionDays * 86_400_000);
 
   return (
@@ -83,8 +109,49 @@ export function SettingsPage() {
           <NextStepNote>행사 등록·수정은 다음 단계예요. 프로토타입은 미리 넣어 둔 행사 1개로 동작해요.</NextStepNote>
         </Section>
 
+        <Section title="즉석 추첨">
+          <Card className="flex flex-col gap-5">
+            <Toggle
+              label="추첨으로 발급"
+              description="학생이 행사 화면을 열면 응모되고, 블록체인이 정한 당첨자만 입장권을 받아요. 한 학생은 한 번만 추첨돼요"
+              checked={!!event.instantDraw}
+              disabled={saving !== null}
+              onChange={(v) => saveDraw(v)}
+            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <TextField
+                label="응모 대상 재학생 수"
+                inputMode="numeric"
+                value={poolValue}
+                onChange={(e) => setPool(e.target.value.replace(/[^\d]/g, ''))}
+                suffix="명"
+                className="sm:max-w-xs"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={saving === 'draw'}
+                disabled={saving !== null || !poolValid || poolNumber === event.drawPool}
+                onClick={() => saveDraw(!!event.instantDraw)}
+              >
+                저장
+              </Button>
+            </div>
+            <p className="text-caption text-ink-2">
+              {poolValid
+                ? `정원 ${event.capacity.toLocaleString('ko-KR')}명 ÷ 재학생 ${poolNumber.toLocaleString('ko-KR')}명 = 당첨 확률 ${formatRate(rateOf(poolNumber))}`
+                : '재학생 수를 넣으면 당첨 확률을 계산해요'}
+              . 이미 응모한 학생의 확률은 바뀌지 않아요 (응모할 때 체인에 고정돼요)
+            </p>
+            {drawError && <p className="text-caption text-danger">{drawError}</p>}
+          </Card>
+        </Section>
+
         <Section title="입장 규칙">
           <Card className="flex flex-col gap-5">
+            {event.instantDraw && (
+              <p className="text-caption text-ink-2">추첨 행사는 행사 명단 대신 추첨 결과로 발급해요. 아래 설정은 추첨을 끄면 적용돼요</p>
+            )}
             <Toggle
               label="명단에 있는 학생만 발급"
               description="명단 연동에서 불러온 학생만 입장권을 받을 수 있어요. 학과 행사처럼 대상이 정해진 행사에 써요"

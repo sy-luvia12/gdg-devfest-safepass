@@ -43,6 +43,7 @@ const codeOf = (p: Promise<unknown>) => p.then(() => 'resolved', (e: { code?: st
 const SCHOOL = 'drw-school';
 const EV_DRAW = 'drw-draw-event';
 const EV_OPEN = 'drw-open-event';
+const TINY = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 
 const seedEvent = (id: string, fields: Record<string, unknown>) =>
   db.doc(`events/${id}`).set({
@@ -89,7 +90,8 @@ describe('instant entry draw', () => {
     expect(entry!.studentRef).toBe(studentRefOf(SCHOOL, 'D001'));
     expect(entry!.entryId).toBe(entryIdOf(eventKeyOf(EV_DRAW), entry!.studentRef, entry!.salt));
 
-    const op = await db.doc(`chainOps/entry-${EV_DRAW}_D001`).get();
+    const op = (await db.collection('chainOps').where('entryDocId', '==', `${EV_DRAW}_D001`).get()).docs[0];
+    expect(op.id).toBe(`entry-${EV_DRAW}_D001_${entry!.salt.slice(2, 10)}`);
     expect(op.data()).toMatchObject({ kind: 'openEntry', eventId: EV_DRAW, entryDocId: `${EV_DRAW}_D001`, status: 'pending' });
 
     const again = await ann.call('enterDraw', { eventId: EV_DRAW });
@@ -185,5 +187,73 @@ describe('operator interventions on chain', () => {
     expect(op.data()).toMatchObject({ action: 1, status: 'pending' });
     expect(op.get('ref')).toMatch(/^0x[0-9a-f]{64}$/);
     expect((await db.doc(`devices/${fay.uid}`).get()).exists).toBe(false);
+  });
+});
+
+describe('admin view of the draw and draw settings', () => {
+  it('lists entries with names and results for the school admin only, and saves the draw settings', async () => {
+    const admin = await login('admin@drw.test');
+    const other = await login('other-admin@drw.test');
+    const list = await admin.call('listEntryDraws', { eventId: EV_DRAW });
+    expect(list).toMatchObject({ capacity: 5_000, drawPool: 20_000, winBps: 2500 });
+    expect(list.counts.total).toBe(list.entries.length);
+    expect(list.counts).toMatchObject({ won: 1, lost: 1 });
+    expect(list.entries.find((e) => e.studentId === 'D002')).toMatchObject({ name: 'ben', status: 'won', score: 42, winBps: 2500 });
+    expect(JSON.stringify(list)).not.toContain('salt');
+    expect(await codeOf(other.call('listEntryDraws', { eventId: EV_DRAW }))).toBe('functions/permission-denied');
+
+    await admin.call('updateEvent', { eventId: EV_DRAW, capacity: 8_000, drawPool: 20_000 });
+    expect((await admin.call('listEntryDraws', { eventId: EV_DRAW })).winBps).toBe(4000);
+    await admin.call('updateEvent', { eventId: EV_OPEN, instantDraw: true, drawPool: 100 });
+    expect((await db.doc(`events/${EV_OPEN}`).get()).data()).toMatchObject({ instantDraw: true, drawPool: 100 });
+    await admin.call('updateEvent', { eventId: EV_OPEN, instantDraw: false });
+  });
+});
+
+describe('operator deletes a student from the school roster', () => {
+  it('clears tickets, draws, cancel records and sign-up so the student can start over', async () => {
+    const SCH = 'drw-purge';
+    const EV = 'drw-purge-event';
+    const EV_D = 'drw-purge-draw';
+    await db.doc(`schools/${SCH}`).set({ name: 'Purge Univ', domains: ['purge.drw.test'], brandColor: '#556677', studentRoster: { sheetUrl: '', count: 1 } });
+    await db.doc(`schools/${SCH}/roster/P001`).set({ name: 'gil', studentId: 'P001', email: 'gil@purge.drw.test' });
+    await seedEvent(EV, { schoolIds: [SCH], allowedDomains: ['purge.drw.test'], capacity: 10 });
+    await seedEvent(EV_D, { schoolIds: [SCH], allowedDomains: ['purge.drw.test'], instantDraw: true, drawPool: 10, capacity: 10 });
+    await db.doc('seedProfiles/ops@purge.drw.test').set({ name: 'Ops', studentId: '', role: 'admin', operator: true });
+    const ops = await login('ops@purge.drw.test');
+
+    const gil = await login('gil@purge.drw.test');
+    await gil.call('verifyStudentRoster', { schoolId: SCH, studentId: 'P001', name: 'gil' });
+    await gil.call('submitProfilePhoto', { photoDataUrl: TINY, idCardDataUrl: TINY });
+    const { ticketId } = await gil.call('issueTicket', { eventId: EV });
+    await gil.call('enterDraw', { eventId: EV_D });
+    await db.doc(`devices/${gil.uid}`).set({ publicKeyJwk: { kty: 'EC' } });
+    await db.collection('scanLogs').add({ eventId: EV, ticketId, result: 'expired' });
+    await db.collection('reassignments').add({ eventId: EV, ticketId: 'old', fromUid: gil.uid, toUid: null, mode: 'queue' });
+    const issued = (await db.doc(`events/${EV}`).get()).get('issuedCount');
+
+    const r = await ops.call('opsEditRoster', { kind: 'school', id: SCH, upserts: [], deletes: ['P001'] });
+    expect(r).toMatchObject({ ok: true, deleted: 1, purged: { students: 1, tickets: 1, entries: 1 } });
+
+    expect((await db.doc(`tickets/${ticketId}`).get()).data()).toMatchObject({ status: 'cancelled', ownerUid: null });
+    expect((await db.doc(`events/${EV}`).get()).get('issuedCount')).toBe(issued - 1);
+    const release = (await db.collection('chainOps').where('ticketId', '==', ticketId).get()).docs.find((d) => d.get('kind') === 'release');
+    expect(release?.get('reason')).toBe(3);
+    expect((await db.collection('scanLogs').where('ticketId', '==', ticketId).get()).size).toBe(0);
+    expect((await db.collection('reassignments').where('fromUid', '==', gil.uid).get()).size).toBe(0);
+    expect((await db.doc(`entryDraws/${EV_D}_P001`).get()).exists).toBe(false);
+    expect((await db.doc(`devices/${gil.uid}`).get()).exists).toBe(false);
+    expect((await db.doc(`idCards/${gil.uid}`).get()).exists).toBe(false);
+    const user = (await db.doc(`users/${gil.uid}`).get()).data()!;
+    expect(user.rosterVerified).toBeUndefined();
+    expect(user.photoSubmitted).toBeUndefined();
+
+    // Added again: sign up again, then everything works from scratch
+    await ops.call('opsEditRoster', { kind: 'school', id: SCH, upserts: [{ name: 'gil', studentId: 'P001', email: 'gil@purge.drw.test' }], deletes: [] });
+    expect(await reasonOf(gil.call('issueTicket', { eventId: EV }))).toBe('NOT_REGISTERED');
+    await gil.call('verifyStudentRoster', { schoolId: SCH, studentId: 'P001', name: 'gil' });
+    await gil.call('submitProfilePhoto', { photoDataUrl: TINY, idCardDataUrl: TINY });
+    expect((await gil.call('issueTicket', { eventId: EV })).ticketId).toBeTruthy();
+    expect((await gil.call('enterDraw', { eventId: EV_D })).entry!.status).toBe('pending');
   });
 });

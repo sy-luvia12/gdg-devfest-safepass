@@ -44,10 +44,11 @@ import {
 import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
 import { checkEntry, entryIdOf, scoreOf, studentRefOf } from './chain/entry';
+import { drawRateOf } from './chain/rate';
 import type { ChainDraw, ChainEntry, ChainEventStatus, DrawCheck, EntryVerification, MyDrawEntry } from './chain/types';
-import type { ClaimResult, EntryDraw, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
+import type { ClaimResult, EntryDraw, EntryDrawAdmin, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v9';
+const STATE_KEY = 'safepass-mock-v10';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
@@ -217,6 +218,7 @@ function seed(): MockState {
       reassignMode: 'queue',
       // 푸른대 축제는 즉석 추첨 행사 (mock: 브라우저에서 결과를 정한다)
       instantDraw: school.id === 'pureun',
+      drawPool: Math.round(event.capacity * 2.5),
       allowReissueAfterCancel: false,
       dataRetentionDays: 7,
     });
@@ -1463,8 +1465,36 @@ export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRo
   const roster = { sheetUrl: current?.sheetUrl ?? '', importedAt: now, entries };
   if (kind === 'school') s.studentRosters[id] = roster as Roster<StudentRow>;
   else s.rosters[id] = roster as Roster<EventRow>;
+  // 재학생 명단에서 지운 학생은 입장권·취소 기록·추첨 응모도 정리한다 (서버 purgeStudent와 같은 규칙)
+  const purged = { students: 0, tickets: 0, entries: 0 };
+  if (kind === 'school') {
+    const draws = mockEntries();
+    for (const sid of removed) {
+      const u = s.users.find((x) => x.schoolId === id && x.studentId === sid && x.role === 'student');
+      if (!before.some((e) => e.studentId === sid)) continue;
+      purged.students += 1;
+      if (!u) continue;
+      for (const t of s.tickets.filter((x) => x.ownerUid === u.uid)) {
+        const ev = s.events.find((e) => e.id === t.eventId);
+        if (ev) {
+          ev.issuedCount = Math.max(0, ev.issuedCount - 1);
+          if (t.status === 'used') ev.enteredCount = Math.max(0, ev.enteredCount - 1);
+        }
+        purged.tickets += 1;
+      }
+      s.tickets = s.tickets.filter((x) => x.ownerUid !== u.uid);
+      s.reassignments = s.reassignments.filter((r) => r.fromUid !== u.uid);
+      for (const key of Object.keys(draws)) {
+        if (key.endsWith(`:${u.uid}`)) {
+          delete draws[key];
+          purged.entries += 1;
+        }
+      }
+    }
+    localStorage.setItem(MOCK_ENTRIES, JSON.stringify(draws));
+  }
   save(s);
-  return { saved: byId.size, deleted, skipped, summary: summaryOf(roster)! };
+  return { saved: byId.size, deleted, skipped, summary: summaryOf(roster)!, ...(kind === 'school' ? { purged } : {}) };
 }
 
 export async function opsListStudents(schoolId: string): Promise<OpsStudent[]> {
@@ -1615,7 +1645,7 @@ export async function enterDraw(eventId: string): Promise<EntryDraw> {
   const entry: EntryDraw = {
     eventId,
     status: 'pending',
-    winBps: winBpsOf(event.capacity, Math.round(event.capacity * MOCK_POOL_FACTOR)),
+    winBps: drawRateOf(event.capacity, event.drawPool ?? Math.round(event.capacity * MOCK_POOL_FACTOR)),
     studentRef,
     salt,
     entryId: entryIdOf(eventId, studentRef, salt),
@@ -1628,6 +1658,42 @@ export async function enterDraw(eventId: string): Promise<EntryDraw> {
   };
   localStorage.setItem(MOCK_ENTRIES, JSON.stringify({ ...mockEntries(), [`${eventId}:${user.uid}`]: entry }));
   return entry;
+}
+
+export async function listEntryDraws(eventId: string): Promise<EntryDrawAdmin> {
+  await wait();
+  const s = load();
+  requireUser(s, ['admin']);
+  const event = findEvent(s, eventId);
+  const pool = event.drawPool ?? Math.round(event.capacity * MOCK_POOL_FACTOR);
+  const entries = Object.entries(mockEntries())
+    .filter(([key]) => key.startsWith(`${eventId}:`))
+    .map(([key]) => {
+      const uid = key.slice(eventId.length + 1);
+      const e = mockEntry(eventId, uid)!;
+      const u = s.users.find((x) => x.uid === uid);
+      return { name: u?.name ?? '알 수 없음', studentId: u?.studentId ?? '', status: e.status, score: e.score, winBps: e.winBps, createdAt: e.createdAt };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const count = (st: string) => entries.filter((e) => e.status === st).length;
+  return {
+    capacity: event.capacity,
+    drawPool: pool,
+    winBps: drawRateOf(event.capacity, pool),
+    counts: { total: entries.length, pending: count('pending'), won: count('won'), lost: count('lost') },
+    entries,
+  };
+}
+
+export async function updateDrawSettings(eventId: string, draw: { instantDraw: boolean; drawPool: number }): Promise<Event> {
+  await wait();
+  const s = load();
+  requireUser(s, ['admin']);
+  const event = findEvent(s, eventId);
+  event.instantDraw = draw.instantDraw;
+  event.drawPool = draw.drawPool;
+  save(s);
+  return event;
 }
 
 export async function getMyEntryDraw(eventId: string): Promise<EntryDraw | null> {
@@ -1645,11 +1711,6 @@ export async function verifyMyEntry(mine: EntryDraw): Promise<EntryVerification>
   return { chain, check: checkEntry(mine, chain, mine.seed), links: { open: null, settle: null, block: null } };
 }
 
-function winBpsOf(capacity: number, pool: number): number {
-  if (!(capacity > 0)) return 0;
-  if (!(pool > capacity)) return 10_000;
-  return Math.max(1, Math.floor((capacity * 10_000) / pool));
-}
 
 // ---------- 취소표 추첨 (mock: 데모 회차의 첫 응모자로 대기 중) ----------
 

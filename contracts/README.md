@@ -109,7 +109,7 @@ NETWORK=amoy contracts/scripts/chain.sh preflight   # Amoy로 할 때
 | seedDraw (회차당) | 50,726 | 0.0000006 | 0.0015 |
 | recordAction (개입 1건) | 51,772 | 0.0000006 | 0.0016 |
 | openEntry (즉석 추첨 응모) | 52,112 | 0.0000006 | 0.0016 |
-| settleEntry (즉석 추첨 결과) | 53,552 | 0.0000006 | 0.0016 |
+| settleEntry (즉석 추첨 결과, 당첨 기준) | 56,409 | 0.0000006 | 0.0017 |
 
 - Base Sepolia: 0.011 gwei는 2026-11-04에 잰 maxFee다. 티켓 1장(발급+입장)은 약 0.0000017 ETH라서, faucet 0.01 ETH로 배포 후 수천 장을 처리한다. Base는 L1 데이터 수수료가 따로 붙지만, 배포 1회에 약 1e-14 ETH로 측정되어 무시한다.
 - Amoy: 티켓 1장은 약 0.0046 POL이다. 0.1 POL이면 배포와 행사 1개 생성 후 약 6장을 처리한다(30 gwei 기준).

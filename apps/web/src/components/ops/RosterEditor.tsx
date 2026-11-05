@@ -61,6 +61,7 @@ export function RosterEditor({ kind, id, label }: Props) {
     const parts = [];
     if (r.saved) parts.push(`${r.saved}줄 저장`);
     if (r.deleted) parts.push(`${r.deleted}줄 삭제`);
+    if (r.purged && (r.purged.tickets || r.purged.entries)) parts.push(`입장권 ${r.purged.tickets}장 · 추첨 ${r.purged.entries}건 정리`);
     if (r.skipped.length) {
       const first = r.skipped
         .slice(0, 3)
@@ -104,14 +105,15 @@ export function RosterEditor({ kind, id, label }: Props) {
   };
 
   const onDelete = async (row: OpsRosterRow) => {
-    if (!confirm(`${row.name} (${row.studentId}) 줄을 지울까요?`)) return;
+    const warn = withEmail ? '\n이 학생의 입장권·추첨·가입 기록도 함께 지워져서, 다시 넣으면 처음부터 가입해요' : '';
+    if (!confirm(`${row.name} (${row.studentId}) 줄을 지울까요?${warn}`)) return;
     await run(`del-${row.studentId}`, [], [row.studentId]);
   };
 
   const onPaste = async (replace: boolean) => {
     const inputs = parsePasted(pasted, withEmail);
     if (inputs.length === 0) return setNotice({ tone: 'bad', text: '붙여 넣은 줄이 없어요' });
-    if (replace && !confirm(`지금 명단을 붙여 넣은 ${inputs.length}줄로 모두 바꿀까요? 여기에 없는 줄은 지워져요`)) return;
+    if (replace && !confirm(`지금 명단을 붙여 넣은 ${inputs.length}줄로 모두 바꿀까요? 여기에 없는 줄은 지워져요${withEmail ? '. 지워지는 학생의 입장권·추첨·가입 기록도 함께 지워져요' : ''}`)) return;
     const r = await run(replace ? 'replace' : 'paste', inputs, [], replace);
     if (r) {
       setPasted('');

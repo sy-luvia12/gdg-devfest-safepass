@@ -38,6 +38,7 @@ import {
   type CancelResult,
   type ClaimResult,
   type EntryDraw,
+  type EntryDrawAdmin,
   type RevokeResult,
   type LotteryState,
   type MyLottery,
@@ -172,6 +173,7 @@ function toEvent(id: string, d: DocumentData, viewer = viewerSchoolId): Event {
     reassignMode: d.reassignMode === 'random' || d.reassignMode === 'lottery' ? 'random' : 'queue',
     lottery: d.reassignMode === 'lottery',
     instantDraw: d.instantDraw === true,
+    drawPool: typeof d.drawPool === 'number' ? d.drawPool : undefined,
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };
@@ -330,7 +332,7 @@ export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<Op
 
 export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRosterEdit): Promise<OpsEditResult> {
   const { data } = await run(() => call('opsEditRoster')({ kind, id, ...edit }));
-  return { saved: data.saved, deleted: data.deleted, skipped: data.skipped, summary: fromApiSummary(data.summary) };
+  return { saved: data.saved, deleted: data.deleted, skipped: data.skipped, summary: fromApiSummary(data.summary), purged: data.purged };
 }
 
 export async function opsListStudents(schoolId: string): Promise<OpsStudent[]> {
@@ -578,6 +580,17 @@ export async function createEvent(input: EventInput): Promise<Event> {
 export async function updateEvent(eventId: string, patch: Partial<Omit<EventInput, 'schoolIds'>>): Promise<Event> {
   await run(() => call('updateEvent')({ eventId, ...patch }));
   return getEvent(eventId);
+}
+
+/** 행사 설정: 즉석 추첨 켜기·끄기와 응모 대상 재학생 수 (당첨 확률 = 정원 ÷ 재학생 수) */
+export async function updateDrawSettings(eventId: string, draw: { instantDraw: boolean; drawPool: number }): Promise<Event> {
+  await run(() => call('updateEvent')({ eventId, ...draw }));
+  return getEvent(eventId);
+}
+
+/** 관리자 추첨 현황: 응모자 이름·학번과 체인이 정한 결과 */
+export async function listEntryDraws(eventId: string): Promise<EntryDrawAdmin> {
+  return (await run(() => call('listEntryDraws')({ eventId }))).data;
 }
 
 /** 행사 설정 화면의 "명단에 있는 학생만 발급" */

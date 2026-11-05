@@ -13,7 +13,7 @@ const GAS = {
   seedDraw: 50_726n,
   recordAction: 51_772n, // one per operator action (lost reissue, refund, manual entry)
   openEntry: 52_112n, // one per student and event (instant entry draw)
-  settleEntry: 53_552n,
+  settleEntry: 56_409n, // a winning entry; a losing one is about 3,000 less
 };
 
 // One ticket that is issued and later scanned at the gate.
