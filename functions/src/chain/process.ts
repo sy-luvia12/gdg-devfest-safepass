@@ -1,5 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { ChainError, redact, type ChainClient } from './client';
+import { applySeed, voidRound } from '../lottery/rounds';
 import { chainOpId, type ChainOpDoc } from './outbox';
 import { deriveAddress } from './wallets';
 
@@ -38,6 +39,7 @@ export async function processChainOp(deps: ChainDeps, opId: string): Promise<Pro
   const op = snap.data() as ChainOpDoc | undefined;
   if (!op || op.status === 'done') return 'skipped';
   if (!client || !mnemonic) return 'disabled';
+  if ((op as { kind: string }).kind === 'commitDraw') return processDrawOp(deps, client, opRef, snap.data() as DrawOpDoc);
   if (op.seq > 1) {
     const prev = await db.doc(`chainOps/${chainOpId(op.ticketId, op.seq - 1)}`).get();
     if (prev.get('status') !== 'done') throw new WaitingForPrevious(`${opId} waits for op ${op.seq - 1}`);
@@ -93,6 +95,42 @@ export async function processChainOp(deps: ChainDeps, opId: string): Promise<Pro
       await opRef.update({ status: 'blocked', error: e.code, attempts: FieldValue.increment(1) });
       await ticketRef.update({ 'chain.status': 'blocked' });
       return 'blocked';
+    }
+    await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
+    throw e;
+  }
+}
+
+interface DrawOpDoc {
+  kind: 'commitDraw';
+  eventId: string;
+  round: number;
+  commitment: string;
+}
+
+/** A lottery round: commit, seed, then the winners are worked out in Firestore (lottery/rounds.ts). */
+async function processDrawOp(
+  deps: ChainDeps,
+  client: ChainClient,
+  opRef: FirebaseFirestore.DocumentReference,
+  op: DrawOpDoc,
+): Promise<ProcessOutcome> {
+  try {
+    const capacity = ((await deps.db.doc(`events/${op.eventId}`).get()).get('capacity') as number | undefined) ?? 0;
+    await client.ensureEvent(op.eventId, capacity);
+    const r = await client.drawRound({ eventId: op.eventId, round: op.round, commitment: op.commitment });
+    await applySeed(deps.db, op.eventId, op.round, r, Date.now());
+    await opRef.update({ status: 'done', txHash: r.seedTx ?? r.commitTx, error: null, doneAt: FieldValue.serverTimestamp() });
+    return 'done';
+  } catch (e) {
+    if (e instanceof ChainError && e.code === 'INSUFFICIENT_FUNDS') {
+      await opRef.update({ status: 'blocked', error: e.code, attempts: FieldValue.increment(1) });
+      return 'blocked';
+    }
+    if (e instanceof ChainError && e.code === 'SEED_EXPIRED') {
+      await voidRound(deps.db, op.eventId, op.round);
+      await opRef.update({ status: 'done', error: e.code, doneAt: FieldValue.serverTimestamp() });
+      return 'done';
     }
     await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
     throw e;

@@ -112,3 +112,9 @@ export const verifyMyDraw: typeof mock.verifyMyDraw = real ? chain.verifyMyDraw 
 /** S7 데모 회차 (Base Sepolia 실제 회차, 가짜 응모자 10명). 응모자 하나를 골라 verifyMyDraw에 넘긴다 */
 export const DEMO_DRAW = chain.DEMO_DRAW;
 export type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
+
+// 취소표 추첨 (추첨 행사만, docs/api.md 14장). 상태: 추첨 대기 중 / 당첨(수락 대기, 기한) / 수락 완료 / 수락 기한 지남 / 추첨 마감
+export const getMyLottery: typeof mock.getMyLottery = real ? fb.getMyLottery : mock.getMyLottery;
+export const claimTicket: typeof mock.claimTicket = real ? fb.claimTicket : mock.claimTicket;
+/** 관리자 "지금 추첨" */
+export const runDrawNow: typeof mock.runDrawNow = real ? fb.runDrawNow : mock.runDrawNow;

@@ -34,6 +34,10 @@ import type {
 import {
   ApiError,
   type CancelResult,
+  type ClaimResult,
+  type LotteryState,
+  type MyLottery,
+  type RunDrawResult,
   type ConfirmResult,
   type DeviceResetRequest,
   type Event,
@@ -151,7 +155,8 @@ function toEvent(id: string, d: DocumentData): Event {
     theme: { source: 'school', colors: [] },
     settings: { requireRoster: d.requireRoster === true },
     roster: rosterSummary(d.roster),
-    reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
+    // 서버의 'lottery'(정해진 시각 추첨)는 관리자 화면에 이름표가 생기기 전까지 '무작위'로 보여 준다 (docs/api.md 14장)
+    reassignMode: d.reassignMode === 'random' || d.reassignMode === 'lottery' ? 'random' : 'queue',
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };
@@ -590,7 +595,8 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   try {
     const { data } = await call('cancelTicket')({ ticketId });
     if (!data.ok) return 'used';
-    return data.outcome === 'REASSIGNED' ? 'reassigned' : 'released';
+    // POOLED (추첨 행사): 표는 다음 추첨에서 대기자에게 간다. 화면에 '취소됨' 문구가 생기기 전까지 reassigned로 보여 준다
+    return data.outcome === 'RELEASED' ? 'released' : 'reassigned';
   } catch (e) {
     throw toApiError(e);
   }
@@ -749,7 +755,7 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
         fromUid: r.fromUid,
         fromName: r.fromName || ((await userName(r.fromUid, names)) ?? '알 수 없음'),
         toName: r.toUid ? r.toName || (await userName(r.toUid, names)) : undefined,
-        mode: r.mode === 'random' ? 'random' : 'queue',
+        mode: r.mode === 'random' || r.mode === 'lottery' ? 'random' : 'queue',
         outcome: r.toUid ? 'reassigned' : 'released',
         createdAt: millis(r.createdAt),
       } satisfies Reassignment;
@@ -917,6 +923,39 @@ export async function removeStaff(uid: string): Promise<void> {
   if (!email) throw new ApiError('not_found');
   try {
     await call('setStaff')({ email, staff: false });
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+// ---------- 취소표 추첨 (docs/api.md 14장) ----------
+
+/** 내 추첨 상태와 영수증. 대기 인원·순번은 오지 않는다 */
+export async function getMyLottery(eventId: string): Promise<MyLottery> {
+  try {
+    const { data } = await call('getMyLottery')({ eventId });
+    return { ...data, state: data.state.toLowerCase() as LotteryState };
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 당첨된 표 받기 (수락 기한 안에) */
+export async function claimTicket(eventId: string): Promise<ClaimResult> {
+  try {
+    const { data } = await call('claimTicket')({ eventId });
+    if (data.ok) return 'claimed';
+    return data.reason === 'EXPIRED' ? 'expired' : 'no_offer';
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 관리자 "지금 추첨" (데모·운영). 체인 커밋 후 시드가 저장되면(약 10초) 바로 발표된다 */
+export async function runDrawNow(eventId: string): Promise<RunDrawResult> {
+  try {
+    const { data } = await call('runDrawNow')({ eventId });
+    return data.ok ? data : { ok: false, reason: data.reason.toLowerCase() as Extract<RunDrawResult, { ok: false }>['reason'] };
   } catch (e) {
     throw toApiError(e);
   }

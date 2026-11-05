@@ -224,6 +224,11 @@ listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인
 getChainEventStatus(eventId): Promise<ChainEventStatus>   // S8 공개 현황판: 정원·활성·발급·입장·재배정·회수
 getChainDraw(eventId, round): Promise<ChainDraw | null>   // 추첨 회차 커밋·시드
 verifyMyDraw(entry): Promise<DrawCheck>                   // S7 직접 검증 (DEMO_DRAW.entries로 시연)
+
+// 취소표 추첨 (reassignMode 'lottery' 행사만). docs/api.md 14장
+getMyLottery(eventId): Promise<MyLottery>                 // 대기 중 / 당첨(기한) / 수락 완료 / 기한 지남 / 마감. receipt → verifyMyDraw
+claimTicket(eventId): Promise<ClaimResult>                // 'claimed' | 'no_offer' | 'expired'
+runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추첨" (데모)
 ```
 
 - 실패는 `types.ts`의 `ApiError`(`code`: `not_school_account` / `sold_out` / `not_found` / `unauthenticated` / `not_in_roster` / `invalid_state` / `device_blocked` / `cancelled_before` / `wrong_role` / `unknown`)로 던진다. 서버 `permission-denied`는 `details.reason`이 `ROLE`이면 `wrong_role`, 아니면 `not_school_account`다. 화면 문구는 프론트가 정한다.

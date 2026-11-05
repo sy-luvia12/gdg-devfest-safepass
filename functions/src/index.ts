@@ -23,3 +23,7 @@ export { verifyStudentRoster } from './handlers/verifyStudentRoster';
 export { listOpenSchools } from './handlers/listOpenSchools';
 export { precheckStudent } from './handlers/precheckStudent';
 export { submitProfilePhoto } from './handlers/submitProfilePhoto';
+export { runDrawNow } from './handlers/runDrawNow';
+export { getMyLottery } from './handlers/getMyLottery';
+export { claimTicket } from './handlers/claimTicket';
+export { lotteryTick } from './handlers/lotteryTick';
