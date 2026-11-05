@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { VerifyStudentReason, VerifyStudentRosterResponse } from '../api';
 import { cleanField, isStudentId, matchStudent } from '../domain/roster';
@@ -58,8 +59,17 @@ export const verifyStudentRoster = onCall<unknown, Promise<VerifyStudentRosterRe
 
     const fields = { schoolId, name: row.get('name') as string, studentId, rosterVerified: true };
     tx.update(rowRef, { claimedBy: caller.uid });
-    tx.update(userRef, fields);
+    if (claimedBy === caller.uid) {
+      tx.update(userRef, fields);
+      if (intentRef) tx.delete(intentRef);
+      return { ok: true, profile: profileOf(caller.uid, { ...user.data(), ...fields }) };
+    }
+    // A new claim is a new sign-up: photos from an earlier sign-up (before the row was removed, or for another row)
+    // do not carry over, so the student takes the face photo and the ID card again.
+    tx.update(userRef, { ...fields, photoSubmitted: FieldValue.delete(), idCardSubmitted: FieldValue.delete(), photoUrl: FieldValue.delete() });
+    tx.delete(db.doc(`idCards/${caller.uid}`));
     if (intentRef) tx.delete(intentRef);
-    return { ok: true, profile: profileOf(caller.uid, { ...user.data(), ...fields }) };
+    const { photoSubmitted: _p, idCardSubmitted: _i, photoUrl: _u, ...kept } = user.data()!;
+    return { ok: true, profile: profileOf(caller.uid, { ...kept, ...fields }) };
   });
 });
