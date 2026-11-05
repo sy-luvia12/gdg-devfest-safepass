@@ -24,7 +24,9 @@ export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(callableO
       return profileOf(caller.uid, d);
     }
 
-    const seed = caller.email && !caller.email.includes('/') ? await tx.get(db.doc(`seedProfiles/${caller.email}`)) : null;
+    // A seeded role (staff, admin) goes only to an address the sign-in provider has verified: with email/password
+    // sign-in on, anyone can register an address they do not own.
+    const seed = caller.emailVerified && caller.email && !caller.email.includes('/') ? await tx.get(db.doc(`seedProfiles/${caller.email}`)) : null;
     const s = seed?.data();
     const profile: UserProfile = {
       uid: caller.uid,
