@@ -98,7 +98,7 @@ firebase.json             #                                    ← 백엔드
 | `/onboarding` | 첫 로그인: 동의 → 본인 사진 → 학생증 → 승인 요청 | 학생 |
 | `/onboarding/pending` | 학생회 승인 대기 | 학생 |
 | `/device` | 다른 기기에 이미 등록됨 → 초기화 요청 | 학생 |
-| `/events` | 학교가 참여하는 축제 목록 (2개 이상일 때) | 학생 |
+| `/events` | 학교가 참여하는 축제 목록 (학생 첫 화면. 명단 행사는 "명단 대상"·"명단 준비 중") | 학생 |
 | `/event` | 축제 상세 · 입장권 발급 | 학생 |
 | `/ticket` | 내 입장권 (QR), 취소 | 학생 |
 | `/ticket/history` | 발급·재배정·입장 기록 | 학생 |
@@ -123,7 +123,7 @@ firebase.json             #                                    ← 백엔드
 | `/ops/admins` | 행사 담당자 지정: 팀원 구글 계정(개인 Gmail 가능) → 학교 | 운영진 |
 | `/ops/devices` | 학교별 학생 기기 초기화 | 운영진 |
 
-- 로그인 후 이동: 학생은 아래 "학생 관문"을 먼저 거치고, 입장권이 있으면 `/ticket`, 없으면 `/event` / staff는 `/staff/scan` / admin은 `/admin`
+- 로그인 후 이동: 학생은 아래 "학생 관문"을 먼저 거치고 항상 축제 목록 `/events` / staff는 `/staff/scan` / admin은 `/admin`
 - **학생 관문** (`studentGatePath`): 승인 전(`none`·`rejected`) → `/onboarding`, 승인 대기 → `/onboarding/pending`, 기기 막힘 → `/device`. 통과 전에는 다른 학생 화면에 들어갈 수 없다.
 - 권한이 없는 경로에 들어오면 자기 역할의 첫 화면으로 보낸다.
 - 관리자 화면은 노트북에서 왼쪽 세로 메뉴, 폰에서는 위쪽 가로 스크롤 메뉴 (`app/AdminLayout.tsx`).

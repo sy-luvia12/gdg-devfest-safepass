@@ -15,7 +15,7 @@ export function PendingPage() {
 
   if (!user) return null;
   const gate = studentGatePath(user);
-  if (gate !== '/onboarding/pending') return <Navigate to={gate ?? '/event'} replace />;
+  if (gate !== '/onboarding/pending') return <Navigate to={gate ?? '/events'} replace />;
 
   const onCheck = async () => {
     setChecking(true);

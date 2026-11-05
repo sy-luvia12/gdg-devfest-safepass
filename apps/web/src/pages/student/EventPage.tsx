@@ -65,7 +65,7 @@ export function EventPage() {
       title="축제 정보"
       right={
         <>
-          {events.length > 1 && <IconButton icon={LayoutList} label="축제 목록" onClick={() => navigate('/events')} />}
+          {events.length > 0 && <IconButton icon={LayoutList} label="축제 목록" onClick={() => navigate('/events')} />}
           <IconButton icon={UserRound} label="내 정보" onClick={() => navigate('/me')} />
         </>
       }

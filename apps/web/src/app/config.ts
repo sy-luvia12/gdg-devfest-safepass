@@ -8,7 +8,7 @@ export const CHAIN_CONTRACT = import.meta.env.VITE_CHAIN_CONTRACT || '';
 export function homePathFor(role: Role): string {
   if (role === 'admin') return '/admin';
   if (role === 'staff') return '/staff/scan';
-  return '/ticket';
+  return '/events';
 }
 
 /**
