@@ -146,12 +146,13 @@ function millis(v: unknown): number {
   return v && typeof v === 'object' && 'toMillis' in v ? (v as { toMillis(): number }).toMillis() : 0;
 }
 
-function toEvent(id: string, d: DocumentData): Event {
+// viewer: 묶음 이름(고연전/연고전)을 고를 학교. 여러 학교 행사를 동시에 읽을 때 섞이지 않게 넘긴다
+function toEvent(id: string, d: DocumentData, viewer = viewerSchoolId): Event {
   return {
     id,
     schoolId: (d.schoolIds as string[] | undefined)?.[0] ?? '',
     schoolIds: d.schoolIds ?? [],
-    seriesName: (d.seriesName as Record<string, string> | undefined)?.[viewerSchoolId] ?? firstValue(d.seriesName),
+    seriesName: (d.seriesName as Record<string, string> | undefined)?.[viewer] ?? firstValue(d.seriesName),
     name: d.name ?? '',
     date: new Date(millis(d.date) || Date.now()).toISOString(),
     place: d.place ?? '',
@@ -486,7 +487,7 @@ export async function listSchools(): Promise<School[]> {
 export async function listEvents(schoolId: string): Promise<Event[]> {
   viewerSchoolId = schoolId;
   const snap = await getDocs(query(collection(db, 'events'), where('schoolIds', 'array-contains', schoolId)));
-  return snap.docs.map((d) => toEvent(d.id, d.data())).sort((a, b) => a.date.localeCompare(b.date));
+  return snap.docs.map((d) => toEvent(d.id, d.data(), schoolId)).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getEvent(eventId: string): Promise<Event> {
