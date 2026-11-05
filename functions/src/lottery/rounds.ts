@@ -4,6 +4,7 @@ import { enqueueChainOps } from '../chain/outbox';
 import { REASON, tokenIdOf } from '../chain/ids';
 import { claimDeadline, COMMIT_LEAD_MS, drawCloseAt, lotterySettingsOf, nextAnnouncement, pickDrawTime } from '../domain/lottery';
 import { isDomainAllowed } from '../domain/ticket';
+import { schoolForEmail } from '../handlers/rosterStore';
 import { buildSnapshot, drawWinners, leafOf, merkleProof, newSalt } from './draw';
 
 // Cancelled-ticket lottery for events with reassignMode 'lottery' (docs/api.md 14장).
@@ -69,6 +70,8 @@ export function poolTicket(tx: Transaction, ticketRef: DocumentReference, reassi
 async function mayTakeTicket(db: Firestore, tx: Transaction, eventId: string, eventData: FirebaseFirestore.DocumentData, uid: string, email: string) {
   const user = await tx.get(db.doc(`users/${uid}`));
   if (user.get('role') !== 'student') return false;
+  // Schools with a loaded student roster only take students who finished sign-up, as issueTicket does.
+  if ((await schoolForEmail(email, tx))?.get('studentRoster') && !(user.get('rosterVerified') && user.get('photoSubmitted'))) return false;
   const held = await tx.get(db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', uid).limit(1));
   if (!held.empty) return false;
   if (eventData.allowReissueAfterCancel !== true) {

@@ -165,6 +165,32 @@ describe('school scoping', () => {
     expect(stored).not.toHaveProperty('staffSchoolId');
   });
 
+  it('a school admin cannot change another school student, unscoped team staff, or a pending address of another school (#28)', async () => {
+    const adminA = await login('admin@sch-a.test');
+    const studentB = await login('pupil@sch-b.test');
+    await login('walkin@sch-team.test');
+
+    expect(await codeOf(adminA.call('setStaff', { email: 'pupil@sch-b.test', staff: true }))).toBe('functions/permission-denied');
+    expect((await db.doc(`users/${studentB.uid}`).get()).get('role')).toBe('student');
+    expect(await codeOf(adminA.call('setStaff', { email: 'walkin@sch-team.test', staff: false }))).toBe('functions/permission-denied');
+    expect(await codeOf(adminA.call('setStaff', { email: 'newcomer@sch-b.test', staff: true }))).toBe('functions/permission-denied');
+    expect((await db.doc('seedProfiles/newcomer@sch-b.test').get()).exists).toBe(false);
+  });
+
+  it('a seeded role goes only to a verified email (#28 hardening)', async () => {
+    await db.doc('seedProfiles/boss@sch-a.test').set({ role: 'admin', adminSchoolId: A, name: 'Boss' });
+    const app = initializeApp({ projectId: PROJECT, apiKey: 'fake-api-key' }, 'sch-unverified');
+    apps.push(app);
+    const auth = getAuth(app);
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    const email = 'boss@sch-a.test';
+    const idToken = JSON.stringify({ sub: 'unverified-boss', email, email_verified: false, name: 'x' });
+    const { user } = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    const profile = await connect(app)('ensureUser', undefined);
+    expect(profile.role).toBe('student');
+    expect((await db.doc(`users/${user.uid}`).get()).get('role')).toBe('student');
+  });
+
   it('school staff cannot scan a ticket of an event their school is not part of; unscoped staff still can', async () => {
     const holderB = await login('holder-b@sch-c.test');
     const holderA = await login('holder-a@sch-c.test');
