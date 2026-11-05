@@ -167,6 +167,7 @@ function toEvent(id: string, d: DocumentData, viewer = viewerSchoolId): Event {
     roster: rosterSummary(d.roster),
     // 서버의 'lottery'(정해진 시각 추첨)는 관리자 화면에 이름표가 생기기 전까지 '무작위'로 보여 준다 (docs/api.md 14장)
     reassignMode: d.reassignMode === 'random' || d.reassignMode === 'lottery' ? 'random' : 'queue',
+    lottery: d.reassignMode === 'lottery',
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };

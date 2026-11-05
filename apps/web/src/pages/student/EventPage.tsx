@@ -139,7 +139,7 @@ export function EventPage() {
 
         <nav className="flex flex-col">
           <LinkRow icon={Blocks} label="공개 현황판" hint="발행량·재배정·운영진 기록" onClick={() => navigate('/event/board')} />
-          {event.reassignMode === 'lottery' && (
+          {event.lottery && (
             <LinkRow icon={ShieldCheck} label="추첨 검증" hint="추첨 결과를 내 폰에서 다시 계산" onClick={() => navigate('/event/draw')} />
           )}
         </nav>
