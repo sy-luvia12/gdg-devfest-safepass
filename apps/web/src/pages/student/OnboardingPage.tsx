@@ -14,7 +14,8 @@ import { studentAuthMessage } from '@/lib/studentAuthForm';
 export function OnboardingPage() {
   const { user, refreshUser, signOut } = useAuth();
   const navigate = useNavigate();
-  const [photo, setPhoto] = useState<string | null>(null);
+  // 학생증 단계 전에 가입한 학생은 본인 사진이 이미 있다. 그대로 두고 학생증만 더 받는다
+  const [photo, setPhoto] = useState<string | null>(() => user?.photoUrl || null);
   const [idCard, setIdCard] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [consented, setConsented] = useState(false);

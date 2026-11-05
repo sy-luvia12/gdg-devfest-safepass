@@ -277,7 +277,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - 색 생성 규칙은 `DESIGN.md` 2.1장. 컴포넌트에서 테마 색 hex를 직접 쓰지 않는다.
 
 ### 로그인 규칙
-- **학생**: 학교 메일 링크(Firebase 이메일 링크, 비밀번호 없음). 가입 = 학교·이름·학번 → `precheckStudent` → 메일 링크 → `completeSignInLink`(서버가 `precheckStudent`가 남긴 가입 정보로 명단 대조. 링크는 어느 브라우저에서 열어도 되고, 링크를 연 브라우저가 등록 기기가 된다) → 본인 사진·학생증 사진 `submitProfilePhoto(photo, idCard)`. 학생증은 `idCards/{uid}`에 두고 클라이언트는 읽지 못한다. 로그인 = 메일(+학번) → 메일 링크. 화면 연결은 `docs/student-auth.md`.
+- **학생**: 학교 메일 링크(Firebase 이메일 링크, 비밀번호 없음). 가입 = 학교·이름·학번 → `precheckStudent` → 메일 링크 → `completeSignInLink`(서버가 `precheckStudent`가 남긴 가입 정보로 명단 대조. 링크는 어느 브라우저에서 열어도 되고, 링크를 연 브라우저가 등록 기기가 된다) → 본인 사진·학생증 사진 `submitProfilePhoto(photo, idCard)`. 가입 완료 = `rosterVerified` + `photoSubmitted` + `idCardSubmitted` (학생증 단계 전에 가입한 학생은 /onboarding에서 학생증만 더 낸다). 학생증은 `idCards/{uid}`에 두고 클라이언트는 읽지 못한다. 로그인 = 메일(+학번) → 메일 링크. 화면 연결은 `docs/student-auth.md`.
 - **운영진(스태프·학생회)**: 구글 로그인(`signInWithSchoolAccount`).
 - 재학생 명단을 불러온 학교는 가입을 마친 학생만 들어오고 발급받는다(`not_registered`). 명단이 없는 학교는 예전처럼 구글 로그인으로 들어온다.
 - 로그인할 때마다 서버가 명단을 다시 본다. 명단에서 빠진 학생은 다시 가입해야 한다.

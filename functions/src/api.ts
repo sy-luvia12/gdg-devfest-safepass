@@ -18,8 +18,10 @@ export interface UserProfile {
   /** Set once verifyStudentRoster matched this account to its school roster row. */
   schoolId?: string;
   rosterVerified?: boolean;
-  /** Set once the student sent a face photo with submitProfilePhoto. Sign-up is complete with both flags. */
+  /** Set once the student sent a face photo with submitProfilePhoto. */
   photoSubmitted?: boolean;
+  /** Set once the student sent a photo of the student ID card (same call). Sign-up is complete with all three flags. */
+  idCardSubmitted?: boolean;
   /** The SafePass operator account (an admin without adminSchoolId). Only it can call the ops* functions. */
   operator?: boolean;
 }

@@ -21,10 +21,10 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callabl
       const reason: IssueReason = 'DOMAIN';
       throw new HttpsError('permission-denied', 'This school domain cannot join this event.', { reason });
     }
-    // Schools with a loaded roster only take students who finished sign-up (roster check and face photo).
+    // Schools with a loaded roster only take students who finished sign-up (roster check, face photo, ID card photo).
     // A school without one keeps the old sign-in, so seeded demo students still work.
     const school = await schoolForEmail(caller.email, tx);
-    if (school?.get('studentRoster') && !(student.rosterVerified && student.photoSubmitted)) {
+    if (school?.get('studentRoster') && !(student.rosterVerified && student.photoSubmitted && student.idCardSubmitted)) {
       const reason: IssueReason = 'NOT_REGISTERED';
       throw new HttpsError('failed-precondition', 'Finish sign-up first.', { reason });
     }
