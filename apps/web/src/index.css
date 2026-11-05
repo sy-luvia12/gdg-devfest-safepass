@@ -28,6 +28,118 @@
   }
 }
 
+/* 안개 구 (components/Orb.tsx). 색은 테마 변수만 쓴다. multiply로 겹쳐 파스텔을 진하게 만든다 */
+@layer components {
+  .orb {
+    isolation: isolate;
+  }
+  .orb-halo {
+    position: absolute;
+    inset: -14%;
+    border-radius: 9999px;
+    background:
+      radial-gradient(circle at 74% 56%, rgb(var(--c-p3) / 0.9) 0%, transparent 52%),
+      radial-gradient(circle at 50% 50%, rgb(var(--c-p2) / 0.55) 40%, rgb(var(--c-p4) / 0.35) 58%, transparent 70%);
+    filter: blur(calc(var(--orb-size) * 0.05));
+    z-index: -1;
+  }
+  /* 또렷한 원. 테두리는 .orb-rim이 그린다 */
+  .orb-body {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: var(--grad-orb);
+    box-shadow: inset 0 0 calc(var(--orb-size) * 0.06) rgb(255 255 255 / 0.55);
+    -webkit-mask-image: radial-gradient(circle closest-side, #000 97%, transparent 100%);
+    mask-image: radial-gradient(circle closest-side, #000 97%, transparent 100%);
+  }
+  /* 파스텔 색이 천천히 섞이는 층 (진하게 하지 않는다) */
+  .orb-swirl {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 50% 42% at 70% 40%, rgb(var(--c-p2) / 0.55) 0%, transparent 100%),
+      radial-gradient(ellipse 45% 50% at 22% 72%, rgb(var(--c-p2) / 0.5) 0%, transparent 100%);
+    animation: orb-swirl 40s linear infinite;
+  }
+  /* 대각선으로 지나가는 밝은 띠 */
+  .orb-band {
+    position: absolute;
+    inset: -15%;
+    background: linear-gradient(
+      128deg,
+      transparent 34%,
+      rgb(255 255 255 / 0.4) 45%,
+      rgb(255 255 255 / 0.2) 52%,
+      transparent 64%
+    );
+    animation: orb-drift 10s ease-in-out infinite alternate;
+  }
+  /* 은은한 핑크 */
+  .orb-glow {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 45% 30% at 62% 60%, rgb(var(--c-p3) / 0.6) 0%, transparent 100%);
+    animation: orb-swirl 40s linear infinite;
+  }
+}
+
+/* 유리 테두리: 선이 아니라 빛. 오른쪽 아래는 무지개빛으로 밝고, 왼쪽 위는 거의 사라진다 */
+@layer components {
+  .orb-rim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .orb-rim::before,
+  .orb-rim::after {
+    content: '';
+    position: absolute;
+    border-radius: 9999px;
+    background: conic-gradient(
+      from 0deg,
+      rgb(255 255 255 / 0.6) 0deg,
+      rgb(var(--c-p1)) 70deg,
+      rgb(var(--c-p4)) 120deg,
+      rgb(var(--c-p3)) 165deg,
+      rgb(var(--c-p2) / 0.6) 220deg,
+      rgb(255 255 255 / 0.2) 290deg,
+      rgb(255 255 255 / 0.6) 360deg
+    );
+  }
+  /* 얇은 선 */
+  .orb-rim::before {
+    inset: 0;
+    -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px), #000 calc(100% - 0.5px), transparent 100%);
+    mask: radial-gradient(closest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px), #000 calc(100% - 0.5px), transparent 100%);
+    filter: saturate(1.2);
+    opacity: 0.4;
+  }
+  /* 선 안팎으로 번지는 빛 */
+  .orb-rim::after {
+    inset: -3%;
+    -webkit-mask: radial-gradient(closest-side, transparent 66%, #000 92%, #000 95%, transparent 100%);
+    mask: radial-gradient(closest-side, transparent 66%, #000 92%, #000 95%, transparent 100%);
+    filter: blur(calc(var(--orb-size) * 0.04)) saturate(1.2);
+    opacity: 0.6;
+  }
+}
+
+@keyframes orb-swirl {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes orb-drift {
+  from {
+    transform: translate(-4%, -3%);
+  }
+  to {
+    transform: translate(4%, 3%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

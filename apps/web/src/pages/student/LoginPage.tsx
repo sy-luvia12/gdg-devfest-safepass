@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { ChevronLeft, RotateCcw } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { homePathFor, studentGatePath } from '@/app/config';
@@ -50,15 +50,21 @@ export function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-dvh flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-16">
-      <section className="flex flex-1 flex-col items-center justify-center gap-10 text-center">
+    <main className="mx-auto flex min-h-dvh w-full max-w-app flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-4">
+      <div className="flex">
+        <Link
+          to="/about"
+          className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-2 text-caption text-ink-2 hover:bg-surface-2"
+        >
+          <ChevronLeft size={14} strokeWidth={2} />
+          Campass 소개 보러가기
+        </Link>
+      </div>
+      <section className="flex flex-1 flex-col items-center justify-center gap-10 py-10 text-center">
         <Orb size={200} />
         <div className="flex flex-col gap-2">
-          <h1 className="text-display text-ink">SafePass</h1>
+          <h1 className="text-display text-ink">Campass</h1>
           <p className="text-body text-ink-2">재학생만을 위한 축제 입장권</p>
-          <Link to="/about" className="text-label text-ink-3 underline underline-offset-4">
-            SafePass 소개 보기
-          </Link>
         </div>
       </section>
 

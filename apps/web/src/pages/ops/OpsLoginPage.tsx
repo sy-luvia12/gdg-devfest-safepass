@@ -49,7 +49,7 @@ export function OpsLoginPage() {
       <form onSubmit={onSubmit} className="flex w-full max-w-[360px] flex-col gap-4">
         <div className="mb-4 flex flex-col items-center gap-3 text-center">
           <ShieldHalf size={36} strokeWidth={1.5} className="text-ops-accent" />
-          <h1 className="text-title text-ops-ink">SafePass 운영진</h1>
+          <h1 className="text-title text-ops-ink">Campass 운영진</h1>
           <p className="text-label text-ops-ink-2">모든 학교의 명단과 기기를 관리해요</p>
         </div>
         <label className="flex flex-col gap-1.5">

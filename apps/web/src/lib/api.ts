@@ -62,7 +62,7 @@ export const pendingSignInEmail: typeof mock.pendingSignInEmail = real ? fb.pend
 export const completeSignInLink: typeof mock.completeSignInLink = real ? fb.completeSignInLink : mock.completeSignInLink;
 export const submitProfilePhoto: typeof mock.submitProfilePhoto = real ? fb.submitProfilePhoto : mock.submitProfilePhoto;
 
-// 운영진 콘솔 (/ops). 아이디·비밀번호로 들어오는 SafePass 운영진만 쓴다. 명단은 서버에 저장된 것을 바로 고친다
+// 운영진 콘솔 (/ops). 아이디·비밀번호로 들어오는 Campass 운영진만 쓴다. 명단은 서버에 저장된 것을 바로 고친다
 export const signInAsOperator: typeof mock.signInAsOperator = real ? fb.signInAsOperator : mock.signInAsOperator;
 export const opsListRoster: typeof mock.opsListRoster = real ? fb.opsListRoster : mock.opsListRoster;
 export const opsEditRoster: typeof mock.opsEditRoster = real ? fb.opsEditRoster : mock.opsEditRoster;

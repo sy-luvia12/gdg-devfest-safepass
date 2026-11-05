@@ -29,7 +29,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [school, eventId]);
 
   useEffect(() => {
-    // 로그인 전(로그인 화면)은 항상 SafePass 기본 보라 테마
+    // 로그인 전(로그인 화면)은 항상 Campass 기본 보라 테마
     applyTheme(school ? themeSeeds(school, event) : null);
   }, [school, event]);
 

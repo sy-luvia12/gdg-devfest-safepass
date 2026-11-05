@@ -29,11 +29,11 @@ export type User = {
   email: string; // 학교 이메일
   photoUrl: string; // 프로토타입은 미리 넣어둔 테스트 사진
   role: Role; // staff: 검표 / admin: 검표 + 관리자
-  /** 학교 관리자가 맡은 학교. admin인데 없으면 SafePass 팀 계정 (모든 학교, 새 스페이스 만들기) */
+  /** 학교 관리자가 맡은 학교. admin인데 없으면 Campass 팀 계정 (모든 학교, 새 스페이스 만들기) */
   adminSchoolId?: string;
   /** 학교 관리자가 추가한 스태프가 맡은 학교. 그 학교 행사만 검표한다. 없으면 모든 학교 (팀 계정) */
   staffSchoolId?: string;
-  /** SafePass 운영진 계정 (어둠의 운영진). /ops 콘솔에서 모든 학교의 명단과 기기를 고친다 */
+  /** Campass 운영진 계정 (어둠의 운영진). /ops 콘솔에서 모든 학교의 명단과 기기를 고친다 */
   operator?: boolean;
   verifyStatus: VerifyStatus;
   rejectReason?: string;
