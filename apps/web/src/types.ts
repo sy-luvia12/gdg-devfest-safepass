@@ -250,6 +250,7 @@ export class ApiError extends Error {
     | 'sheet_not_found'
     | 'sheet_api_disabled' // 프로젝트에서 Sheets API가 꺼져 있음
     | 'sheet_missing_columns' // 첫 줄에 이름·학번·이메일 열이 없음
+    | 'chain_unavailable' // 체인(RPC)을 읽지 못함. 다시 시도
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);

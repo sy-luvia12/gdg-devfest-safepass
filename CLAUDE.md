@@ -195,7 +195,7 @@ issueTicket(eventId): Promise<Ticket>               // 도메인·1인 1매·정
 getMyTicket(eventId): Promise<Ticket | null>
 subscribeMyTicket(eventId, cb, onError?): () => void   // 실시간. 재배정·입장·취소가 새로고침 없이 반영
 refreshQrToken(ticketId): Promise<{ token; expiresAt }> // 25초마다. 기기 서명을 붙인다
-getTicketHistory(ticketId): Promise<TicketHistoryItem[]>   // 발급·재배정·입장 (txHash는 표시용)
+getTicketHistory(ticketId): Promise<TicketHistoryItem[]>   // 발급·재배정·입장. 실제 연결은 체인에서 직접 읽는다 (docs/api.md 13장)
 
 // 취소 (양도 대체): 대기 명단 재배정
 cancelTicket(ticketId): Promise<'reassigned' | 'released' | 'used'>
@@ -219,6 +219,11 @@ createEvent(input) / updateEvent(eventId, patch)                     // 행사 �
 getEventRoster(eventId) / importEventRoster(eventId, sheetUrl)       // 행사 명단
 verifyStudentRoster(schoolId, name, studentId): Promise<User>        // 회원가입: 학번 줄의 이름·메일 대조
 listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인 전이면 첫 로그인 때 적용
+
+// 체인 직접 읽기 (Firebase 안 거침, "체인 기록" 배지). docs/api.md 13장
+getChainEventStatus(eventId): Promise<ChainEventStatus>   // S8 공개 현황판: 정원·활성·발급·입장·재배정·회수
+getChainDraw(eventId, round): Promise<ChainDraw | null>   // 추첨 회차 커밋·시드
+verifyMyDraw(entry): Promise<DrawCheck>                   // S7 직접 검증 (DEMO_DRAW.entries로 시연)
 ```
 
 - 실패는 `types.ts`의 `ApiError`(`code`: `not_school_account` / `sold_out` / `not_found` / `unauthenticated` / `not_in_roster` / `invalid_state` / `device_blocked` / `cancelled_before` / `wrong_role` / `unknown`)로 던진다. 서버 `permission-denied`는 `details.reason`이 `ROLE`이면 `wrong_role`, 아니면 `not_school_account`다. 화면 문구는 프론트가 정한다.
