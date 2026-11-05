@@ -454,7 +454,14 @@ describe('student sign-up and tickets', () => {
     }
 
     await seedRosterRow(A, { studentId: '2024201', name: 'Fay Kang', email: 'recheck1@sch-a.test' });
-    expect(await removed.call('verifyStudentRoster', { schoolId: A, studentId: '2024201', name: 'Fay Kang' })).toMatchObject({ ok: true });
+    const again = await removed.call('verifyStudentRoster', { schoolId: A, studentId: '2024201', name: 'Fay Kang' });
+    expect(again).toMatchObject({ ok: true, profile: { rosterVerified: true } });
+    // Signing up again asks for the photos again: the earlier ones do not carry over
+    expect(again.profile).not.toHaveProperty('photoSubmitted');
+    expect(again.profile).not.toHaveProperty('idCardSubmitted');
+    expect((await db.doc(`idCards/${removed.uid}`).get()).exists).toBe(false);
+    expect(await reasonOf(removed.call('issueTicket', { eventId: EV_A }))).toBe('NOT_REGISTERED');
+    await removed.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG, idCardDataUrl: TINY_JPEG });
     expect((await removed.call('issueTicket', { eventId: EV_A })).ticketId).toBeTruthy();
   });
 
