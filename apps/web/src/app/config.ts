@@ -22,3 +22,8 @@ export function studentGatePath(user: User): string | null {
   if (user.deviceStatus === 'blocked') return '/device';
   return null;
 }
+
+/** 학교가 아직 지정되지 않은 관리자 (예전 팀 관리자 계정 등). 운영진이 /ops에서 학교를 지정해야 관리 화면을 쓴다 */
+export function isUnassignedAdmin(user: User): boolean {
+  return user.role === 'admin' && !user.adminSchoolId && !user.operator;
+}

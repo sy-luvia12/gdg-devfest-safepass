@@ -100,7 +100,10 @@ beforeAll(async () => {
 
   await seedProfile('admin@sch-a.test', { role: 'admin', adminSchoolId: A });
   await seedProfile('admin@sch-b.test', { role: 'admin', adminSchoolId: B });
-  await seedProfile('team@sch-team.test', { role: 'admin' });
+  // The operator works for every school. An admin with no school and no operator flag (an old team account) has no
+  // admin access until the operator assigns a school.
+  await seedProfile('team@sch-team.test', { role: 'admin', operator: true });
+  await seedProfile('legacy@sch-team.test', { role: 'admin' });
   await seedProfile('ops@sch-ops.test', { role: 'admin', operator: true, name: 'Operator' });
   // The operator flag only counts on an admin with no school
   await seedProfile('fake-ops@sch-a.test', { role: 'admin', adminSchoolId: A, operator: true });
@@ -146,7 +149,7 @@ describe('school scoping', () => {
     expect((await db.doc(`devices/${byDomainA.uid}`).get()).exists).toBe(false);
   });
 
-  it('setStaff stamps the admin school, refuses another school staff member, and a team admin adds unscoped staff', async () => {
+  it('setStaff stamps the admin school, refuses another school staff member, and the operator adds unscoped staff', async () => {
     const adminA = await login('admin@sch-a.test');
     const team = await login('team@sch-team.test');
     const hire = await login('hire@sch-a.test');
@@ -447,7 +450,7 @@ describe('operator console', () => {
     await seedEvent(OPS_EV, { schoolIds: [A], allowedDomains: ['sch-a.test'], requireRoster: true });
     const ops = await login('ops@sch-ops.test');
     expect(await ops.call('ensureUser', undefined)).toMatchObject({ role: 'admin', operator: true });
-    for (const email of ['team@sch-team.test', 'admin@sch-a.test', 'fake-ops@sch-a.test', 'dev1@sch-a.test']) {
+    for (const email of ['legacy@sch-team.test', 'admin@sch-a.test', 'fake-ops@sch-a.test', 'dev1@sch-a.test']) {
       const other = await login(email);
       expect(await codeOf(other.call('opsListRoster', { kind: 'school', id: A }))).toBe('functions/permission-denied');
       expect(await codeOf(other.call('opsEditRoster', { kind: 'school', id: A, upserts: [], deletes: [] }))).toBe(
@@ -561,7 +564,7 @@ describe('operator console', () => {
     expect(after.students.find((s) => s.uid === student.uid)).toMatchObject({ deviceRegistered: false, resetRequested: false });
   });
 
-  it('assigns a personal Gmail as event admin before or after its first sign-in, and leaves team admins alone', async () => {
+  it('assigns a personal Gmail as event admin before or after its first sign-in, and leaves operators alone', async () => {
     const ops = await login('ops@sch-ops.test');
     const adminA = await login('admin@sch-a.test');
     expect(await codeOf(adminA.call('opsSetEventAdmin', { email: 'x@sch-gmail.test', schoolId: A }))).toBe('functions/permission-denied');
@@ -592,7 +595,7 @@ describe('operator console', () => {
     expect(await ops.call('opsSetEventAdmin', { email: 'early.admin@sch-gmail.test', schoolId: null })).toEqual({ ok: true, status: 'REMOVED' });
     expect(await early.call('ensureUser', undefined)).not.toHaveProperty('adminSchoolId');
 
-    // Team admins and operator addresses are never changed
+    // Operator accounts are never changed
     expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'team@sch-team.test', schoolId: A }))).toBe('functions/failed-precondition');
     expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'ops@ops.safepass.app', schoolId: A }))).toBe('functions/failed-precondition');
     expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'new@sch-gmail.test', schoolId: 'no-such-school' }))).toBe('functions/not-found');
@@ -655,5 +658,31 @@ describe('waitlist on a roster event', () => {
     await db.doc('tickets/sch-a-lottery-pooled').set({ eventId: EV, ownerUid: null, status: 'pooled', drawRound: null, nftNumber: '#0001', chainSeq: 0, chain: { status: 'pending' } });
     const adminA = await login('admin@sch-a.test');
     expect(await adminA.call('runDrawNow', { eventId: EV })).toEqual({ ok: true, round: 1, tickets: 1, entries: 1 });
+  });
+});
+
+describe('no school-less team admin', () => {
+  it('an admin with no school and no operator flag can do nothing until the operator assigns a school', async () => {
+    const legacy = await login('legacy@sch-team.test');
+    const ops = await login('ops@sch-ops.test');
+    expect(await legacy.call('ensureUser', undefined)).toMatchObject({ role: 'admin' });
+    const date = '2026-12-01T18:00:00+09:00';
+    const fields = { name: 'Legacy Fest', date, place: 'Hall', capacity: 10, faceValue: 0, requireRoster: false };
+    expect(await codeOf(legacy.call('createEvent', { ...fields, schoolIds: [A] }))).toBe('functions/permission-denied');
+    expect(await codeOf(legacy.call('setReassignMode', { eventId: EV_A, mode: 'random' }))).toBe('functions/permission-denied');
+    expect(await codeOf(legacy.call('getEventRoster', { eventId: EV_A }))).toBe('functions/permission-denied');
+    expect(await codeOf(legacy.call('setStaff', { email: 'someone@sch-a.test', staff: true }))).toBe('functions/permission-denied');
+    expect(await codeOf(legacy.call('upsertSchool', { schoolId: 'sch-legacy', name: 'X', domains: ['sch-legacy.test'], brandColor: '#000000' }))).toBe(
+      'functions/permission-denied',
+    );
+    const dev = await login('legacy-dev@sch-a.test');
+    expect(await codeOf(legacy.call('resetDevice', { uid: dev.uid! }))).toBe('functions/permission-denied');
+
+    // The operator sees it as an admin with no school and assigns one
+    const list = await ops.call('opsListEventAdmins', undefined);
+    expect(list.admins).toContainEqual(expect.objectContaining({ email: 'legacy@sch-team.test', schoolId: '' }));
+    expect(await ops.call('opsSetEventAdmin', { email: 'legacy@sch-team.test', schoolId: A })).toEqual({ ok: true, status: 'UPDATED' });
+    expect((await legacy.call('createEvent', { ...fields, schoolIds: [A] })).ok).toBe(true);
+    expect(await codeOf(legacy.call('createEvent', { ...fields, schoolIds: [B] }))).toBe('functions/permission-denied');
   });
 });

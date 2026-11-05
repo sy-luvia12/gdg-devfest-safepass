@@ -13,7 +13,7 @@ import { StateView } from '@/components/StateView';
 export function EventListPage() {
   const navigate = useNavigate();
   const { user, school, events, eventId, selectEvent } = useAuth();
-  const teamAccount = !user?.adminSchoolId;
+  const teamAccount = !!user?.operator;
 
   const open = (id: string) => {
     selectEvent(id);

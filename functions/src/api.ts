@@ -11,7 +11,7 @@ export interface UserProfile {
   email: string;
   photoUrl: string | null;
   role: Role;
-  /** Set on admin accounts that manage one school. Absent on SafePass team admins, who manage every school. */
+  /** The school an event admin works for. An admin without it (and without operator) has no admin access yet. */
   adminSchoolId?: string;
   /** Set on staff added by a school admin: they check tickets at that school's events only. */
   staffSchoolId?: string;
@@ -429,6 +429,7 @@ export interface OpsListStudentsResponse {
 export interface OpsEventAdmin {
   email: string;
   name: string;
+  /** '' for an admin with no school yet (an old team account): the operator assigns one */
   schoolId: string;
   /** ACTIVE: signed in already. PENDING_SIGNUP: applies on the first sign-in */
   status: 'ACTIVE' | 'PENDING_SIGNUP';

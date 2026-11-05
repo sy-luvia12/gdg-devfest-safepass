@@ -26,7 +26,7 @@ export function SetupPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { user, school, refreshScope, selectSchool } = useAuth();
-  const isNew = !user?.adminSchoolId && params.has('new');
+  const isNew = !!user?.operator && params.has('new');
   const existing = isNew ? null : school;
   const [step, setStep] = useState<Step>(existing ? (existing.studentRoster ? 'done' : 'roster') : 'school');
   const [form, setForm] = useState({
@@ -102,7 +102,7 @@ export function SetupPage() {
       {step === 'school' && (
         <Card>
           <form onSubmit={saveSchool} className="flex flex-col gap-4">
-            {!user?.adminSchoolId && (
+            {user?.operator && (
               <TextField label="학교 ID" placeholder="korea" value={form.id} onChange={set('id')} hint="주소와 데이터에 쓰는 영문 이름이에요" />
             )}
             <TextField label="학교 이름" placeholder="고려대학교" value={form.name} onChange={set('name')} />

@@ -109,10 +109,10 @@ firebase.json             #                                    ← 백엔드
 | `/admin/entries` | 입장 기록 (필터·검색·CSV) | admin |
 | `/admin/tickets` | 발급 현황 | admin |
 | `/admin/reassignments` | 취소·재배정 기록, 대기 명단(시트 등록, 이름·학번만), 재배정 방식 | admin |
-| `/admin/devices` | 기기 초기화 요청 | 팀 admin (행사 담당자에게는 숨김) |
+| `/admin/devices` | 기기 초기화 요청 | 운영진 (행사 담당자에게는 숨김) |
 | `/admin/staff` | 스태프 관리 | admin |
-| `/admin/setup` | 스페이스 만들기: 학교 정보 → 재학생 시트 | 팀 admin |
-| `/admin/students` | 재학생 명단 (학교 전체, 회원가입 대조용) | 팀 admin |
+| `/admin/setup` | 스페이스 만들기: 학교 정보 → 재학생 시트 | 운영진 |
+| `/admin/students` | 재학생 명단 (학교 전체, 회원가입 대조용) | 운영진 |
 | `/admin/events`, `/admin/events/new` | 행사 목록 · 행사 등록 | admin |
 | `/admin/roster` | 행사 명단 (당첨자·참가자 시트, 이름·학번만) | admin |
 | `/admin/settings` | 행사 정보 · 입장 규칙 · 보관 기간 · 테마 | admin |
@@ -245,7 +245,7 @@ opsEditRoster(kind, id, { upserts, deletes, replace? }): Promise<OpsEditResult> 
 opsListStudents(schoolId): Promise<OpsStudent[]>    // 가입한 학생과 기기 등록·초기화 요청 여부
 opsResetDevice(uid): Promise<void>                  // resetDevice
 opsListEventAdmins(): Promise<OpsEventAdmin[]>       // 행사 담당자 (로그인 전이면 pending)
-opsSetEventAdmin(email, schoolId | null): Promise<void>   // 지정·해제. 로그인 전이면 seedProfiles에 두고 첫 구글 로그인 때 적용. 팀 관리자·운영진은 못 바꿈
+opsSetEventAdmin(email, schoolId | null): Promise<void>   // 지정·해제. 로그인 전이면 seedProfiles에 두고 첫 구글 로그인 때 적용. 운영진은 못 바꿈. 학교 없는 예전 관리자도 여기서 학교를 지정한다
 
 // 체인 직접 읽기 (Firebase 안 거침, "체인 기록" 배지). docs/api.md 13장
 getChainEventStatus(eventId): Promise<ChainEventStatus>   // S8 공개 현황판: 정원·활성·발급·입장·재배정·회수
@@ -344,7 +344,7 @@ firebase deploy --only hosting   # 저장소 루트에서
 - 무엇을 바꿨는지, 어떤 파일을 건드렸는지, 남의 소유 파일에 필요한 변경 요청이 있는지 짧게 요약한다.
 
 ## 명단 (학교 스페이스 · 행사)
-- 행사 담당자(`users.adminSchoolId`)는 자기 학교만 다룬다. 값이 없는 admin은 SafePass 팀 계정 (모든 학교, 새 스페이스). 그중 `operator`가 있는 계정이 운영진.
+- 관리자는 두 종류뿐이다: 행사 담당자(`users.adminSchoolId`, 자기 학교만)와 운영진(`operator`, 모든 학교·새 스페이스). **학교 없는 팀 관리자는 없앴다.** 학교도 `operator`도 없는 admin(예전 팀 계정)은 아무 권한이 없고, 관리 화면에서 "아직 맡은 학교가 없어요"를 본다. 운영진이 `/ops/admins`에서 학교를 지정한다.
 - **재학생 명단**(`schools/{id}/roster/{studentId}`, 이름·학번·메일): 회원가입 대조. 학번으로 줄을 찾고 이름 + 로그인 메일이 그 줄과 같아야 한다. 학번 하나에 계정 하나(`claimedBy`). 데모에서는 시드가 넣고 운영진 콘솔에서 고친다.
 - **행사 명단**(`events/{id}/roster/{studentId}`, 이름·학번): `requireRoster` 행사는 학생의 학번 줄이 있고 이름이 같아야 발급 (`not_in_roster`). 시트로 불러오면 주최 학교 재학생 명단과 학번·이름이 맞는 줄만 들어간다(안 맞으면 `NOT_IN_STUDENT_ROSTER`·`NAME_MISMATCH`로 건너뜀). 행사 담당자 화면에는 메일이 나오지 않는다.
 - 시트는 관리자가 Cloud Functions 서비스 계정에 뷰어로 공유하고, 함수가 읽어 Firestore에 복사한다. 명단 하위 컬렉션은 클라이언트가 읽지 못한다. 재학생 시트 첫 줄은 `이름`·`학번`·`이메일`, 행사 시트는 `이름`·`학번`.

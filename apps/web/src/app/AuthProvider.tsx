@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from '@/lib/api';
 import type { Event, School, User } from '@/types';
+import { isUnassignedAdmin } from './config';
 
 /** 보고 있는 학교와 그 학교의 행사들. eventId는 그중 지금 보고 있는 행사 (행사가 없으면 null).
  * school이 null이면 학교 관리자의 스페이스가 아직 없다 → /admin/setup */
@@ -62,6 +63,8 @@ async function scopeFor(school: School): Promise<Scope> {
 /** 학생은 자기 학교. 관리자·스태프는 지난번에 고른 학교, 없으면 자기 학교나 첫 학교 */
 async function resolve(u: User): Promise<Scope & { schools: School[] }> {
   if (u.role === 'student') return { ...(await scopeFor(await api.getSchool(u.schoolId))), schools: [] };
+  // 학교가 지정되지 않은 관리자는 볼 학교가 없다 (관리 화면이 "학교 지정 대기"를 보여준다)
+  if (isUnassignedAdmin(u)) return { school: null, events: [], eventId: null, schools: [] };
   // 학교 관리자·스태프는 자기 학교만. 관리자가 스페이스를 아직 안 만들었으면 학교 없이 들어온다
   const ownSchoolId = u.role === 'admin' ? u.adminSchoolId : u.staffSchoolId;
   if (ownSchoolId) {

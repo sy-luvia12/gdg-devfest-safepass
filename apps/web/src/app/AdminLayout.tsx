@@ -20,11 +20,13 @@ import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
 import { eventTitle } from '@/app/format';
 import { SchoolSwitcher } from '@/components/SchoolSwitcher';
+import { StateView } from '@/components/StateView';
 import { getEvent, listDeviceResets } from '@/lib/api';
 import type { Event } from '@/types';
 import { useAuth } from './AuthProvider';
+import { isUnassignedAdmin } from './config';
 
-/** teamOnly: 학교 담당자 일이라 행사 담당자(adminSchoolId 있음)에게는 숨긴다. 운영진 콘솔(/ops)에서 한다 */
+/** teamOnly: 학교 담당자 일이라 운영진에게만 보인다. 행사 담당자에게는 숨긴다 */
 type NavItem = { to: string; label: string; icon: LucideIcon; badge?: 'devices'; teamOnly?: boolean };
 
 // 학교 메뉴는 행사를 바꿔도 그대로, 행사 메뉴는 지금 고른 행사 기준
@@ -71,9 +73,10 @@ export function AdminLayout() {
   const { user, school, eventId, signOut } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [badges, setBadges] = useState({ devices: 0 });
-  // 행사 담당자: 자기 학교 행사만, 학교 담당자 메뉴(재학생 명단·기기 초기화·스페이스)는 없다
-  const eventAdmin = !!user?.adminSchoolId;
-  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !(eventAdmin && i.teamOnly)) }));
+  // 행사 담당자: 자기 학교 행사만, 학교 담당자 메뉴(재학생 명단·기기 초기화·스페이스)는 운영진만
+  const operator = !!user?.operator;
+  const eventAdmin = !operator;
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => operator || !i.teamOnly) }));
 
   useEffect(() => {
     // 학교를 바꾸면 이전 행사 이름이 남지 않게 비운다
@@ -98,6 +101,23 @@ export function AdminLayout() {
 
   const ctx: AdminContext = { event, setEvent, refreshBadges };
   const inSetup = pathname === '/admin/setup';
+  // 학교가 지정되지 않은 관리자: 운영진이 학교를 지정할 때까지 기다린다
+  if (user && isUnassignedAdmin(user)) {
+    return (
+      <div className="mx-auto flex min-h-dvh max-w-app flex-col justify-center px-5">
+        <StateView
+          kind="empty"
+          title="아직 맡은 학교가 없어요"
+          description="운영진이 이 계정을 학교 행사 담당자로 지정하면 행사 관리 화면을 쓸 수 있어요"
+          action={
+            <Button variant="secondary" onClick={signOut}>
+              로그아웃
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
   // 학교 담당자 화면에 직접 들어온 행사 담당자는 실시간 현황으로
   if (eventAdmin && TEAM_ONLY_PATHS.includes(pathname)) return <Navigate to="/admin" replace />;
 

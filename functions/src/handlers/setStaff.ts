@@ -2,7 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { SetStaffResponse } from '../api';
 import { db } from '../firebase';
-import { readString, requireAuth, requireRole } from './boundary';
+import { isOperator, readString, requireAuth, requireRole } from './boundary';
 import { callableOptions } from './callableOptions';
 import { schoolForEmail } from './rosterStore';
 
@@ -20,16 +20,18 @@ export const setStaff = onCall<unknown, Promise<SetStaffResponse>>(callableOptio
 
   return db.runTransaction(async (tx): Promise<SetStaffResponse> => {
     const admin = await requireRole(tx, caller.uid, ['admin']);
-    // Staff added by a school admin work for that school only (operatorSchoolId). A team admin adds unscoped staff.
+    // Staff added by an event admin work for that school only (operatorSchoolId). The operator adds unscoped staff.
+    // An admin with no school assigned cannot add anyone.
     const school: string | undefined = admin.adminSchoolId || undefined;
+    if (!school && !isOperator(admin)) throw new HttpsError('permission-denied', 'No school assigned to this admin yet.');
     const fields = staff ? { role, staffSchoolId: school ?? FieldValue.delete() } : { role, staffSchoolId: FieldValue.delete() };
     const account = (await tx.get(db.collection('users').where('email', '==', email).limit(1))).docs[0];
     const seedRef = db.doc(`seedProfiles/${email}`);
     const seed = account ? null : await tx.get(seedRef);
     if (account?.get('role') === 'admin') throw new HttpsError('failed-precondition', 'An admin account cannot be changed.');
     if (school) {
-      // A school admin changes accounts of its own school only. Unscoped team staff (and team-added pending
-      // staff) are left to team admins; everyone else is placed by staff school, school, or email domain.
+      // An event admin changes accounts of its own school only. Unscoped staff (and pending staff the operator
+      // added) are left to the operator; everyone else is placed by staff school, school, or email domain.
       const teamStaff = account ? account.get('role') === 'staff' && !account.get('staffSchoolId') : seed?.get('role') === 'staff' && !seed.get('staffSchoolId');
       const known = account ? account.get('staffSchoolId') || account.get('schoolId') : seed?.get('staffSchoolId');
       const theirs = known || (await schoolForEmail(email, tx))?.id;
