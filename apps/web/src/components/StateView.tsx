@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, Inbox, Loader2 } from 'lucide-react';
 import { cx } from './cx';
 
 type Props = {
-  kind: 'loading' | 'empty' | 'error';
+  kind: 'loading' | 'empty' | 'error' | 'success';
   title?: string;
   description?: string;
   action?: ReactNode;
@@ -11,6 +11,7 @@ type Props = {
 };
 
 const defaults = {
+  success: { icon: Check, title: '완료됐어요' },
   loading: { icon: Loader2, title: '불러오는 중이에요' },
   empty: { icon: Inbox, title: '아직 아무것도 없어요' },
   error: { icon: AlertCircle, title: '문제가 생겼어요' },
@@ -31,7 +32,7 @@ export function StateView({ kind, title, description, action, fullScreen }: Prop
       <div
         className={cx(
           'flex h-14 w-14 items-center justify-center rounded-full',
-          kind === 'error' ? 'bg-danger-bg text-danger' : 'bg-surface text-ink-2',
+          kind === 'error' ? 'bg-danger-bg text-danger' : kind === 'success' ? 'bg-success-bg text-success' : 'bg-surface text-ink-2',
         )}
       >
         <Icon size={24} strokeWidth={1.75} className={kind === 'loading' ? 'animate-spin' : undefined} />

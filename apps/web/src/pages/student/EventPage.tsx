@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Calendar, LayoutList, ListOrdered, MapPin, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
+import { LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import calendarIcon from '@/assets/icons/festival-calendar.svg';
+import locationIcon from '@/assets/icons/festival-location.svg';
 import { useAuth, useEventId } from '@/app/AuthProvider';
 import { eventTitle, formatEventDate } from '@/app/format';
 import { AppHeader } from '@/components/AppHeader';
@@ -98,17 +100,27 @@ export function EventPage() {
       {header}
       <main className="flex flex-col gap-6 px-5 pb-36 pt-2 md:pb-10">
         <section className="flex aspect-[4/3] flex-col justify-end gap-2 rounded-xl bg-grad-ticket p-6 shadow-float">
-          <p className="text-label text-ink-2">{school?.name} 재학생 전용</p>
-          <h2 className="text-title text-ink">{eventTitle(event)}</h2>
-          <div className="flex flex-col gap-1 text-body text-ink-2">
-            <span className="flex items-center gap-2">
-              <Calendar size={16} strokeWidth={1.75} />
-              {formatEventDate(event.date)}
-            </span>
-            <span className="flex items-center gap-2">
-              <MapPin size={16} strokeWidth={1.75} />
-              {event.place}
-            </span>
+          <div className="w-full [container-type:inline-size]">
+            <p className="inline-flex max-w-full rounded-full border border-white/[0.22] bg-white/[0.28] px-3 py-1.5 text-[12px] font-medium leading-[1.4] text-ink-2 [overflow-wrap:anywhere] [@container(max-width:240px)]:px-2.5 [@container(max-width:240px)]:py-1 [@container(max-width:240px)]:text-[11px]">
+              {school?.name} 재학생 전용
+            </p>
+            <h2 className="mt-4 text-[clamp(22px,7cqw,30px)] font-bold leading-[1.22] tracking-[-0.03em] text-ink [overflow-wrap:anywhere] [@container(240px<width<=280px)]:mt-2 [@container(max-width:240px)]:mt-2 [@container(max-width:240px)]:text-[20px]">
+              {eventTitle(event)}
+            </h2>
+            <div className="mt-5 flex flex-col gap-2 text-[14px] font-medium leading-[1.4] text-ink-2 [@container(240px<width<=280px)]:mt-3 [@container(240px<width<=280px)]:gap-1.5 [@container(max-width:240px)]:mt-2 [@container(max-width:240px)]:gap-1 [@container(max-width:240px)]:text-[12px]">
+              <span className="flex items-center gap-3">
+                <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/25 [@container(240px<width<=280px)]:h-7 [@container(240px<width<=280px)]:w-7 [@container(max-width:240px)]:h-6 [@container(max-width:240px)]:w-6">
+                  <img src={calendarIcon} alt="" className="h-6 w-6 shrink-0 [@container(max-width:240px)]:h-5 [@container(max-width:240px)]:w-5" />
+                </span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{formatEventDate(event.date)}</span>
+              </span>
+              <span className="flex items-center gap-3">
+                <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/25 [@container(240px<width<=280px)]:h-7 [@container(240px<width<=280px)]:w-7 [@container(max-width:240px)]:h-6 [@container(max-width:240px)]:w-6">
+                  <img src={locationIcon} alt="" className="h-6 w-6 shrink-0 [@container(max-width:240px)]:h-5 [@container(max-width:240px)]:w-5" />
+                </span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{event.place}</span>
+              </span>
+            </div>
           </div>
         </section>
 
