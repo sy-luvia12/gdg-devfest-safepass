@@ -231,6 +231,23 @@ describe('school scoping', () => {
     expect(await team.call('upsertSchool', edit('sch-new', ['sch-new.test']))).toEqual({ ok: true, created: true });
   });
 
+  it('updateEvent saves lottery settings: partial changes merge with the stored ones, bad rules are refused, other hosts are refused', async () => {
+    const adminA = await login('admin@sch-a.test');
+    const adminB = await login('admin@sch-b.test');
+
+    expect(await adminA.call('updateEvent', { eventId: EV_A, lottery: { claimWindowMinutes: 30, finalPhase: { announceTimes: ['11:00'] } } })).toEqual({ ok: true });
+    const first = (await db.doc(`events/${EV_A}`).get()).get('lottery');
+    expect(first).toMatchObject({ claimWindowMinutes: 30, announceTimes: ['12:00'], finalPhase: { announceTimes: ['11:00'], startsBeforeHours: 72 } });
+
+    await adminA.call('updateEvent', { eventId: EV_A, lottery: { announceTimes: ['13:00'] } });
+    expect((await db.doc(`events/${EV_A}`).get()).get('lottery')).toMatchObject({ claimWindowMinutes: 30, announceTimes: ['13:00'] });
+
+    expect(await codeOf(adminA.call('updateEvent', { eventId: EV_A, lottery: { announceTimes: ['25:99'] } }))).toBe('functions/invalid-argument');
+    expect(await codeOf(adminA.call('updateEvent', { eventId: EV_A, lottery: { claimWindowMinutes: 'soon' as unknown as number } }))).toBe('functions/invalid-argument');
+    expect((await db.doc(`events/${EV_A}`).get()).get('lottery')).toMatchObject({ announceTimes: ['13:00'] });
+    expect(await codeOf(adminB.call('updateEvent', { eventId: EV_A, lottery: { claimWindowMinutes: 10 } }))).toBe('functions/permission-denied');
+  });
+
   it('createEvent sets safe defaults for the host admin, and refuses other hosts and unknown schools', async () => {
     const adminA = await login('admin@sch-a.test');
     const adminB = await login('admin@sch-b.test');
