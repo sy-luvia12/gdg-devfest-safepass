@@ -392,6 +392,44 @@ describe('student sign-up and tickets', () => {
     expect((await db.doc(`tickets/${ticket.ticketId}`).get()).get('ownerUid')).toBe(student.uid);
   });
 
+  it('a sign-up that passed precheckStudent is finished by verifyStudentRoster with no fields, from any browser', async () => {
+    const guest = await visitor();
+    await seedRosterRow(A, { studentId: '2024301', name: 'Hana Seo', email: 'intent1@sch-a.test' });
+    await seedRosterRow(A, { studentId: '2024302', name: 'Ian Ro', email: 'intent2@sch-a.test' });
+    await seedRosterRow(A, { studentId: '2024303', name: 'Jo Han', email: 'intent3@sch-a.test' });
+    const intent = (email: string) => db.doc(`signupIntents/${email}`);
+
+    // A failed or name-less check saves nothing
+    await guest.call('precheckStudent', { email: 'intent1@sch-a.test', studentId: '2024301', name: 'Wrong Name' });
+    await guest.call('precheckStudent', { email: 'intent1@sch-a.test', studentId: '2024301' });
+    expect((await intent('intent1@sch-a.test').get()).exists).toBe(false);
+
+    const hana = await login('intent1@sch-a.test');
+    expect(await hana.call('verifyStudentRoster', {})).toEqual({ ok: false, reason: 'NO_SIGNUP' });
+
+    await guest.call('precheckStudent', { email: 'intent1@sch-a.test', studentId: '2024301', name: 'Hana Seo' });
+    expect((await intent('intent1@sch-a.test').get()).data()).toMatchObject({ schoolId: A, studentId: '2024301' });
+    const ok = await hana.call('verifyStudentRoster', {});
+    expect(ok).toMatchObject({ ok: true, profile: { schoolId: A, studentId: '2024301', name: 'Hana Seo', rosterVerified: true } });
+    expect((await db.doc(`schools/${A}/roster/2024301`).get()).get('claimedBy')).toBe(hana.uid);
+    expect((await intent('intent1@sch-a.test').get()).exists).toBe(false);
+    // A returning student opening a sign-in link has nothing saved and is still ok
+    expect(await hana.call('verifyStudentRoster', {})).toMatchObject({ ok: true });
+
+    // Only the mailbox of the roster row can finish it, and an expired check is no check
+    await guest.call('precheckStudent', { email: 'intent2@sch-a.test', studentId: '2024302', name: 'Ian Ro' });
+    await db.doc('signupIntents/intent2@sch-a.test').update({ expiresAt: Timestamp.fromMillis(Date.now() - 1000) });
+    const ian = await login('intent2@sch-a.test');
+    expect(await ian.call('verifyStudentRoster', {})).toEqual({ ok: false, reason: 'NO_SIGNUP' });
+    await db.doc('signupIntents/intent3@sch-a.test').set({ schoolId: A, studentId: '2024302', expiresAt: Timestamp.fromMillis(Date.now() + 60_000) });
+    const jo = await login('intent3@sch-a.test');
+    expect(await jo.call('verifyStudentRoster', {})).toEqual({ ok: false, reason: 'EMAIL_MISMATCH' });
+    expect((await db.doc(`schools/${A}/roster/2024302`).get()).get('claimedBy')).toBeUndefined();
+
+    // Some fields without the others is a malformed request
+    expect(await codeOf(ian.call('verifyStudentRoster', { schoolId: A }))).toBe('functions/invalid-argument');
+  });
+
   it('ensureUser re-checks the roster, so a removed or re-claimed row blocks tickets until the student signs up again', async () => {
     const removed = await login('recheck1@sch-a.test');
     const reclaimed = await login('recheck2@sch-a.test');
