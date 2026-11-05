@@ -569,6 +569,18 @@ export async function verifyStudentRoster(schoolId: string, name: string, studen
 
 // ---------- 입장권 ----------
 
+/** 이 행사 명단에 내 학번 줄이 있고 이름이 같은지. 보안 규칙상 자기 줄만 읽을 수 있다. 발급 여부는 서버가 다시 확인한다 */
+export async function amIOnEventRoster(eventId: string): Promise<boolean> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new ApiError('unauthenticated');
+  const me = (await getDoc(doc(db, 'users', uid))).data();
+  const studentId = typeof me?.studentId === 'string' ? me.studentId : '';
+  if (!studentId) return false;
+  const row = await getDoc(doc(db, 'events', eventId, 'roster', studentId)).catch(() => null);
+  const clean = (v: unknown) => String(v ?? '').normalize('NFC').replace(/[\s\p{Cf}]/gu, '');
+  return !!row?.exists() && clean(row.get('name')) === clean(me?.name);
+}
+
 export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new ApiError('unauthenticated');

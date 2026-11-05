@@ -966,6 +966,14 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   return ticket;
 }
 
+export async function amIOnEventRoster(eventId: string): Promise<boolean> {
+  await wait();
+  const s = load();
+  const user = requireUser(s);
+  const name = user.name.replace(/\s+/g, '');
+  return !!s.rosters[eventId]?.entries.some((r) => r.studentId === user.studentId && r.name.replace(/\s+/g, '') === name);
+}
+
 export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   await wait();
   const s = load();

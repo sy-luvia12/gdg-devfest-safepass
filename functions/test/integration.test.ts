@@ -364,6 +364,18 @@ describe('admin features and security rules', () => {
     expect(await codeOf(getDocs(collection(staff.fs, 'scanLogs')))).toBe('permission-denied');
   });
 
+  it('a student reads only their own event roster row, never the list or another row', async () => {
+    await db.doc(`events/${EVENT}/roster/2024000001`).set({ name: 'Alice Kim', studentId: '2024000001' });
+    await db.doc(`events/${EVENT}/roster/2024000099`).set({ name: 'Other', studentId: '2024000099' });
+    expect(await codeOf(getDoc(clientDoc(alice.fs, 'events', EVENT, 'roster', '2024000001')))).toBe('resolved');
+    expect(await codeOf(getDoc(clientDoc(alice.fs, 'events', EVENT, 'roster', '2024000099')))).toBe('permission-denied');
+    expect(await codeOf(getDocs(collection(alice.fs, 'events', EVENT, 'roster')))).toBe('permission-denied');
+    // bob has no student id, so no row is his
+    expect(await codeOf(getDoc(clientDoc(bob.fs, 'events', EVENT, 'roster', '2024000001')))).toBe('permission-denied');
+    await db.doc(`events/${EVENT}/roster/2024000001`).delete();
+    await db.doc(`events/${EVENT}/roster/2024000099`).delete();
+  });
+
   it('staff reads only the scans they made', async () => {
     const mine = query(collection(staff.fs, 'scanLogs'), where('staffUid', '==', await uidOf(STAFF)));
     expect((await getDocs(mine)).size).toBe(6);

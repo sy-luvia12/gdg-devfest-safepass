@@ -8,10 +8,11 @@ import { Badge, type BadgeTone } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { StateView } from '@/components/StateView';
-import { getMyTicket } from '@/lib/api';
+import { amIOnEventRoster, getMyTicket } from '@/lib/api';
 import type { Event, Ticket } from '@/types';
 
-type Row = { event: Event; ticket: Ticket | null };
+/** onRoster: 명단 행사에서 내가 명단에 있는지 (명단 행사가 아니거나 명단이 아직 없으면 null) */
+type Row = { event: Event; ticket: Ticket | null; onRoster: boolean | null };
 /** 묶음(고연전)은 제목 하나 아래 경기들을, 단독 행사는 제목 없이 하나씩 */
 type Group = { title?: string; rows: Row[] };
 
@@ -26,12 +27,13 @@ function groupRows(rows: Row[]): Group[] {
   return groups;
 }
 
-function status({ event, ticket }: Row): { tone: BadgeTone; text: string } {
+function status({ event, ticket, onRoster }: Row): { tone: BadgeTone; text: string } {
   if (ticket?.status === 'used') return { tone: 'muted', text: '입장함' };
   if (ticket) return { tone: 'success', text: '받음' };
   if (event.capacity - event.issuedCount <= 0) return { tone: 'muted', text: '마감' };
   // 명단 행사는 행사 담당자가 시트로 올린 명단의 학생만 받는다. 명단이 아직 없으면 아무도 못 받는다
-  if (event.settings.requireRoster) return event.roster ? { tone: 'neutral', text: '명단 대상' } : { tone: 'muted', text: '명단 준비 중' };
+  if (event.settings.requireRoster && !event.roster) return { tone: 'muted', text: '명단 준비 중' };
+  if (onRoster === false) return { tone: 'muted', text: '명단에 없음' };
   return { tone: 'neutral', text: '받을 수 있어요' };
 }
 
@@ -44,7 +46,16 @@ export function EventsPage() {
 
   const load = useCallback(() => {
     setError(false);
-    Promise.all(events.map(async (event) => ({ event, ticket: await getMyTicket(event.id) })))
+    Promise.all(
+      events.map(async (event) => {
+        const rosterOnly = event.settings.requireRoster && !!event.roster;
+        const [ticket, onRoster] = await Promise.all([
+          getMyTicket(event.id),
+          rosterOnly ? amIOnEventRoster(event.id) : Promise.resolve(null),
+        ]);
+        return { event, ticket, onRoster };
+      }),
+    )
       .then(setRows)
       .catch(() => setError(true));
   }, [events]);

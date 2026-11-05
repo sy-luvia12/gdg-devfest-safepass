@@ -11,10 +11,10 @@ import { BottomBar, Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { IconButton } from '@/components/IconButton';
 import { StateView } from '@/components/StateView';
-import { getEvent, getMyTicket, issueTicket } from '@/lib/api';
+import { amIOnEventRoster, getEvent, getMyTicket, issueTicket } from '@/lib/api';
 import { ApiError, type Event, type Ticket } from '@/types';
 
-type Data = { event: Event; ticket: Ticket | null };
+type Data = { event: Event; ticket: Ticket | null; onRoster: boolean | null };
 
 export function EventPage() {
   const eventId = useEventId();
@@ -29,9 +29,15 @@ export function EventPage() {
   const load = useCallback(() => {
     setLoadError(false);
     Promise.all([getEvent(eventId), getMyTicket(eventId)])
-      .then(([event, ticket]) => setData({ event, ticket }))
+      .then(async ([event, ticket]) => {
+        // 명단 행사: 명단이 없거나 내가 명단에 없으면 받기 버튼을 막는다 (서버도 같은 규칙으로 거부한다)
+        const onRoster = event.settings.requireRoster && user?.role === 'student'
+          ? (event.roster ? await amIOnEventRoster(eventId) : false)
+          : null;
+        setData({ event, ticket, onRoster });
+      })
       .catch(() => setLoadError(true));
-  }, [eventId]);
+  }, [eventId, user?.role]);
   useEffect(load, [load]);
 
   const onIssue = async () => {
@@ -147,6 +153,8 @@ export function EventPage() {
           <Button disabled>학생 계정으로만 받을 수 있어요</Button>
         ) : soldOut ? (
           <Button disabled>모두 발급되었어요</Button>
+        ) : data.onRoster === false ? (
+          <Button disabled>{event.roster ? '행사 명단에 없어서 받을 수 없어요' : '행사 명단이 아직 올라오지 않았어요'}</Button>
         ) : (
           <Button loading={issuing} onClick={onIssue}>
             입장권 받기
