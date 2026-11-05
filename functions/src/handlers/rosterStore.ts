@@ -7,7 +7,17 @@ import {
 } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { ROSTER_PREVIEW, type GetRosterResponse, type ImportRosterResponse, type RosterSummary, type SheetReason } from '../api';
-import { matchEventRow, parseEventRosterRows, parseRosterRows, parseSheetId, type EventRosterRow, type RosterRow } from '../domain/roster';
+import {
+  isStudentId,
+  matchEventRow,
+  normalizeName,
+  parseEventRosterRows,
+  parseRosterRows,
+  parseSheetId,
+  planWaitlist,
+  type EventRosterRow,
+  type RosterRow,
+} from '../domain/roster';
 import { emailDomain } from '../domain/ticket';
 import { db } from '../firebase';
 import { readSheetValues, serviceAccountEmail } from '../sheets/readSheet';
@@ -16,7 +26,7 @@ import { readSheetValues, serviceAccountEmail } from '../sheets/readSheet';
 export interface RosterPlace {
   parent: DocumentReference;
   rows: CollectionReference;
-  summaryField: 'studentRoster' | 'roster';
+  summaryField: 'studentRoster' | 'roster' | 'waitlist';
 }
 
 type StoredRow = RosterRow | EventRosterRow;
@@ -76,6 +86,43 @@ export async function importEventRows(place: RosterPlace, sheetUrl: string, scho
   return { ok: true, summary, skipped };
 }
 
+// Waitlist sheet (이름·학번, in waiting order) into events/{id}/waitlist/{email}. Rows are matched against the
+// host school roster for the email. Settled entries (assigned, offered, ...) are kept as they are.
+export async function importWaitlistRows(eventId: string, sheetUrl: string, schoolId: string): Promise<ImportRosterResponse> {
+  const parsed = parseEventRosterRows(await sheetValues(sheetUrl));
+  if (!parsed.ok) throw sheetError('MISSING_COLUMNS', 'The first row needs 이름 and 학번 columns.');
+  const place = waitlistPlace(eventId);
+  const [school, existing] = await Promise.all([
+    schoolRowsFor(schoolId, parsed.rows.map((r) => r.studentId)),
+    place.rows.get(),
+  ]);
+  const plan = planWaitlist(
+    parsed,
+    school,
+    existing.docs.map((d) => ({ email: d.id, status: String(d.get('status') ?? 'waiting') })),
+  );
+  const writer = db.bulkWriter();
+  for (const email of plan.deletes) void writer.delete(place.rows.doc(email));
+  for (const w of plan.upserts) {
+    void writer.set(
+      place.rows.doc(w.email),
+      { order: w.order, status: 'waiting', assignedTicketId: null, name: w.name, studentId: w.studentId },
+      { merge: true },
+    );
+  }
+  await writer.close();
+  const summary = await writeSummary(place, (await place.rows.count().get()).data().count, sheetUrl);
+  return { ok: true, summary, skipped: plan.skipped };
+}
+
+// An event roster row for this student: same student id and the same name (spaces ignored).
+export async function onEventRoster(tx: Transaction, eventId: string, studentId: unknown, name: unknown): Promise<boolean> {
+  const id = typeof studentId === 'string' ? studentId : '';
+  if (!isStudentId(id)) return false;
+  const row = await tx.get(db.doc(`events/${eventId}/roster/${id}`));
+  return row.exists && normalizeName(String(row.get('name') ?? '')) === normalizeName(String(name ?? ''));
+}
+
 // The host school's roster rows of these student ids.
 export async function schoolRowsFor(schoolId: string, studentIds: string[]): Promise<Map<string, RosterRow & { claimedBy?: string }>> {
   const refs = [...new Set(studentIds)].map((id) => db.doc(`schools/${schoolId}/roster/${id}`));
@@ -115,6 +162,12 @@ export const eventRosterPlace = (eventId: string): RosterPlace => ({
   parent: db.doc(`events/${eventId}`),
   rows: db.collection(`events/${eventId}/roster`),
   summaryField: 'roster',
+});
+
+export const waitlistPlace = (eventId: string): RosterPlace => ({
+  parent: db.doc(`events/${eventId}`),
+  rows: db.collection(`events/${eventId}/waitlist`),
+  summaryField: 'waitlist',
 });
 
 // The school whose mail domains include this email's domain. Sign-in finds the school this way, so a domain

@@ -148,3 +148,43 @@ export function isProfilePhoto(value: string, maxBytes: number): boolean {
   const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
   return !!m && Math.floor((m[1].length * 3) / 4) <= maxBytes;
 }
+
+// ---------- Waitlist (대기 명단) ----------
+
+// A waitlist sheet lists names and student ids in waiting order, like an event roster. Each row matching the host
+// school's roster becomes events/{id}/waitlist/{email}, the shape cancelTicket and the lottery read.
+export interface ExistingWaiter {
+  email: string;
+  status: string;
+}
+export interface WaitlistPlan {
+  /** Rows to write in waiting order (order is 1-based among kept rows) */
+  upserts: { email: string; name: string; studentId: string; order: number }[];
+  /** Waiting entries the new sheet no longer lists */
+  deletes: string[];
+  skipped: SkippedRow[];
+}
+
+// Entries past 'waiting' (assigned, offered, claimed, ...) are history and stay as they are: the sheet does not
+// move or remove them, and a sheet row for such a student keeps its old entry.
+export function planWaitlist(
+  parsed: { rows: EventRosterRow[]; sheetRows: number[] },
+  schoolRows: Map<string, { name: string; email: string }>,
+  existing: ExistingWaiter[],
+): WaitlistPlan {
+  const settled = new Set(existing.filter((e) => e.status !== 'waiting').map((e) => e.email));
+  const skipped: SkippedRow[] = [];
+  const upserts: WaitlistPlan['upserts'] = [];
+  const listed = new Set<string>();
+  parsed.rows.forEach((row, i) => {
+    const school = schoolRows.get(row.studentId) ?? null;
+    const match = matchEventRow(row, school);
+    if (match !== 'OK') return skipped.push({ row: parsed.sheetRows[i], reason: match });
+    const email = school!.email.toLowerCase();
+    listed.add(email);
+    if (settled.has(email)) return;
+    upserts.push({ email, name: row.name, studentId: row.studentId, order: upserts.length + 1 });
+  });
+  const deletes = existing.filter((e) => e.status === 'waiting' && !listed.has(e.email)).map((e) => e.email);
+  return { upserts, deletes, skipped };
+}

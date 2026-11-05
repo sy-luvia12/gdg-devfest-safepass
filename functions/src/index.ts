@@ -19,6 +19,7 @@ export { createEvent } from './handlers/createEvent';
 export { updateEvent } from './handlers/updateEvent';
 export { importEventRoster } from './handlers/importEventRoster';
 export { getEventRoster } from './handlers/getEventRoster';
+export { importWaitlist, getWaitlist } from './handlers/waitlist';
 export { verifyStudentRoster } from './handlers/verifyStudentRoster';
 export { listOpenSchools } from './handlers/listOpenSchools';
 export { precheckStudent } from './handlers/precheckStudent';

@@ -8,6 +8,7 @@ import {
   parseEventRosterRows,
   parseRosterRows,
   parseSheetId,
+  planWaitlist,
   studentRowProblem,
 } from '../src/domain/roster';
 
@@ -181,5 +182,52 @@ describe('matchEventRow', () => {
     expect(matchEventRow(row, { name: '김하늘' })).toBe('OK');
     expect(matchEventRow(row, { name: '이도윤' })).toBe('NAME_MISMATCH');
     expect(matchEventRow(row, null)).toBe('NOT_IN_STUDENT_ROSTER');
+  });
+});
+
+describe('planWaitlist', () => {
+  const school = new Map([
+    ['2024001', { name: '김하늘', email: 'Sky@korea.ac.kr' }],
+    ['2024002', { name: '이도윤', email: 'doyoon@korea.ac.kr' }],
+    ['2024003', { name: '박서연', email: 'seo@korea.ac.kr' }],
+    ['2024004', { name: '최민준', email: 'min@korea.ac.kr' }],
+  ]);
+  const parsed = {
+    rows: [
+      { name: '이도윤', studentId: '2024002' },
+      { name: '김하늘', studentId: '2024001' },
+      { name: '없는학생', studentId: '2099999' },
+      { name: '다른이름', studentId: '2024003' },
+      { name: '최민준', studentId: '2024004' },
+    ],
+    sheetRows: [2, 3, 4, 5, 6],
+  };
+
+  it('keeps the sheet order, finds emails in the school roster and reports rows that do not match', () => {
+    const plan = planWaitlist(parsed, school, []);
+    expect(plan.upserts).toEqual([
+      { email: 'doyoon@korea.ac.kr', name: '이도윤', studentId: '2024002', order: 1 },
+      { email: 'sky@korea.ac.kr', name: '김하늘', studentId: '2024001', order: 2 },
+      { email: 'min@korea.ac.kr', name: '최민준', studentId: '2024004', order: 3 },
+    ]);
+    expect(plan.skipped).toEqual([
+      { row: 4, reason: 'NOT_IN_STUDENT_ROSTER' },
+      { row: 5, reason: 'NAME_MISMATCH' },
+    ]);
+    expect(plan.deletes).toEqual([]);
+  });
+
+  it('drops waiting entries the sheet no longer lists and never touches settled ones', () => {
+    const plan = planWaitlist(parsed, school, [
+      { email: 'gone@korea.ac.kr', status: 'waiting' },
+      { email: 'old@korea.ac.kr', status: 'assigned' },
+      { email: 'sky@korea.ac.kr', status: 'assigned' },
+      { email: 'doyoon@korea.ac.kr', status: 'waiting' },
+    ]);
+    expect(plan.deletes).toEqual(['gone@korea.ac.kr']);
+    expect(plan.upserts.map((u) => [u.email, u.order])).toEqual([
+      ['doyoon@korea.ac.kr', 1],
+      ['min@korea.ac.kr', 2],
+    ]);
   });
 });

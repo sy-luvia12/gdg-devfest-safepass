@@ -597,4 +597,63 @@ describe('operator console', () => {
     expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'ops@ops.safepass.app', schoolId: A }))).toBe('functions/failed-precondition');
     expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'new@sch-gmail.test', schoolId: 'no-such-school' }))).toBe('functions/not-found');
   });
+
+  it('the waitlist: only the host school admin loads or reads it, and the admin never sees emails', async () => {
+    const WL_EV = 'sch-a-waitlist-event';
+    await seedEvent(WL_EV, { schoolIds: [A], allowedDomains: ['sch-a.test'] });
+    const adminA = await login('admin@sch-a.test');
+    const adminB = await login('admin@sch-b.test');
+    const bad = 'https://example.com/not-a-sheet';
+    expect(await codeOf(adminB.call('importWaitlist', { eventId: WL_EV, sheetUrl: bad }))).toBe('functions/permission-denied');
+    expect(await codeOf(adminB.call('getWaitlist', { eventId: WL_EV }))).toBe('functions/permission-denied');
+    expect(await reasonOf(adminA.call('importWaitlist', { eventId: WL_EV, sheetUrl: bad }))).toBe('BAD_SHEET_URL');
+
+    await db.doc(`events/${WL_EV}/waitlist/second@sch-a.test`).set({ order: 2, status: 'waiting', name: '둘째', studentId: 'W2' });
+    await db.doc(`events/${WL_EV}/waitlist/first@sch-a.test`).set({ order: 1, status: 'assigned', name: '첫째', studentId: 'W1' });
+    const view = await adminA.call('getWaitlist', { eventId: WL_EV });
+    expect(view.entries).toEqual([
+      { order: 1, name: '첫째', studentId: 'W1', status: 'assigned' },
+      { order: 2, name: '둘째', studentId: 'W2', status: 'waiting' },
+    ]);
+    expect(JSON.stringify(view)).not.toContain('@sch-a.test');
+  });
+});
+
+describe('waitlist on a roster event', () => {
+  const signedUp = async (email: string, studentId: string, name: string) => {
+    const c = await login(email);
+    await db.doc(`users/${c.uid}`).update({ schoolId: A, studentId, name, rosterVerified: true, photoSubmitted: true });
+    return c;
+  };
+
+  it('a cancelled ticket goes to the first waiting student even when they are not on the event roster', async () => {
+    const EV = 'sch-a-queue-roster';
+    await seedEvent(EV, { schoolIds: [A], allowedDomains: ['sch-a.test'], requireRoster: true });
+    const holder = await signedUp('wl-holder@sch-a.test', 'Q100', '보유자');
+    const waiter = await signedUp('wl-waiter@sch-a.test', 'Q200', '대기자');
+    await db.doc(`events/${EV}/roster/Q100`).set({ name: '보유자', studentId: 'Q100' });
+    expect(await reasonOf(waiter.call('issueTicket', { eventId: EV }))).toBe('NOT_IN_ROSTER');
+    const { ticketId } = await holder.call('issueTicket', { eventId: EV });
+
+    await db.doc(`events/${EV}/waitlist/wl-waiter@sch-a.test`).set({ order: 1, status: 'waiting', assignedTicketId: null, name: '대기자', studentId: 'Q200' });
+    expect(await holder.call('cancelTicket', { ticketId })).toEqual({ ok: true, outcome: 'REASSIGNED' });
+    expect((await db.doc(`tickets/${ticketId}`).get()).get('ownerUid')).toBe(waiter.uid);
+    expect((await db.doc(`events/${EV}/waitlist/wl-waiter@sch-a.test`).get()).data()).toMatchObject({ status: 'assigned', assignedTicketId: ticketId });
+  });
+
+  it('a lottery round on a roster event takes waitlisted students (the event roster used to be checked by email)', async () => {
+    const EV = 'sch-a-lottery-roster';
+    await seedEvent(EV, {
+      schoolIds: [A],
+      allowedDomains: ['sch-a.test'],
+      requireRoster: true,
+      reassignMode: 'lottery',
+      date: Timestamp.fromDate(new Date(Date.now() + 7 * 86_400_000)),
+    });
+    await signedUp('lt-waiter@sch-a.test', 'L200', '추첨대기');
+    await db.doc(`events/${EV}/waitlist/lt-waiter@sch-a.test`).set({ order: 1, status: 'waiting', assignedTicketId: null, name: '추첨대기', studentId: 'L200' });
+    await db.doc('tickets/sch-a-lottery-pooled').set({ eventId: EV, ownerUid: null, status: 'pooled', drawRound: null, nftNumber: '#0001', chainSeq: 0, chain: { status: 'pending' } });
+    const adminA = await login('admin@sch-a.test');
+    expect(await adminA.call('runDrawNow', { eventId: EV })).toEqual({ ok: true, round: 1, tickets: 1, entries: 1 });
+  });
 });

@@ -17,9 +17,7 @@ service cloud.firestore {
     }
     match /events/{eventId} {
       allow read: if signedIn();
-      match /waitlist/{email} {
-        allow read: if isAdmin();
-      }
+      // 대기 명단(waitlist)은 문서 id가 학생 메일이라 클라이언트가 읽지 못한다. 행사 담당자는 getWaitlist(이름·학번만)로 본다
     }
     // 스태프는 자기가 검표한 기록만 ("내 검표 기록"). 쿼리에 where('staffUid', '==', uid)가 있어야 한다
     match /scanLogs/{id} {

@@ -268,6 +268,28 @@ export interface GetEventRosterRequest {
   eventId: string;
 }
 
+// Waitlist (대기 명단): the event admin loads a sheet of 이름·학번 in waiting order. Rows that match the host school's
+// roster become events/{id}/waitlist/{email}; cancelTicket (queue/random) and the lottery draw from it.
+export interface ImportWaitlistRequest {
+  eventId: string;
+  sheetUrl: string;
+}
+export interface GetWaitlistRequest {
+  eventId: string;
+}
+// No emails: the event admin sees names and student ids only. status is 'waiting' or a settled state.
+export interface WaitlistRow {
+  order: number;
+  name: string;
+  studentId: string;
+  status: string;
+}
+export interface GetWaitlistResponse {
+  summary: RosterSummary | null;
+  entries: WaitlistRow[];
+  serviceAccountEmail: string;
+}
+
 // schoolIds[0] hosts the event and its admin creates it. allowedDomains come from the schools' domains.
 export interface EventFields {
   schoolIds: string[];
@@ -497,6 +519,8 @@ export interface Callables {
   listOpenSchools: [void, ListOpenSchoolsResponse];
   precheckStudent: [PrecheckStudentRequest, PrecheckStudentResponse];
   submitProfilePhoto: [SubmitProfilePhotoRequest, SubmitProfilePhotoResponse];
+  importWaitlist: [ImportWaitlistRequest, ImportRosterResponse];
+  getWaitlist: [GetWaitlistRequest, GetWaitlistResponse];
   opsListRoster: [OpsListRosterRequest, OpsListRosterResponse];
   opsEditRoster: [OpsEditRosterRequest, OpsEditRosterResponse];
   opsListStudents: [OpsListStudentsRequest, OpsListStudentsResponse];
