@@ -57,7 +57,7 @@ export function DevicePage() {
           </Button>
         }
       />
-      <main className="flex flex-col items-center gap-6 px-5 pb-40 pt-8 text-center md:pb-10">
+      <main className="flex flex-col items-center gap-6 px-5 pb-6 pt-8 text-center">
         <Orb size={140} tone="warm">
           <Smartphone size={36} strokeWidth={1.75} className="text-ink" />
         </Orb>

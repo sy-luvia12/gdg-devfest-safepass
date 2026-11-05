@@ -5,7 +5,7 @@ type Section = { title: string; body: string[] };
 const TERMS: Section[] = [
   {
     title: '1. 서비스',
-    body: ['SafePass는 대학 행사 주최 측(학생회)이 재학생에게 입장권을 발급하고 입장을 확인하는 서비스예요.'],
+    body: ['Campass는 대학 행사 주최 측(학생회)이 재학생에게 입장권을 발급하고 입장을 확인하는 서비스예요.'],
   },
   {
     title: '2. 입장권',

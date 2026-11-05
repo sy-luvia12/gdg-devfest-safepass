@@ -52,7 +52,7 @@ export function OpsLayout() {
         <div className="mx-auto flex h-14 max-w-admin items-center justify-between gap-3 px-5 md:px-8">
           <div className="flex items-center gap-2">
             <ShieldHalf size={18} strokeWidth={1.75} className="text-ops-accent" />
-            <span className="text-heading text-ops-ink">SafePass 운영진</span>
+            <span className="text-heading text-ops-ink">Campass 운영진</span>
           </div>
           <div className="flex items-center gap-1">
             <button

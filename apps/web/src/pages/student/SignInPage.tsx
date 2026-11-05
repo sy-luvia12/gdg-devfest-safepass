@@ -36,7 +36,7 @@ export function SignInPage() {
   return (
     <>
       <AppHeader title="로그인" back={busy ? undefined : '/'} />
-      <main className="px-5 pb-40 pt-8 md:pb-10">
+      <main className="px-5 pb-6 pt-8">
         {sentAt ? <MailLinkNotice email={fields.email} sentAt={sentAt} busy={busy} onResend={() => void send()} /> : (
           <section className="animate-rise-in">
             <h2 className="mb-2 text-title text-ink">학교 메일로 로그인해요</h2>
@@ -49,11 +49,11 @@ export function SignInPage() {
           </section>
         )}
         {error && <p role="alert" className="mt-5 rounded-md bg-danger-bg p-4 text-label text-danger">{error}</p>}
-        <BottomBar>
-          {!sentAt && <Button type="submit" form="student-signin" loading={busy}>인증 메일 받기</Button>}
-          {!!sentAt && <Button variant="ghost" disabled={busy} onClick={() => { setSentAt(0); setError(''); }}>입력 정보 수정하기</Button>}
-        </BottomBar>
       </main>
+      <BottomBar>
+        {!sentAt && <Button type="submit" form="student-signin" loading={busy}>인증 메일 받기</Button>}
+        {!!sentAt && <Button variant="ghost" disabled={busy} onClick={() => { setSentAt(0); setError(''); }}>입력 정보 수정하기</Button>}
+      </BottomBar>
     </>
   );
 }

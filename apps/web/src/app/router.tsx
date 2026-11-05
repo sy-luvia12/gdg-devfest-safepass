@@ -100,7 +100,7 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  // 운영진 콘솔 (검정 테마). 아이디·비밀번호로 들어오는 SafePass 운영진만
+  // 운영진 콘솔 (검정 테마). 아이디·비밀번호로 들어오는 Campass 운영진만
   { path: '/ops/login', lazy: page(() => import('@/pages/ops/OpsLoginPage'), 'OpsLoginPage') },
   {
     element: <OpsLayout />,

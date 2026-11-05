@@ -74,7 +74,7 @@ export function MePage() {
 
         <Card padded={false} className="divide-y divide-line">
           {user.role !== 'student' && <LinkRow to="/staff/history" icon={ClipboardList} label="내 검표 기록" />}
-          <LinkRow to="/about" icon={Info} label="SafePass 소개" />
+          <LinkRow to="/about" icon={Info} label="Campass 소개" />
           <LinkRow to="/terms" icon={FileText} label="이용약관" />
           <LinkRow to="/privacy" icon={Shield} label="개인정보 처리방침" />
         </Card>

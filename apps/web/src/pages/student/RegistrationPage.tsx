@@ -61,7 +61,7 @@ export function RegistrationPage() {
   return (
     <>
       <AppHeader title="회원가입" back={busy ? undefined : '/'} />
-      <main className="px-5 pb-44 pt-6 md:pb-10">
+      <main className="px-5 pb-6 pt-6">
         <RegistrationSteps step={phase === 'email' ? 1 : 0} />
         <section key={phase} className="animate-rise-in">
           {phase === 'school' && (
@@ -97,12 +97,12 @@ export function RegistrationPage() {
           {phase === 'email' && <MailLinkNotice email={fields.email} sentAt={sentAt} busy={busy} onResend={() => void send()} />}
           {error && <p role="alert" className="mt-5 rounded-md bg-danger-bg p-4 text-label text-danger">{error}</p>}
         </section>
-        <BottomBar>
-          {phase === 'school' && <Button disabled={!school} onClick={() => setPhase('identity')}>다음</Button>}
-          {phase === 'identity' && <Button type="submit" form="signup-info" loading={busy}>학적 확인하고 인증 메일 받기</Button>}
-          {phase !== 'school' && <Button variant="ghost" disabled={busy} onClick={() => { setError(''); setPhase(phase === 'email' ? 'identity' : 'school'); }}>이전</Button>}
-        </BottomBar>
       </main>
+      <BottomBar>
+        {phase === 'school' && <Button disabled={!school} onClick={() => setPhase('identity')}>다음</Button>}
+        {phase === 'identity' && <Button type="submit" form="signup-info" loading={busy}>학적 확인하고 인증 메일 받기</Button>}
+        {phase !== 'school' && <Button variant="ghost" disabled={busy} onClick={() => { setError(''); setPhase(phase === 'email' ? 'identity' : 'school'); }}>이전</Button>}
+      </BottomBar>
     </>
   );
 }

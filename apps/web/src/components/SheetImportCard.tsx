@@ -12,7 +12,7 @@ const SHEET_ERRORS: Partial<Record<ApiError['code'], string>> = {
   sheet_bad_url: '구글 시트 주소를 확인해 주세요 (https://docs.google.com/spreadsheets/d/...)',
   sheet_not_shared: '시트를 위 계정에 보기 권한으로 공유한 뒤 다시 불러와 주세요',
   sheet_not_found: '시트를 찾지 못했어요. 주소를 확인해 주세요',
-  sheet_api_disabled: '서비스에서 구글 시트 읽기가 꺼져 있어요. SafePass 운영팀에 알려 주세요',
+  sheet_api_disabled: '서비스에서 구글 시트 읽기가 꺼져 있어요. Campass 운영팀에 알려 주세요',
   sheet_missing_columns: '첫 줄에 필요한 열(이름, 학번)이 있어야 해요',
   not_found: '스페이스를 먼저 만들어 주세요',
 };

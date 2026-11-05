@@ -133,7 +133,7 @@ export function AdminLayout() {
       <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
           <div className="min-w-0">
-            <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · SafePass 관리자</p>
+            <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · Campass 관리자</p>
             <h1 className="truncate text-heading text-ink">
               {inSetup ? '스페이스 만들기' : event ? eventTitle(event) : eventId ? '' : '행사 없음'}
             </h1>
