@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cleanField,
   decidePrecheck,
   eventRowProblem,
   isProfilePhoto,
@@ -229,5 +230,16 @@ describe('planWaitlist', () => {
       ['doyoon@korea.ac.kr', 1],
       ['min@korea.ac.kr', 2],
     ]);
+  });
+});
+
+describe('cleanField', () => {
+  it('drops spaces and invisible characters pasted or autofilled into sign-up fields', () => {
+    expect(cleanField(' 2025320513​')).toBe('2025320513');
+    expect(cleanField('﻿박서연 ')).toBe('박서연');
+    expect(cleanField('박서연'.normalize('NFD'))).toBe('박서연');
+  });
+  it('lets a pasted name with a zero-width space match its roster row', () => {
+    expect(matchStudent({ name: '박서연', studentId: '2025320513', email: 'a@korea.ac.kr' }, '박서​연', 'a@korea.ac.kr')).toBe('OK');
   });
 });

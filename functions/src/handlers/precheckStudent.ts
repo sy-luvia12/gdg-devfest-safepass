@@ -1,6 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { PrecheckStudentResponse } from '../api';
-import { decidePrecheck, isStudentId } from '../domain/roster';
+import { cleanField, decidePrecheck, isStudentId } from '../domain/roster';
 import { db } from '../firebase';
 import { readOptional, readString } from './boundary';
 import { callableOptions } from './callableOptions';
@@ -9,9 +9,9 @@ import { schoolForEmail } from './rosterStore';
 // Checked before the email link is sent, so a link only goes to an address on the school roster. Open to visitors
 // who are not signed in; it answers yes or no and never returns roster data.
 export const precheckStudent = onCall<unknown, Promise<PrecheckStudentResponse>>(callableOptions, async (request) => {
-  const email = readString(request.data, 'email').trim().toLowerCase();
-  const studentId = readString(request.data, 'studentId').trim();
-  const name = readOptional(request.data, 'name', readString)?.trim();
+  const email = cleanField(readString(request.data, 'email')).toLowerCase();
+  const studentId = cleanField(readString(request.data, 'studentId'));
+  const name = readOptional(request.data, 'name', readString)?.normalize('NFC').trim();
   if (!/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(email)) throw new HttpsError('invalid-argument', 'email is not valid.');
 
   const school = await schoolForEmail(email);
@@ -21,6 +21,14 @@ export const precheckStudent = onCall<unknown, Promise<PrecheckStudentResponse>>
     ? { name: row.get('name'), studentId, email: row.get('email'), claimedBy: row.get('claimedBy') }
     : null;
   const decision = decidePrecheck(found, { email, name });
+  // Which part of a failed check differs, without the values themselves.
+  if (decision !== 'OK') {
+    console.log('precheck failed', decision, {
+      idValid: isStudentId(studentId), idLen: studentId.length, rowFound: !!row?.exists, nameLen: name?.length,
+      nameSame: found ? cleanField(String(found.name)) === cleanField(name ?? '') : null,
+      emailSame: found ? String(found.email).toLowerCase() === email : null, claimed: !!found?.claimedBy,
+    });
+  }
   if (decision !== 'OK') return { ok: false, reason: decision };
   return { ok: true, schoolId: school.id, schoolName: school.get('name') ?? '' };
 });

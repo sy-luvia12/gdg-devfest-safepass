@@ -1,6 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { VerifyStudentReason, VerifyStudentRosterResponse } from '../api';
-import { isStudentId, matchStudent } from '../domain/roster';
+import { cleanField, isStudentId, matchStudent } from '../domain/roster';
 import { db } from '../firebase';
 import { readDocId, readString, requireAuth } from './boundary';
 import { callableOptions } from './callableOptions';
@@ -12,7 +12,7 @@ export const verifyStudentRoster = onCall<unknown, Promise<VerifyStudentRosterRe
   const caller = requireAuth(request);
   const schoolId = readDocId(request.data, 'schoolId');
   const name = readString(request.data, 'name').trim();
-  const studentId = readString(request.data, 'studentId').trim();
+  const studentId = cleanField(readString(request.data, 'studentId'));
   if (!caller.emailVerified) throw new HttpsError('permission-denied', 'The sign-in email is not verified.');
   const reject = (reason: VerifyStudentReason): VerifyStudentRosterResponse => ({ ok: false, reason });
 
