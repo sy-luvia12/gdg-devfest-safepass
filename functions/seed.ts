@@ -39,9 +39,10 @@ const base = {
 // school has its own four game events grouped under its series name.
 // Who can take a ticket: 'draw' events issue only to students who won the instant draw (see above). 'all' events
 // issue to every student who signed up against the school roster.
-// Expected applicants for a draw event: about the whole school. The win rate is capacity / pool, so a bigger school
-// or a smaller venue makes a ticket harder to win. Demo values.
-const enrolled: Record<string, number> = { korea: 20_000, yonsei: 19_000, skku: 18_000, kaist: 10_000 };
+// Expected applicants for a draw event: the school's undergraduates. The win rate is capacity / pool, so a bigger
+// school or a smaller venue makes a ticket harder to win. Approximate (2025): 고려대 21,772 (namu.wiki), KAIST 4,009
+// (unisquads); 연세대 신촌 and 성균관대 are estimates without a published figure we could find.
+const enrolled: Record<string, number> = { korea: 21_700, yonsei: 19_000, skku: 18_000, kaist: 4_000 };
 
 // 'draw' events: opening the event enters the student in an instant draw on chain (instantDraw), and only winners
 // take a ticket. They used to be 'roster' events that waited for the event admin's sheet.
@@ -58,10 +59,12 @@ const event = (schoolId: string, who: 'draw' | 'all', fields: Record<string, unk
 // 고연전/연고전 games. 야구 and the main stadium are open to every student; 농구 and 아이스하키 are draw events. Ids are {school}-koyon-{game}. Places and capacities are demo values to confirm.
 function games(schoolId: 'korea' | 'yonsei', series: string): Record<string, Record<string, unknown>> {
   const list: [string, string, 'draw' | 'all', string, string, number][] = [
-    ['baseball', '야구', 'all', '잠실야구장', '2026-11-13T11:00:00+09:00', 20_000],
-    ['basketball', '농구', 'draw', '잠실학생체육관', '2026-11-13T13:00:00+09:00', 5_000],
-    ['icehockey', '아이스하키', 'draw', '목동아이스링크', '2026-11-13T15:00:00+09:00', 3_000],
-    ['football', '축구·럭비', 'all', '잠실종합운동장 주경기장', '2026-11-14T13:00:00+09:00', 20_000],
+    // Each school gets about half the venue: 잠실야구장 ~23,750, 잠실학생체육관 7,500, 목동아이스링크 5,000 seats,
+    // 잠실 주경기장 ~69,950.
+    ['baseball', '야구', 'all', '잠실야구장', '2026-11-13T11:00:00+09:00', 11_000],
+    ['basketball', '농구', 'draw', '잠실학생체육관', '2026-11-13T13:00:00+09:00', 3_500],
+    ['icehockey', '아이스하키', 'draw', '목동아이스링크', '2026-11-13T15:00:00+09:00', 2_500],
+    ['football', '축구·럭비', 'all', '잠실종합운동장 주경기장', '2026-11-14T13:00:00+09:00', 30_000],
   ];
   return Object.fromEntries(
     list.map(([key, name, who, place, date, capacity]) => [
@@ -74,10 +77,11 @@ function games(schoolId: 'korea' | 'yonsei', series: string): Record<string, Rec
 // Dates, places and capacities are demo values.
 const events: Record<string, Record<string, unknown>> = {
   // The first demo event, entered by hand in the console. Its id stays as it is.
-  'demo-festival': event('korea', 'draw', { name: '입실렌티', place: '녹지운동장', date: at('2026-11-06T18:00:00+09:00'), capacity: 10_000 }),
+  // 입실렌티: about 20,000 students in 2025. 아카라카: 11,200 student tickets in 2022 (연세춘추).
+  'demo-festival': event('korea', 'draw', { name: '입실렌티', place: '녹지운동장', date: at('2026-11-06T18:00:00+09:00'), capacity: 20_000 }),
   ...games('korea', '고연전'),
   'korea-seoktap': event('korea', 'all', { name: '석탑대동제', place: '민주광장', date: at('2026-11-20T18:00:00+09:00'), capacity: 8_000 }),
-  'yonsei-akaraka': event('yonsei', 'draw', { name: '아카라카', place: '노천극장', date: at('2026-11-20T18:00:00+09:00'), capacity: 12_000 }),
+  'yonsei-akaraka': event('yonsei', 'draw', { name: '아카라카', place: '노천극장', date: at('2026-11-20T18:00:00+09:00'), capacity: 11_200 }),
   ...games('yonsei', '연고전'),
   'skku-daedongje': event('skku', 'all', { name: '대동제', place: '금잔디광장', date: at('2026-11-21T18:00:00+09:00'), capacity: 8_000 }),
   'kaist-taeul': event('kaist', 'all', { name: '태울석림제', place: '대운동장', date: at('2026-11-27T18:00:00+09:00'), capacity: 5_000 }),

@@ -16,6 +16,9 @@ import type { Reassignment, WaitlistEntry, WaitlistView } from '@/types';
 
 const MODE_LABEL = { queue: '대기 순서대로', random: '무작위' } as const;
 
+// 운영진 회수는 재배정 방식과 상관없다
+const modeLabel = (r: Reassignment) => (r.outcome === 'revoked' ? '-' : MODE_LABEL[r.mode]);
+
 function outcome(r: Reassignment) {
   if (r.outcome === 'revoked') return { tone: 'danger' as const, text: '운영진 회수' };
   return r.outcome === 'reassigned'
@@ -85,7 +88,7 @@ export function ReassignmentsPage() {
                 { header: 'NFT', cell: (r) => <span className="tabular">{r.nftTokenId}</span> },
                 { header: '취소한 학생', cell: (r) => r.fromName },
                 { header: '받은 학생', cell: (r) => <span className="text-ink-2">{r.toName ?? '-'}</span> },
-                { header: '방식', cell: (r) => MODE_LABEL[r.mode] },
+                { header: '방식', cell: (r) => modeLabel(r) },
                 { header: '결과', cell: (r) => <Badge tone={outcome(r).tone}>{outcome(r).text}</Badge> },
                 {
                   header: '시각',
@@ -96,7 +99,7 @@ export function ReassignmentsPage() {
               mobile={(r) => (
                 <ListItem
                   title={r.toName ? `${r.fromName} → ${r.toName}` : r.fromName}
-                  subtitle={`${r.nftTokenId} · ${MODE_LABEL[r.mode]} · ${formatDateTime(r.createdAt)}`}
+                  subtitle={[r.nftTokenId, r.outcome === 'revoked' ? null : MODE_LABEL[r.mode], formatDateTime(r.createdAt)].filter(Boolean).join(' · ')}
                   trailing={<Badge tone={outcome(r).tone}>{outcome(r).text}</Badge>}
                 />
               )}

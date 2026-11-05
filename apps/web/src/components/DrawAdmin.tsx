@@ -77,7 +77,7 @@ export function DrawEntryTable({ data, limit }: { data: EntryDrawAdmin; limit?: 
         { header: '결과', cell: (r) => <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].text}</Badge> },
         {
           header: '점수 / 기준',
-          cell: (r) => <span className="font-mono text-label text-ink-2">{r.score !== null ? `${r.score} / ${data.winBps}` : '-'}</span>,
+          cell: (r) => <span className="font-mono text-label text-ink-2">{r.score !== null ? `${r.score} / ${r.winBps}` : '-'}</span>,
         },
         {
           header: '응모 시각',

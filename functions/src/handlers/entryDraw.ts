@@ -131,7 +131,7 @@ export const listEntryDraws = onCall<unknown, Promise<ListEntryDrawsResponse>>(c
   const entries = docs
     .map((d) => {
       const v = entryView(d.data());
-      return { name: names.get(d.get('uid')) || '알 수 없음', studentId: d.get('studentId') ?? '', status: v.status, score: v.score, createdAt: v.createdAt };
+      return { name: names.get(d.get('uid')) || '알 수 없음', studentId: d.get('studentId') ?? '', status: v.status, score: v.score, winBps: v.winBps, createdAt: v.createdAt };
     })
     .sort((a, b) => b.createdAt - a.createdAt);
   const count = (s: string) => entries.filter((e) => e.status === s).length;

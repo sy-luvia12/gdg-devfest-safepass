@@ -601,6 +601,8 @@ export interface AdminEntryRow {
   studentId: string;
   status: EntryDrawStatus;
   score: number | null;
+  /** The rate fixed for this entry when it was opened (a later pool change does not touch it) */
+  winBps: number;
   createdAt: number;
 }
 export interface ListEntryDrawsResponse {

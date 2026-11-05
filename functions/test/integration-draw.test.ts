@@ -198,7 +198,7 @@ describe('admin view of the draw and draw settings', () => {
     expect(list).toMatchObject({ capacity: 5_000, drawPool: 20_000, winBps: 2500 });
     expect(list.counts.total).toBe(list.entries.length);
     expect(list.counts).toMatchObject({ won: 1, lost: 1 });
-    expect(list.entries.find((e) => e.studentId === 'D002')).toMatchObject({ name: 'ben', status: 'won', score: 42 });
+    expect(list.entries.find((e) => e.studentId === 'D002')).toMatchObject({ name: 'ben', status: 'won', score: 42, winBps: 2500 });
     expect(JSON.stringify(list)).not.toContain('salt');
     expect(await codeOf(other.call('listEntryDraws', { eventId: EV_DRAW }))).toBe('functions/permission-denied');
 

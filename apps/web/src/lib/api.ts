@@ -141,7 +141,7 @@ export const getMyEntryDraw: typeof mock.getMyEntryDraw = real ? fb.getMyEntryDr
 /** "다시 검증하기": 체인의 응모·시드를 읽어 폰에서 다시 계산 */
 export const verifyMyEntry: typeof mock.verifyMyEntry = real ? lazyChain((m) => m.verifyMyEntry) : mock.verifyMyEntry;
 export type { EntryCheck, EntryVerification } from './chain/types';
-export { formatRate } from './chain/rate';
+export { drawRateOf, formatRate } from './chain/rate';
 
 export const getMyLottery: typeof mock.getMyLottery = real ? fb.getMyLottery : mock.getMyLottery;
 export const claimTicket: typeof mock.claimTicket = real ? fb.claimTicket : mock.claimTicket;

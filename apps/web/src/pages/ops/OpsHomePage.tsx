@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { eventTitle, formatEventDate } from '@/app/format';
 import { OpsBadge, OpsButton, OpsPanel, OpsState, OpsTitle } from '@/components/ops/ui';
-import { getSchool, listEvents, listSchools } from '@/lib/api';
+import { drawRateOf, formatRate, getSchool, listEvents, listSchools } from '@/lib/api';
 import type { Event, School } from '@/types';
 
 type Row = { school: School; events: Event[] };
@@ -77,7 +77,9 @@ export function OpsHomePage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {e.settings.requireRoster ? (
+                      {e.instantDraw ? (
+                        <OpsBadge tone="accent">추첨 · 당첨 {formatRate(drawRateOf(e.capacity, e.drawPool))}</OpsBadge>
+                      ) : e.settings.requireRoster ? (
                         <OpsBadge tone={e.roster?.sheetUrl ? 'accent' : 'warn'}>
                           행사 명단 {e.roster?.sheetUrl ? `${e.roster.count}명` : '시트 전'}
                         </OpsBadge>

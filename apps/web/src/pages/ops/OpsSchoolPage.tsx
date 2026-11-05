@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { eventTitle } from '@/app/format';
 import { RosterEditor } from '@/components/ops/RosterEditor';
 import { OpsBadge, OpsButton, OpsPanel, OpsState, OpsTitle } from '@/components/ops/ui';
-import { getSchool, listEvents } from '@/lib/api';
+import { drawRateOf, formatRate, getSchool, listEvents } from '@/lib/api';
 import type { Event, School } from '@/types';
 
 /** 학교 하나: 재학생 명단(회원가입 대조용) 편집과 그 학교 행사들 */
@@ -54,8 +54,8 @@ export function OpsSchoolPage() {
               to={`/ops/events/${e.id}`}
               className="flex h-9 items-center gap-2 rounded-full border border-ops-line px-3.5 text-label text-ops-ink-2 hover:border-ops-accent hover:text-ops-ink"
             >
-              {eventTitle(e)} 행사 명단
-              <OpsBadge tone="muted">{e.roster?.count ?? 0}</OpsBadge>
+              {eventTitle(e)} {e.instantDraw ? '추첨' : '행사 명단'}
+              <OpsBadge tone="muted">{e.instantDraw ? formatRate(drawRateOf(e.capacity, e.drawPool)) : (e.roster?.count ?? 0)}</OpsBadge>
               <ChevronRight size={14} strokeWidth={1.75} />
             </Link>
           ))}

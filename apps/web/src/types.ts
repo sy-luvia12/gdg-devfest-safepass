@@ -376,5 +376,6 @@ export type EntryDrawAdmin = {
   drawPool: number;
   winBps: number;
   counts: { total: number; pending: number; won: number; lost: number };
-  entries: { name: string; studentId: string; status: 'pending' | 'won' | 'lost'; score: number | null; createdAt: number }[];
+  /** winBps: 그 응모에 고정된 확률 (나중에 재학생 수를 바꿔도 그대로) */
+  entries: { name: string; studentId: string; status: 'pending' | 'won' | 'lost'; score: number | null; winBps: number; createdAt: number }[];
 };
