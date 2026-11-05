@@ -17,6 +17,8 @@ export function OnboardingPage() {
   // 학생증 단계 전에 가입한 학생은 본인 사진이 이미 있다. 그대로 두고 학생증만 더 받는다
   const [photo, setPhoto] = useState<string | null>(() => user?.photoUrl || null);
   const [idCard, setIdCard] = useState<string | null>(null);
+  // 본인 사진 → 학생증 순서. 본인 사진이 이미 있는 예전 가입자는 학생증부터
+  const [stage, setStage] = useState<'photo' | 'idCard'>(() => (user?.photoUrl ? 'idCard' : 'photo'));
   const [processing, setProcessing] = useState(false);
   const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,24 +50,39 @@ export function OnboardingPage() {
     <>
       <AppHeader title="회원가입" right={<Button variant="ghost" size="sm" disabled={busy} onClick={() => void signOut()}>나가기</Button>} />
       <main className="px-5 pb-36 pt-6 md:pb-10">
-        <RegistrationSteps step={2} />
-        <section className="flex animate-rise-in flex-col gap-6">
-          <div>
-            <h2 className="text-title text-ink">본인 사진과 학생증을 등록해 주세요</h2>
-            <p className="mt-2 text-body text-ink-2">{user.name}님, 입장할 때 스태프가 사진과 얼굴을 확인해요. 학생증은 재학생인지 확인하는 데만 써요.</p>
-          </div>
-          <ImagePicker label="본인 사진" hint="정면 얼굴이 잘 보이는 사진" value={photo} onChange={setPhoto} shape="face" disabled={busy} onProcessingChange={setProcessing} />
-          <p className="text-caption text-ink-2">모자·선글라스·마스크 없이 정면을 촬영해 주세요. 노트북에서는 기존 이미지를 업로드해도 돼요.</p>
-          <ImagePicker label="학생증 앞면" hint="이름과 학번이 보이게" value={idCard} onChange={setIdCard} shape="card" disabled={busy} onProcessingChange={setProcessing} />
-          <p className="text-caption text-ink-2">학생증 사진은 화면에 다시 보이지 않고 서버에만 보관해요.</p>
-          <label className="flex cursor-pointer items-start gap-3 rounded-md bg-surface p-4 text-label text-ink">
-            <input type="checkbox" disabled={busy} checked={consented} onChange={(event) => setConsented(event.target.checked)} className="mt-1 accent-ink" />
-            <span>[필수] 이름·학번·학교 이메일·본인 사진·학생증 사진을 재학생·본인 확인 목적으로 수집하고, 본인 사진을 검표 스태프에게 표시하는 데 동의해요.</span>
-          </label>
-          {error && <p role="alert" className="rounded-md bg-danger-bg p-4 text-label text-danger">{error}</p>}
-        </section>
+        <RegistrationSteps step={stage === 'photo' ? 2 : 3} />
+        {stage === 'photo' ? (
+          <section key="photo" className="flex animate-rise-in flex-col gap-6">
+            <div>
+              <h2 className="text-title text-ink">본인 사진을 등록해 주세요</h2>
+              <p className="mt-2 text-body text-ink-2">{user.name}님, 입장할 때 스태프가 사진과 얼굴을 확인해요.</p>
+            </div>
+            <ImagePicker label="본인 사진" hint="정면 얼굴이 잘 보이는 사진" value={photo} onChange={setPhoto} shape="face" disabled={busy} onProcessingChange={setProcessing} />
+            <p className="text-caption text-ink-2">모자·선글라스·마스크 없이 정면을 촬영해 주세요. 노트북에서는 기존 이미지를 업로드해도 돼요.</p>
+          </section>
+        ) : (
+          <section key="idCard" className="flex animate-rise-in flex-col gap-6">
+            <div>
+              <h2 className="text-title text-ink">학생증을 찍어 주세요</h2>
+              <p className="mt-2 text-body text-ink-2">재학생인지 확인하는 데만 써요. 화면에 다시 보이지 않고 서버에만 보관해요.</p>
+            </div>
+            <ImagePicker label="학생증 앞면" hint="이름과 학번이 보이게" value={idCard} onChange={setIdCard} shape="card" disabled={busy} onProcessingChange={setProcessing} />
+            <label className="flex cursor-pointer items-start gap-3 rounded-md bg-surface p-4 text-label text-ink">
+              <input type="checkbox" disabled={busy} checked={consented} onChange={(event) => setConsented(event.target.checked)} className="mt-1 accent-ink" />
+              <span>[필수] 이름·학번·학교 이메일·본인 사진·학생증 사진을 재학생·본인 확인 목적으로 수집하고, 본인 사진을 검표 스태프에게 표시하는 데 동의해요.</span>
+            </label>
+            {error && <p role="alert" className="rounded-md bg-danger-bg p-4 text-label text-danger">{error}</p>}
+            <button type="button" disabled={busy} onClick={() => setStage('photo')} className="self-start text-label text-ink-2 underline underline-offset-4">
+              본인 사진 다시 고르기
+            </button>
+          </section>
+        )}
         <BottomBar>
-          <Button loading={busy} disabled={!photo || !idCard || !consented || processing} onClick={() => void finish()}>회원가입 완료하기</Button>
+          {stage === 'photo' ? (
+            <Button disabled={!photo || processing} onClick={() => setStage('idCard')}>다음</Button>
+          ) : (
+            <Button loading={busy} disabled={!photo || !idCard || !consented || processing} onClick={() => void finish()}>회원가입 완료하기</Button>
+          )}
         </BottomBar>
       </main>
     </>
