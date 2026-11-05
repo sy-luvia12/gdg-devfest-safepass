@@ -37,6 +37,8 @@ export const ensureUser = onCall<unknown, Promise<EnsureUserResponse>>(callableO
       role: s?.role ?? 'student',
       ...(s?.adminSchoolId ? { adminSchoolId: s.adminSchoolId } : {}),
       ...(s?.staffSchoolId ? { staffSchoolId: s.staffSchoolId } : {}),
+      // Only an admin with no school can be the operator
+      ...(s?.operator === true && s.role === 'admin' && !s.adminSchoolId ? { operator: true } : {}),
     };
     const { uid: _uid, ...fields } = profile;
     tx.set(userRef, { ...fields, createdAt: FieldValue.serverTimestamp() });
@@ -57,5 +59,6 @@ export function profileOf(uid: string, d: DocumentData): UserProfile {
     ...(d.schoolId ? { schoolId: d.schoolId } : {}),
     ...(d.rosterVerified ? { rosterVerified: true } : {}),
     ...(d.photoSubmitted ? { photoSubmitted: true } : {}),
+    ...(d.operator === true ? { operator: true } : {}),
   };
 }

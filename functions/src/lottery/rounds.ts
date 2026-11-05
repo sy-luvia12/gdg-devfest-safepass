@@ -4,7 +4,7 @@ import { enqueueChainOps } from '../chain/outbox';
 import { REASON, tokenIdOf } from '../chain/ids';
 import { claimDeadline, COMMIT_LEAD_MS, drawCloseAt, lotterySettingsOf, nextAnnouncement, pickDrawTime } from '../domain/lottery';
 import { isDomainAllowed } from '../domain/ticket';
-import { schoolForEmail } from '../handlers/rosterStore';
+import { onEventRoster, schoolForEmail } from '../handlers/rosterStore';
 import { buildSnapshot, drawWinners, leafOf, merkleProof, newSalt } from './draw';
 
 // Cancelled-ticket lottery for events with reassignMode 'lottery' (docs/api.md 14장).
@@ -65,7 +65,7 @@ export function poolTicket(tx: Transaction, ticketRef: DocumentReference, reassi
 
 /**
  * The issueTicket rules a lottery winner must also meet: a student, one ticket per event, not someone who
- * cancelled this event's ticket (unless the event allows reissue), and on the event roster when it has one.
+ * cancelled this event's ticket (unless the event allows reissue), and for a roster event on its roster or waitlist.
  */
 async function mayTakeTicket(db: Firestore, tx: Transaction, eventId: string, eventData: FirebaseFirestore.DocumentData, uid: string, email: string) {
   const user = await tx.get(db.doc(`users/${uid}`));
@@ -78,7 +78,12 @@ async function mayTakeTicket(db: Firestore, tx: Transaction, eventId: string, ev
     const cancelled = await tx.get(db.collection('reassignments').where('fromUid', '==', uid).where('eventId', '==', eventId).limit(1));
     if (!cancelled.empty) return false;
   }
-  if (eventData.requireRoster === true && !(await tx.get(db.doc(`events/${eventId}/roster/${email}`))).exists) return false;
+  // A roster event takes the student when the event roster lists their student id and name, or when the event
+  // admin put them on the waitlist sheet (also matched against the school roster).
+  if (eventData.requireRoster === true) {
+    const listed = await onEventRoster(tx, eventId, user.get('studentId'), user.get('name'));
+    if (!listed && !(await tx.get(db.doc(`events/${eventId}/waitlist/${email}`))).exists) return false;
+  }
   return true;
 }
 

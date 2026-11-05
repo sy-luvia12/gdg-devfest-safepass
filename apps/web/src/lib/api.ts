@@ -57,6 +57,15 @@ export const pendingSignInEmail: typeof mock.pendingSignInEmail = real ? fb.pend
 export const completeSignInLink: typeof mock.completeSignInLink = real ? fb.completeSignInLink : mock.completeSignInLink;
 export const submitProfilePhoto: typeof mock.submitProfilePhoto = real ? fb.submitProfilePhoto : mock.submitProfilePhoto;
 
+// 운영진 콘솔 (/ops). 아이디·비밀번호로 들어오는 SafePass 운영진만 쓴다. 명단은 서버에 저장된 것을 바로 고친다
+export const signInAsOperator: typeof mock.signInAsOperator = real ? fb.signInAsOperator : mock.signInAsOperator;
+export const opsListRoster: typeof mock.opsListRoster = real ? fb.opsListRoster : mock.opsListRoster;
+export const opsEditRoster: typeof mock.opsEditRoster = real ? fb.opsEditRoster : mock.opsEditRoster;
+export const opsListStudents: typeof mock.opsListStudents = real ? fb.opsListStudents : mock.opsListStudents;
+export const opsResetDevice: typeof mock.opsResetDevice = real ? fb.opsResetDevice : mock.opsResetDevice;
+export const opsListEventAdmins: typeof mock.opsListEventAdmins = real ? fb.opsListEventAdmins : mock.opsListEventAdmins;
+export const opsSetEventAdmin: typeof mock.opsSetEventAdmin = real ? fb.opsSetEventAdmin : mock.opsSetEventAdmin;
+
 // 재학생 승인 · 기기 (백엔드 다음 단계 2.2, 2.3)
 export const submitVerification: typeof mock.submitVerification = real ? notYet : mock.submitVerification;
 export const listPendingVerifications: typeof mock.listPendingVerifications = real
@@ -96,6 +105,8 @@ export const subscribeEventStats: typeof mock.subscribeEventStats = real
 export const listEntries: typeof mock.listEntries = real ? fb.listEntries : mock.listEntries;
 export const listReassignments: typeof mock.listReassignments = real ? fb.listReassignments : mock.listReassignments;
 export const getWaitlist: typeof mock.getWaitlist = real ? fb.getWaitlist : mock.getWaitlist;
+/** 대기 명단 시트 불러오기 (행사 담당자) */
+export const importWaitlist: typeof mock.importWaitlist = real ? fb.importWaitlist : mock.importWaitlist;
 export const updateReassignMode: typeof mock.updateReassignMode = real ? fb.updateReassignMode : mock.updateReassignMode;
 export const listTickets: typeof mock.listTickets = real ? fb.listTickets : mock.listTickets;
 export const listStaff: typeof mock.listStaff = real ? fb.listStaff : mock.listStaff;

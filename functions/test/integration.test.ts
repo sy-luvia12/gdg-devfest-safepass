@@ -350,10 +350,11 @@ describe('hand-made event documents', () => {
 });
 
 describe('admin features and security rules', () => {
-  it('admin reads scanLogs, reassignments and the waitlist; a student cannot', async () => {
+  it('admin reads scanLogs and reassignments; nobody reads the waitlist directly (its ids are emails); a student reads none', async () => {
     expect(await codeOf(getDocs(collection(chief.fs, 'scanLogs')))).toBe('resolved');
     expect(await codeOf(getDocs(collection(chief.fs, 'reassignments')))).toBe('resolved');
-    expect(await codeOf(getDocs(collection(chief.fs, 'events', EVENT, 'waitlist')))).toBe('resolved');
+    // Admins see the waitlist through getWaitlist, which returns names and student ids only
+    expect(await codeOf(getDocs(collection(chief.fs, 'events', EVENT, 'waitlist')))).toBe('permission-denied');
     expect((await getDocs(collection(chief.fs, 'scanLogs'))).size).toBe(6);
 
     expect(await codeOf(getDocs(collection(bob.fs, 'scanLogs')))).toBe('permission-denied');

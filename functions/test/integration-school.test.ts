@@ -101,6 +101,9 @@ beforeAll(async () => {
   await seedProfile('admin@sch-a.test', { role: 'admin', adminSchoolId: A });
   await seedProfile('admin@sch-b.test', { role: 'admin', adminSchoolId: B });
   await seedProfile('team@sch-team.test', { role: 'admin' });
+  await seedProfile('ops@sch-ops.test', { role: 'admin', operator: true, name: 'Operator' });
+  // The operator flag only counts on an admin with no school
+  await seedProfile('fake-ops@sch-a.test', { role: 'admin', adminSchoolId: A, operator: true });
   await seedProfile('staff@sch-a.test', { role: 'staff', staffSchoolId: A });
   await seedProfile('staff@sch-b.test', { role: 'staff', staffSchoolId: B });
   await seedProfile('staff@sch-free.test', { role: 'staff' });
@@ -420,14 +423,237 @@ describe('student sign-up and tickets', () => {
     expect((await db.doc(`tickets/${ticket.ticketId}`).get()).data()).toMatchObject({ eventId: EV_OPEN, status: 'issued' });
   });
 
-  it('an event that requires its own roster only issues to emails on it', async () => {
+  it('an event that requires its own roster issues to the student id and name on it, not to an email', async () => {
+    await seedProfile('listed@sch-c.test', { name: 'Listed', studentId: 'L001' });
     const student = await login('listed@sch-c.test');
-    expect(await codeOf(student.call('issueTicket', { eventId: EV_ROSTER }))).toBe('functions/failed-precondition');
+    expect(await reasonOf(student.call('issueTicket', { eventId: EV_ROSTER }))).toBe('NOT_IN_ROSTER');
+
+    // A row keyed by the email (the old format) or with another name does not count.
+    await db.doc(`events/${EV_ROSTER}/roster/listed@sch-c.test`).set({ name: 'Listed', studentId: 'L001', email: 'listed@sch-c.test' });
+    await db.doc(`events/${EV_ROSTER}/roster/L001`).set({ name: 'Someone Else', studentId: 'L001' });
     expect(await reasonOf(student.call('issueTicket', { eventId: EV_ROSTER }))).toBe('NOT_IN_ROSTER');
     expect((await db.doc(`events/${EV_ROSTER}`).get()).get('issuedCount')).toBe(0);
 
-    await db.doc(`events/${EV_ROSTER}/roster/listed@sch-c.test`).set({ name: 'Listed', studentId: '1', email: 'listed@sch-c.test', addedAt: FieldValue.serverTimestamp() });
+    await db.doc(`events/${EV_ROSTER}/roster/L001`).set({ name: 'Lis ted', studentId: 'L001' });
     const ticket = await student.call('issueTicket', { eventId: EV_ROSTER });
     expect(ticket.nftNumber).toBe('#0001');
+  });
+});
+
+describe('operator console', () => {
+  const OPS_EV = 'sch-a-ops-event';
+
+  it('only the operator account calls ops functions; team and school admins are refused', async () => {
+    await seedEvent(OPS_EV, { schoolIds: [A], allowedDomains: ['sch-a.test'], requireRoster: true });
+    const ops = await login('ops@sch-ops.test');
+    expect(await ops.call('ensureUser', undefined)).toMatchObject({ role: 'admin', operator: true });
+    for (const email of ['team@sch-team.test', 'admin@sch-a.test', 'fake-ops@sch-a.test', 'dev1@sch-a.test']) {
+      const other = await login(email);
+      expect(await codeOf(other.call('opsListRoster', { kind: 'school', id: A }))).toBe('functions/permission-denied');
+      expect(await codeOf(other.call('opsEditRoster', { kind: 'school', id: A, upserts: [], deletes: [] }))).toBe(
+        'functions/permission-denied',
+      );
+      expect(await codeOf(other.call('opsListStudents', { schoolId: A }))).toBe('functions/permission-denied');
+    }
+    expect(await (await login('fake-ops@sch-a.test')).call('ensureUser', undefined)).not.toHaveProperty('operator');
+    // No admin can turn an operator address into staff, even before it signs in
+    const team = await login('team@sch-team.test');
+    expect(await codeOf(team.call('setStaff', { email: 'ops@ops.safepass.app', staff: true }))).toBe('functions/failed-precondition');
+    expect((await db.doc('seedProfiles/ops@ops.safepass.app').get()).exists).toBe(false);
+  });
+
+  it('edits a school roster in place: checks rows, keeps claimedBy, deletes, and updates the summary', async () => {
+    const ops = await login('ops@sch-ops.test');
+    await seedRosterRow(A, { studentId: 'OPS1', name: '김하늘', email: 'ops1@sch-a.test', claimedBy: 'someone' });
+
+    const res = await ops.call('opsEditRoster', {
+      kind: 'school',
+      id: A,
+      upserts: [
+        { studentId: 'OPS1', name: '김하늘', email: 'OPS1-new@sch-a.test' },
+        { studentId: 'OPS2', name: '이도윤', email: 'ops2@sch-a.test' },
+        { studentId: 'OPS3', name: '박서연', email: 'ops3@gmail.com' },
+        { studentId: 'OPS4', name: '', email: 'ops4@sch-a.test' },
+      ],
+      deletes: [],
+    });
+    expect(res).toMatchObject({ ok: true, saved: 2, deleted: 0, skipped: [{ index: 2, reason: 'BAD_DOMAIN' }, { index: 3, reason: 'MISSING_FIELD' }] });
+    expect((await db.doc(`schools/${A}/roster/OPS1`).get()).data()).toMatchObject({ email: 'ops1-new@sch-a.test', claimedBy: 'someone' });
+
+    const list = await ops.call('opsListRoster', { kind: 'school', id: A });
+    expect(list.rows.find((r) => r.studentId === 'OPS1')).toMatchObject({ name: '김하늘', claimed: true });
+    expect(list.rows.find((r) => r.studentId === 'OPS2')).toMatchObject({ email: 'ops2@sch-a.test', claimed: false });
+    expect(list.summary?.count).toBe(list.rows.length);
+
+    const del = await ops.call('opsEditRoster', { kind: 'school', id: A, upserts: [], deletes: ['OPS2'] });
+    expect(del).toMatchObject({ saved: 0, deleted: 1 });
+    expect((await db.doc(`schools/${A}/roster/OPS2`).get()).exists).toBe(false);
+  });
+
+  it('edits an event roster by name and student id, shows the school roster match, and tickets follow it', async () => {
+    const ops = await login('ops@sch-ops.test');
+    await seedRosterRow(A, { studentId: 'EVR1', name: '정지우', email: 'evr1@sch-a.test' });
+    // Until the event admin loads a sheet once, the console can read the event roster but not change it
+    expect(await ops.call('opsListRoster', { kind: 'event', id: OPS_EV })).toMatchObject({ rows: [], editable: false });
+    const early = ops.call('opsEditRoster', { kind: 'event', id: OPS_EV, upserts: [{ studentId: 'EVR1', name: '정지우' }], deletes: [] });
+    expect(await reasonOf(early)).toBe('NO_SHEET_IMPORT');
+    await db.doc(`events/${OPS_EV}`).update({ roster: { sheetUrl: 'https://docs.google.com/spreadsheets/d/imported', count: 0 } });
+
+    await ops.call('opsEditRoster', {
+      kind: 'event',
+      id: OPS_EV,
+      upserts: [
+        { studentId: 'EVR1', name: '정지우', email: 'ignored@gmail.com' },
+        { studentId: 'EVR2', name: '없는학생' },
+        { studentId: 'OPS1', name: '다른이름' },
+      ],
+      deletes: [],
+      replace: true,
+    });
+    const stored = await db.doc(`events/${OPS_EV}/roster/EVR1`).get();
+    expect(stored.data()).toEqual({ name: '정지우', studentId: 'EVR1' });
+
+    const list = await ops.call('opsListRoster', { kind: 'event', id: OPS_EV });
+    expect(list).toMatchObject({ schoolId: A, editable: true });
+    expect(list.rows).toEqual([
+      { name: '정지우', studentId: 'EVR1', email: 'evr1@sch-a.test', match: 'OK' },
+      { name: '없는학생', studentId: 'EVR2', match: 'NOT_IN_STUDENT_ROSTER' },
+      { name: '다른이름', studentId: 'OPS1', email: 'ops1-new@sch-a.test', match: 'NAME_MISMATCH' },
+    ]);
+    // The console keeps the sheet address the event admin loaded
+    expect((await db.doc(`events/${OPS_EV}`).get()).get('roster')).toMatchObject({
+      count: 3,
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/imported',
+    });
+
+    // The event admin's view has no emails
+    const adminA = await login('admin@sch-a.test');
+    const view = await adminA.call('getEventRoster', { eventId: OPS_EV });
+    expect(view.entries.map((e) => Object.keys(e).sort())).toEqual([
+      ['name', 'studentId'],
+      ['name', 'studentId'],
+      ['name', 'studentId'],
+    ]);
+
+    // replace drops rows that are not pasted again
+    await ops.call('opsEditRoster', { kind: 'event', id: OPS_EV, upserts: [{ studentId: 'EVR1', name: '정지우' }], deletes: [], replace: true });
+    expect((await ops.call('opsListRoster', { kind: 'event', id: OPS_EV })).rows.map((r) => r.studentId)).toEqual(['EVR1']);
+  });
+
+  it('lists a school\'s students with their device state, and the operator resets any school\'s device', async () => {
+    const ops = await login('ops@sch-ops.test');
+    const student = await login('opsdev@sch-b.test');
+    await db.doc(`users/${student.uid}`).update({ schoolId: B, studentId: 'B900', name: '서도경' });
+    await db.doc(`devices/${student.uid}`).set({ publicKeyJwk: { kty: 'EC' } });
+    await db.doc(`deviceResets/${student.uid}`).set({ uid: student.uid, status: 'pending' });
+
+    const before = await ops.call('opsListStudents', { schoolId: B });
+    expect(before.students.find((s) => s.uid === student.uid)).toEqual({
+      uid: student.uid,
+      name: '서도경',
+      studentId: 'B900',
+      email: 'opsdev@sch-b.test',
+      deviceRegistered: true,
+      resetRequested: true,
+    });
+    expect(await ops.call('resetDevice', { uid: student.uid! })).toEqual({ ok: true });
+    const after = await ops.call('opsListStudents', { schoolId: B });
+    expect(after.students.find((s) => s.uid === student.uid)).toMatchObject({ deviceRegistered: false, resetRequested: false });
+  });
+
+  it('assigns a personal Gmail as event admin before or after its first sign-in, and leaves team admins alone', async () => {
+    const ops = await login('ops@sch-ops.test');
+    const adminA = await login('admin@sch-a.test');
+    expect(await codeOf(adminA.call('opsSetEventAdmin', { email: 'x@sch-gmail.test', schoolId: A }))).toBe('functions/permission-denied');
+
+    // Not signed in yet: applies on the first Google sign-in
+    expect(await ops.call('opsSetEventAdmin', { email: 'Pending.Admin@sch-gmail.test', schoolId: A })).toEqual({ ok: true, status: 'PENDING_SIGNUP' });
+    let list = await ops.call('opsListEventAdmins', undefined);
+    expect(list.admins).toContainEqual(expect.objectContaining({ email: 'pending.admin@sch-gmail.test', schoolId: A, status: 'PENDING_SIGNUP' }));
+    const pending = await login('pending.admin@sch-gmail.test');
+    expect(await pending.call('ensureUser', undefined)).toMatchObject({ role: 'admin', adminSchoolId: A });
+    // and it can register an event for its school, not for another one
+    const date = '2026-12-01T18:00:00+09:00';
+    const made = await pending.call('createEvent', { schoolIds: [A], name: 'Gmail Fest', date, place: 'Hall', capacity: 10, faceValue: 0, requireRoster: true });
+    expect(made.ok).toBe(true);
+    expect(await codeOf(pending.call('createEvent', { schoolIds: [B], name: 'X', date, place: 'Hall', capacity: 10, faceValue: 0, requireRoster: true }))).toBe(
+      'functions/permission-denied',
+    );
+
+    // Signed in first as a (rejected) student: the stored account is updated in place
+    const early = await login('early.admin@sch-gmail.test');
+    expect(await early.call('ensureUser', undefined)).toMatchObject({ role: 'student' });
+    expect(await ops.call('opsSetEventAdmin', { email: 'early.admin@sch-gmail.test', schoolId: B })).toEqual({ ok: true, status: 'UPDATED' });
+    expect(await early.call('ensureUser', undefined)).toMatchObject({ role: 'admin', adminSchoolId: B });
+    list = await ops.call('opsListEventAdmins', undefined);
+    expect(list.admins).toContainEqual(expect.objectContaining({ email: 'early.admin@sch-gmail.test', schoolId: B, status: 'ACTIVE' }));
+
+    // Removing it makes the account a plain (non-school) user again
+    expect(await ops.call('opsSetEventAdmin', { email: 'early.admin@sch-gmail.test', schoolId: null })).toEqual({ ok: true, status: 'REMOVED' });
+    expect(await early.call('ensureUser', undefined)).not.toHaveProperty('adminSchoolId');
+
+    // Team admins and operator addresses are never changed
+    expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'team@sch-team.test', schoolId: A }))).toBe('functions/failed-precondition');
+    expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'ops@ops.safepass.app', schoolId: A }))).toBe('functions/failed-precondition');
+    expect(await codeOf(ops.call('opsSetEventAdmin', { email: 'new@sch-gmail.test', schoolId: 'no-such-school' }))).toBe('functions/not-found');
+  });
+
+  it('the waitlist: only the host school admin loads or reads it, and the admin never sees emails', async () => {
+    const WL_EV = 'sch-a-waitlist-event';
+    await seedEvent(WL_EV, { schoolIds: [A], allowedDomains: ['sch-a.test'] });
+    const adminA = await login('admin@sch-a.test');
+    const adminB = await login('admin@sch-b.test');
+    const bad = 'https://example.com/not-a-sheet';
+    expect(await codeOf(adminB.call('importWaitlist', { eventId: WL_EV, sheetUrl: bad }))).toBe('functions/permission-denied');
+    expect(await codeOf(adminB.call('getWaitlist', { eventId: WL_EV }))).toBe('functions/permission-denied');
+    expect(await reasonOf(adminA.call('importWaitlist', { eventId: WL_EV, sheetUrl: bad }))).toBe('BAD_SHEET_URL');
+
+    await db.doc(`events/${WL_EV}/waitlist/second@sch-a.test`).set({ order: 2, status: 'waiting', name: '둘째', studentId: 'W2' });
+    await db.doc(`events/${WL_EV}/waitlist/first@sch-a.test`).set({ order: 1, status: 'assigned', name: '첫째', studentId: 'W1' });
+    const view = await adminA.call('getWaitlist', { eventId: WL_EV });
+    expect(view.entries).toEqual([
+      { order: 1, name: '첫째', studentId: 'W1', status: 'assigned' },
+      { order: 2, name: '둘째', studentId: 'W2', status: 'waiting' },
+    ]);
+    expect(JSON.stringify(view)).not.toContain('@sch-a.test');
+  });
+});
+
+describe('waitlist on a roster event', () => {
+  const signedUp = async (email: string, studentId: string, name: string) => {
+    const c = await login(email);
+    await db.doc(`users/${c.uid}`).update({ schoolId: A, studentId, name, rosterVerified: true, photoSubmitted: true });
+    return c;
+  };
+
+  it('a cancelled ticket goes to the first waiting student even when they are not on the event roster', async () => {
+    const EV = 'sch-a-queue-roster';
+    await seedEvent(EV, { schoolIds: [A], allowedDomains: ['sch-a.test'], requireRoster: true });
+    const holder = await signedUp('wl-holder@sch-a.test', 'Q100', '보유자');
+    const waiter = await signedUp('wl-waiter@sch-a.test', 'Q200', '대기자');
+    await db.doc(`events/${EV}/roster/Q100`).set({ name: '보유자', studentId: 'Q100' });
+    expect(await reasonOf(waiter.call('issueTicket', { eventId: EV }))).toBe('NOT_IN_ROSTER');
+    const { ticketId } = await holder.call('issueTicket', { eventId: EV });
+
+    await db.doc(`events/${EV}/waitlist/wl-waiter@sch-a.test`).set({ order: 1, status: 'waiting', assignedTicketId: null, name: '대기자', studentId: 'Q200' });
+    expect(await holder.call('cancelTicket', { ticketId })).toEqual({ ok: true, outcome: 'REASSIGNED' });
+    expect((await db.doc(`tickets/${ticketId}`).get()).get('ownerUid')).toBe(waiter.uid);
+    expect((await db.doc(`events/${EV}/waitlist/wl-waiter@sch-a.test`).get()).data()).toMatchObject({ status: 'assigned', assignedTicketId: ticketId });
+  });
+
+  it('a lottery round on a roster event takes waitlisted students (the event roster used to be checked by email)', async () => {
+    const EV = 'sch-a-lottery-roster';
+    await seedEvent(EV, {
+      schoolIds: [A],
+      allowedDomains: ['sch-a.test'],
+      requireRoster: true,
+      reassignMode: 'lottery',
+      date: Timestamp.fromDate(new Date(Date.now() + 7 * 86_400_000)),
+    });
+    await signedUp('lt-waiter@sch-a.test', 'L200', '추첨대기');
+    await db.doc(`events/${EV}/waitlist/lt-waiter@sch-a.test`).set({ order: 1, status: 'waiting', assignedTicketId: null, name: '추첨대기', studentId: 'L200' });
+    await db.doc('tickets/sch-a-lottery-pooled').set({ eventId: EV, ownerUid: null, status: 'pooled', drawRound: null, nftNumber: '#0001', chainSeq: 0, chain: { status: 'pending' } });
+    const adminA = await login('admin@sch-a.test');
+    expect(await adminA.call('runDrawNow', { eventId: EV })).toEqual({ ok: true, round: 1, tickets: 1, entries: 1 });
   });
 });

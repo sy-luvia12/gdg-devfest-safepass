@@ -108,20 +108,37 @@ firebase.json             #                                    ← 백엔드
 | `/admin` | 실시간 현황 | admin |
 | `/admin/entries` | 입장 기록 (필터·검색·CSV) | admin |
 | `/admin/tickets` | 발급 현황 | admin |
-| `/admin/reassignments` | 취소·재배정 기록, 대기 명단, 재배정 방식 | admin |
-| `/admin/approvals` | 재학생 승인 | admin |
-| `/admin/devices` | 기기 초기화 요청 | admin |
+| `/admin/reassignments` | 취소·재배정 기록, 대기 명단(시트 등록, 이름·학번만), 재배정 방식 | admin |
+| `/admin/devices` | 기기 초기화 요청 | 팀 admin (행사 담당자에게는 숨김) |
 | `/admin/staff` | 스태프 관리 | admin |
-| `/admin/setup` | 스페이스 만들기: 학교 정보 → 재학생 시트 (학교 관리자는 여기부터) | admin |
-| `/admin/students` | 재학생 명단 (학교 전체, 회원가입 대조용) | admin |
+| `/admin/setup` | 스페이스 만들기: 학교 정보 → 재학생 시트 | 팀 admin |
+| `/admin/students` | 재학생 명단 (학교 전체, 회원가입 대조용) | 팀 admin |
 | `/admin/events`, `/admin/events/new` | 행사 목록 · 행사 등록 | admin |
-| `/admin/roster` | 행사 명단 (당첨자·참가자 시트, 발급 대조용) | admin |
+| `/admin/roster` | 행사 명단 (당첨자·참가자 시트, 이름·학번만) | admin |
 | `/admin/settings` | 행사 정보 · 입장 규칙 · 보관 기간 · 테마 | admin |
+| `/ops/login` | 운영진 로그인 (아이디·비밀번호) | 누구나 |
+| `/ops` | 운영진 콘솔 개요: 학교별 재학생 명단·행사 명단 수 | 운영진 |
+| `/ops/schools/:schoolId` | 재학생 명단 편집 (추가·수정·삭제, 붙여넣기, CSV) | 운영진 |
+| `/ops/events/:eventId` | 행사 명단 편집, 재학생 명단 대조 결과 | 운영진 |
+| `/ops/admins` | 행사 담당자 지정: 팀원 구글 계정(개인 Gmail 가능) → 학교 | 운영진 |
+| `/ops/devices` | 학교별 학생 기기 초기화 | 운영진 |
 
 - 로그인 후 이동: 학생은 아래 "학생 관문"을 먼저 거치고, 입장권이 있으면 `/ticket`, 없으면 `/event` / staff는 `/staff/scan` / admin은 `/admin`
 - **학생 관문** (`studentGatePath`): 승인 전(`none`·`rejected`) → `/onboarding`, 승인 대기 → `/onboarding/pending`, 기기 막힘 → `/device`. 통과 전에는 다른 학생 화면에 들어갈 수 없다.
 - 권한이 없는 경로에 들어오면 자기 역할의 첫 화면으로 보낸다.
 - 관리자 화면은 노트북에서 왼쪽 세로 메뉴, 폰에서는 위쪽 가로 스크롤 메뉴 (`app/AdminLayout.tsx`).
+- 운영진 콘솔은 검정 테마의 별도 틀(`app/OpsLayout.tsx`, `components/ops/`). 운영진이 아니면 `/ops/login`으로 보낸다. 로그인 화면 아래 "운영진" 링크로 들어간다.
+
+## 역할 (담당자)
+| 역할 | 하는 일 | 구현 |
+|---|---|---|
+| 학교 담당자 (행정실 등) | 학교 등록, 재학생 명단(이름·학번·메일) 등록, 기기 초기화 요청 처리 | **설명만 한다.** 화면은 만들지 않고, 이 일은 운영진 콘솔이 대신한다 |
+| 행사 담당자 (`admin` + `adminSchoolId`) | 행사 등록, 행사 대상 명단(이름·학번) 등록, 발급·출입 관리. 자기 학교 행사만 본다 | 관리자 화면 `/admin` (학교 메뉴는 행사 목록·스태프 관리만) |
+| 운영진 (`admin` + `operator`, 학교 없음) | 모든 학교의 재학생 명단·행사 명단을 바로 고치고 기기를 초기화한다. 데모·테스트 관리용 | 운영진 콘솔 `/ops` |
+- 행사 담당자 계정은 운영진이 콘솔(`/ops/admins`)에서 구글 계정(개인 Gmail 가능)과 학교로 지정한다. 재학생 명단과 상관없이 구글 로그인으로 들어온다. 지정되지 않은 Gmail은 학생으로 보고 막는다.
+- 행사 담당자는 학생 메일을 보지 않는다. 행사 명단은 이름·학번만 받고, 서버가 같은 학교의 재학생 명단과 대조한다.
+- 두 학교가 함께하는 경기(고연전/연고전)도 학교마다 따로 행사를 만들어 각자 발급·검표한다.
+- 재학생 승인(사진·학생증을 보고 승인)은 없앴다. 재학생 명단 대조 가입이 대신한다.
 
 ## 데이터 모델 (Firestore)
 전체 정의는 `apps/web/src/types.ts`가 기준이다. 주요 구조만 적는다.
@@ -210,7 +227,8 @@ getMyScanHistory(): Promise<ScanLog[]>
 subscribeEventStats(eventId, cb): () => void        // { enteredCount, capacity, rejectedCount, recent }
 listEntries(eventId): Promise<ScanLog[]>
 listReassignments(eventId): Promise<Reassignment[]>   // 취소·재배정 기록
-getWaitlist(eventId): Promise<WaitlistEntry[]>
+getWaitlist(eventId): Promise<WaitlistView>          // 서버 getWaitlist. 이름·학번·순서·상태만 (메일 없음)
+importWaitlist(eventId, sheetUrl): Promise<RosterImport>   // 대기 명단 시트(이름·학번, 대기 순서). 재학생 명단과 맞는 학생만
 updateReassignMode(eventId, mode) / updateAllowReissue(eventId, allow)   // admin
 listTickets(eventId): Promise<TicketRow[]>
 upsertSchool(schoolId, { name, domain, brandColor })                 // 스페이스 만들기 (학교 관리자는 자기 학교만)
@@ -219,6 +237,15 @@ createEvent(input) / updateEvent(eventId, patch)                     // 행사 �
 getEventRoster(eventId) / importEventRoster(eventId, sheetUrl)       // 행사 명단
 verifyStudentRoster(schoolId, name, studentId): Promise<User>        // 회원가입: 학번 줄의 이름·메일 대조
 listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인 전이면 첫 로그인 때 적용
+
+// 운영진 콘솔 (operator 계정만. 서버 opsListRoster / opsEditRoster / opsListStudents)
+signInAsOperator(id, password): Promise<User>       // 아이디 → {id}@ops.safepass.app 이메일·비밀번호 계정. 틀리면 'wrong_password'
+opsListRoster(kind: 'school' | 'event', id): Promise<OpsRoster>   // 학교: 메일·가입 여부 / 행사: 재학생 명단 대조(match)와 메일
+opsEditRoster(kind, id, { upserts, deletes, replace? }): Promise<OpsEditResult>   // 학번 기준 추가·덮어쓰기·삭제. 행사 명단은 시트를 한 번 불러온 뒤에만
+opsListStudents(schoolId): Promise<OpsStudent[]>    // 가입한 학생과 기기 등록·초기화 요청 여부
+opsResetDevice(uid): Promise<void>                  // resetDevice
+opsListEventAdmins(): Promise<OpsEventAdmin[]>       // 행사 담당자 (로그인 전이면 pending)
+opsSetEventAdmin(email, schoolId | null): Promise<void>   // 지정·해제. 로그인 전이면 seedProfiles에 두고 첫 구글 로그인 때 적용. 팀 관리자·운영진은 못 바꿈
 
 // 체인 직접 읽기 (Firebase 안 거침, "체인 기록" 배지). docs/api.md 13장
 getChainEventStatus(eventId): Promise<ChainEventStatus>   // S8 공개 현황판: 정원·활성·발급·입장·재배정·회수
@@ -263,6 +290,8 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - 거부된 스캔도 `ScanLog`에 기록한다 (관리자 "거부된 시도")
 
 ### 취소 · 재배정 규칙
+- 대기 명단은 행사 담당자가 구글 시트(이름·학번, 위에서부터 대기 순서)로 등록한다. 서버가 재학생 명단과 대조해 `events/{id}/waitlist/{email}`로 저장한다. 다시 불러오면 대기 중인 줄은 시트대로 바뀌고, 이미 배정·당첨 처리된 줄은 그대로 남는다. 대기 명단은 클라이언트가 직접 읽지 못한다(문서 id가 메일).
+- 행사 명단 행사(`requireRoster`)에서도 대기 명단에 있는 학생은 재배정·추첨으로 입장권을 받을 수 있다.
 - 주인이 취소하면 `reassignMode`에 따라 대기 명단에서 후보를 고른다. `queue`는 `order`가 작은 순서, `random`은 무작위.
 - 후보 조건: 이미 로그인해 `users`에 같은 메일이 있고, 도메인이 `allowedDomains`에 있고, 이 행사 입장권이 없다. 못 맞추면 건너뛴다.
 - 후보가 있으면 `ownerUid`를 바꾸고 QR을 지운다(`reassigned`). 없으면 취소 상태로 두고 수량을 돌려준다(`released`). 받은 사람은 취소한 사람에게 알려주지 않는다.
@@ -280,7 +309,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).
-- 아직 화면과 mock뿐: 재학생 승인, 사진·학생증 업로드, 대기 명단 등록, 테마·검표 설정 저장, 개인정보 파기
+- 아직 화면과 mock뿐: 테마·검표 설정 저장, 개인정보 파기
 - 하지 않는 것: reCAPTCHA, App Check, Gemini, 결제, 개인 간 양도
 - 배포 빌드는 Firebase 설정(`.env.local`)이 없으면 실패한다. mock 빌드는 `VITE_BACKEND=mock`을 명시한다.
 
@@ -290,7 +319,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 3. 본인 QR 스캔 → 입장 성공, 사진·이름·학번 대조, 노트북의 관리자 화면 인원 즉시 증가
 4. 같은 QR 다시 스캔 → 사용됨으로 거부
 5. 입장권 취소 → 대기 명단의 다음 학생에게 재배정 (그 학생 폰에 입장권이 바로 나타남). 취소한 학생은 다시 못 받음
-6. (보여줄 여유가 있으면) 관리자 메뉴: 취소·재배정 기록, 재배정 방식 변경, 재학생 승인, 행사 테마
+6. (보여줄 여유가 있으면) 관리자 메뉴: 취소·재배정 기록, 재배정 방식 변경, 행사 명단, 행사 테마
 
 폰 두 대(학생용, 검표용) + 노트북(관리자 화면)으로 리허설한다.
 
@@ -315,8 +344,20 @@ firebase deploy --only hosting   # 저장소 루트에서
 - 무엇을 바꿨는지, 어떤 파일을 건드렸는지, 남의 소유 파일에 필요한 변경 요청이 있는지 짧게 요약한다.
 
 ## 명단 (학교 스페이스 · 행사)
-- 학교 관리자(`users.adminSchoolId`)는 자기 학교만 다룬다. 값이 없는 admin은 SafePass 팀 계정 (모든 학교, 새 스페이스).
-- **재학생 명단**(`schools/{id}/roster/{studentId}`): 회원가입 대조. 학번으로 줄을 찾고 이름 + 로그인 메일이 그 줄과 같아야 한다. 학번 하나에 계정 하나(`claimedBy`).
-- **행사 명단**(`events/{id}/roster/{email}`): `requireRoster` 행사는 여기 있는 메일만 발급 (`not_in_roster`).
-- 시트는 관리자가 Cloud Functions 서비스 계정에 뷰어로 공유하고, 함수가 읽어 Firestore에 복사한다. 명단 하위 컬렉션은 클라이언트가 읽지 못한다. 시트 첫 줄은 `이름`·`학번`·`이메일` 제목.
+- 행사 담당자(`users.adminSchoolId`)는 자기 학교만 다룬다. 값이 없는 admin은 SafePass 팀 계정 (모든 학교, 새 스페이스). 그중 `operator`가 있는 계정이 운영진.
+- **재학생 명단**(`schools/{id}/roster/{studentId}`, 이름·학번·메일): 회원가입 대조. 학번으로 줄을 찾고 이름 + 로그인 메일이 그 줄과 같아야 한다. 학번 하나에 계정 하나(`claimedBy`). 데모에서는 시드가 넣고 운영진 콘솔에서 고친다.
+- **행사 명단**(`events/{id}/roster/{studentId}`, 이름·학번): `requireRoster` 행사는 학생의 학번 줄이 있고 이름이 같아야 발급 (`not_in_roster`). 시트로 불러오면 주최 학교 재학생 명단과 학번·이름이 맞는 줄만 들어간다(안 맞으면 `NOT_IN_STUDENT_ROSTER`·`NAME_MISMATCH`로 건너뜀). 행사 담당자 화면에는 메일이 나오지 않는다.
+- 시트는 관리자가 Cloud Functions 서비스 계정에 뷰어로 공유하고, 함수가 읽어 Firestore에 복사한다. 명단 하위 컬렉션은 클라이언트가 읽지 못한다. 재학생 시트 첫 줄은 `이름`·`학번`·`이메일`, 행사 시트는 `이름`·`학번`.
 - 배포 전 GCP 콘솔에서 **Google Sheets API 사용 설정**이 필요하다.
+
+## 데모 데이터 (시드)와 운영진 계정
+- `functions/seed.ts`: 학교 4곳(고려대·연세대·성균관대·KAIST)과 행사 7개.
+  - 행사 명단 행사(`requireRoster` 켬): 고려대 입실렌티·고연전, 연세대 아카라카·연고전. 행사 담당자가 시트로 올린 명단의 학생만 받는다.
+  - 모든 재학생 행사(`requireRoster` 끔): 고려대 석탑대동제, 성균관대 대동제, KAIST 태울석림제. 행사 명단 없이 재학생 명단으로 가입한 학생은 누구나 받는다.
+  - 둘 다 행사 담당자가 "행사 설정"에서 바꿀 수 있다.
+- 학생은 넣지 않는다. 학교마다 빈 재학생 명단으로 시작하고, 팀원이 운영진 콘솔에서 자기 학교 계정을 넣는다. 이미 있는 명단은 건드리지 않는다.
+- 운영진 콘솔에서 재학생 명단은 언제든 고칠 수 있다. 행사 명단은 **행사 담당자가 시트로 한 번 불러온 뒤에만** 고칠 수 있다(그 전에는 `NO_SHEET_IMPORT`로 거부, 콘솔은 읽기만).
+- 운영진 계정: `OPS_PASSWORD=... npm --prefix functions run seed`로 만들거나 비밀번호를 바꾼다(아이디 기본 `ops`, `OPS_ID`로 변경). 비밀번호는 코드에 두지 않는다. 처음 한 번 Firebase 콘솔에서 **Authentication → 이메일/비밀번호 로그인 사용**이 필요하다.
+- 예전 시드의 행사(`test-reassign`, `koyon-*`)는 시드가 경고만 하고, `SEED_PRUNE=1`일 때 지운다.
+- mock 운영진: 아이디 `ops` / 비밀번호 `ops` (화면에는 표시하지 않는다).
+- 확인: `npm --prefix functions run test:seed` (에뮬레이터에서 시드 → 운영진 로그인 → 명단 조회). 에뮬레이터는 Java 21 이상이 필요하다.

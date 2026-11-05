@@ -57,7 +57,12 @@ export function RosterPage() {
         />
       ) : (
         <div className="flex flex-col gap-6">
-          <SheetImportCard view={view} onImport={(url) => importEventRoster(eventId, url)} onImported={onImported} />
+          <SheetImportCard
+            kind="event"
+            view={view}
+            onImport={(url) => importEventRoster(eventId, url)}
+            onImported={onImported}
+          />
           {view === null ? (
             <StateView kind="loading" />
           ) : view.summary ? (

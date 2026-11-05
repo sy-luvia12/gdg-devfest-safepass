@@ -12,6 +12,8 @@ export const setStaff = onCall<unknown, Promise<SetStaffResponse>>(callableOptio
   const caller = requireAuth(request);
   const email = readString(request.data, 'email').trim().toLowerCase();
   if (!/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(email)) throw new HttpsError('invalid-argument', 'email is not valid.');
+  // Operator accounts (seed.ts) are never staff, even before their first sign-in
+  if (email.endsWith('@ops.safepass.app')) throw new HttpsError('failed-precondition', 'An operator account cannot be changed.');
   const staff = (request.data as { staff?: unknown } | null)?.staff;
   if (typeof staff !== 'boolean') throw new HttpsError('invalid-argument', 'staff must be a boolean.');
   const role = staff ? 'staff' : 'student';

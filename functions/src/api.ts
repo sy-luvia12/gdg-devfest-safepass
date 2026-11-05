@@ -20,6 +20,8 @@ export interface UserProfile {
   rosterVerified?: boolean;
   /** Set once the student sent a face photo with submitProfilePhoto. Sign-up is complete with both flags. */
   photoSubmitted?: boolean;
+  /** The SafePass operator account (an admin without adminSchoolId). Only it can call the ops* functions. */
+  operator?: boolean;
 }
 
 export type EnsureUserResponse = UserProfile;
@@ -228,16 +230,25 @@ export interface RosterSummary {
   importedAtMs: number;
   count: number;
 }
-export type RosterSkipReason = 'MISSING_FIELD' | 'BAD_STUDENT_ID' | 'BAD_DOMAIN' | 'DUPLICATE_STUDENT_ID' | 'DUPLICATE_EMAIL';
+// NOT_IN_STUDENT_ROSTER and NAME_MISMATCH are event roster rows that do not match the host school's student roster.
+export type RosterSkipReason =
+  | 'MISSING_FIELD'
+  | 'BAD_STUDENT_ID'
+  | 'BAD_DOMAIN'
+  | 'DUPLICATE_STUDENT_ID'
+  | 'DUPLICATE_EMAIL'
+  | 'NOT_IN_STUDENT_ROSTER'
+  | 'NAME_MISMATCH';
 export interface ImportRosterResponse {
   ok: true;
   summary: RosterSummary;
   skipped: { row: number; reason: RosterSkipReason }[];
 }
 // summary is null before the first import. entries holds the first ROSTER_PREVIEW rows, sorted by student id.
+// Event roster entries have no email: event admins see names and student ids only.
 export interface GetRosterResponse {
   summary: RosterSummary | null;
-  entries: RosterEntry[];
+  entries: (Omit<RosterEntry, 'email'> & { email?: string })[];
   serviceAccountEmail: string;
 }
 export const ROSTER_PREVIEW = 200;
@@ -255,6 +266,28 @@ export interface ImportEventRosterRequest {
 }
 export interface GetEventRosterRequest {
   eventId: string;
+}
+
+// Waitlist (대기 명단): the event admin loads a sheet of 이름·학번 in waiting order. Rows that match the host school's
+// roster become events/{id}/waitlist/{email}; cancelTicket (queue/random) and the lottery draw from it.
+export interface ImportWaitlistRequest {
+  eventId: string;
+  sheetUrl: string;
+}
+export interface GetWaitlistRequest {
+  eventId: string;
+}
+// No emails: the event admin sees names and student ids only. status is 'waiting' or a settled state.
+export interface WaitlistRow {
+  order: number;
+  name: string;
+  studentId: string;
+  status: string;
+}
+export interface GetWaitlistResponse {
+  summary: RosterSummary | null;
+  entries: WaitlistRow[];
+  serviceAccountEmail: string;
 }
 
 // schoolIds[0] hosts the event and its admin creates it. allowedDomains come from the schools' domains.
@@ -330,6 +363,89 @@ export interface SubmitProfilePhotoResponse {
   profile: UserProfile;
 }
 
+// ---------- Operator console (ops*). Only the operator account (users.operator) can call these ----------
+
+export type OpsRosterKind = 'school' | 'event';
+export interface OpsListRosterRequest {
+  kind: OpsRosterKind;
+  /** schoolId for 'school', eventId for 'event' */
+  id: string;
+}
+// School rows carry the email and whether a student signed up with the row. Event rows carry the host school's
+// roster email of the same student id and whether the row matches it.
+export interface OpsRosterRow {
+  name: string;
+  studentId: string;
+  email?: string;
+  claimed?: boolean;
+  match?: 'OK' | 'NOT_IN_STUDENT_ROSTER' | 'NAME_MISMATCH';
+}
+export interface OpsListRosterResponse {
+  rows: OpsRosterRow[];
+  summary: RosterSummary | null;
+  /** The event's host school, for 'event' */
+  schoolId?: string;
+  /** false for an event roster the event admin has not loaded from a sheet yet: opsEditRoster refuses it */
+  editable: boolean;
+}
+export const OPS_EDIT_MAX = 3000;
+export interface OpsEditRosterRequest {
+  kind: OpsRosterKind;
+  id: string;
+  /** Rows to add or overwrite, keyed by studentId. Event rows ignore email. */
+  upserts: { name: string; studentId: string; email?: string }[];
+  /** Student ids to remove */
+  deletes: string[];
+  /** Remove every row not in upserts (paste a whole sheet) */
+  replace?: boolean;
+}
+export interface OpsEditRosterResponse {
+  ok: true;
+  saved: number;
+  deleted: number;
+  /** index into upserts */
+  skipped: { index: number; reason: RosterSkipReason }[];
+  summary: RosterSummary;
+}
+export interface OpsListStudentsRequest {
+  schoolId: string;
+}
+export interface OpsStudent {
+  uid: string;
+  name: string;
+  studentId: string;
+  email: string;
+  /** A device key is registered (devices/{uid}) */
+  deviceRegistered: boolean;
+  /** The student asked for a reset (deviceResets/{uid} pending) */
+  resetRequested: boolean;
+}
+export interface OpsListStudentsResponse {
+  students: OpsStudent[];
+}
+
+// Event admins (행사 담당자) are admin accounts with adminSchoolId, usually a team member's own Gmail. The operator
+// assigns them by email. Someone who has not signed in yet gets it on the first Google sign-in (seedProfiles).
+export interface OpsEventAdmin {
+  email: string;
+  name: string;
+  schoolId: string;
+  /** ACTIVE: signed in already. PENDING_SIGNUP: applies on the first sign-in */
+  status: 'ACTIVE' | 'PENDING_SIGNUP';
+}
+export interface OpsListEventAdminsResponse {
+  admins: OpsEventAdmin[];
+}
+export interface OpsSetEventAdminRequest {
+  email: string;
+  /** The school this account manages events for. null removes the event admin role. */
+  schoolId: string | null;
+}
+export interface OpsSetEventAdminResponse {
+  ok: true;
+  status: 'UPDATED' | 'PENDING_SIGNUP' | 'REMOVED';
+}
+
 // Cancelled-ticket lottery (reassignMode 'lottery'). Times are Asia/Seoul wall clock "HH:MM".
 export interface LotteryPhase {
   announceTimes: string[];
@@ -403,6 +519,13 @@ export interface Callables {
   listOpenSchools: [void, ListOpenSchoolsResponse];
   precheckStudent: [PrecheckStudentRequest, PrecheckStudentResponse];
   submitProfilePhoto: [SubmitProfilePhotoRequest, SubmitProfilePhotoResponse];
+  importWaitlist: [ImportWaitlistRequest, ImportRosterResponse];
+  getWaitlist: [GetWaitlistRequest, GetWaitlistResponse];
+  opsListRoster: [OpsListRosterRequest, OpsListRosterResponse];
+  opsEditRoster: [OpsEditRosterRequest, OpsEditRosterResponse];
+  opsListStudents: [OpsListStudentsRequest, OpsListStudentsResponse];
+  opsListEventAdmins: [void, OpsListEventAdminsResponse];
+  opsSetEventAdmin: [OpsSetEventAdminRequest, OpsSetEventAdminResponse];
   runDrawNow: [RunDrawNowRequest, RunDrawNowResponse];
   getMyLottery: [GetMyLotteryRequest, GetMyLotteryResponse];
   claimTicket: [ClaimTicketRequest, ClaimTicketResponse];

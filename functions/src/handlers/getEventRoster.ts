@@ -13,5 +13,5 @@ export const getEventRoster = onCall<unknown, Promise<GetRosterResponse>>(callab
     if (!event.exists) throw new HttpsError('not-found', 'Event not found.');
     await requireSchoolAdmin(tx, caller.uid, hostOf(event.get('schoolIds')));
   });
-  return readRoster(eventRosterPlace(eventId));
+  return readRoster(eventRosterPlace(eventId), false);
 });
