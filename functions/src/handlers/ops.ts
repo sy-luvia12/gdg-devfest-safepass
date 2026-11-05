@@ -207,21 +207,22 @@ export const opsListEventAdmins = onCall<unknown, Promise<OpsListEventAdminsResp
   ]);
   const admins: OpsEventAdmin[] = [];
   const signedIn = new Set<string>();
+  // Admins with no school (old team accounts) are listed with schoolId '' so the operator can assign one.
   for (const d of users.docs) {
     signedIn.add(String(d.get('email') ?? '').toLowerCase());
-    if (!d.get('adminSchoolId')) continue;
-    admins.push({ email: d.get('email') ?? '', name: d.get('name') ?? '', schoolId: d.get('adminSchoolId'), status: 'ACTIVE' });
+    if (d.get('operator') === true) continue;
+    admins.push({ email: d.get('email') ?? '', name: d.get('name') ?? '', schoolId: d.get('adminSchoolId') ?? '', status: 'ACTIVE' });
   }
   for (const d of pending.docs) {
-    if (!d.get('adminSchoolId') || signedIn.has(d.id)) continue;
-    admins.push({ email: d.id, name: d.get('name') ?? '', schoolId: d.get('adminSchoolId'), status: 'PENDING_SIGNUP' });
+    if (d.get('operator') === true || signedIn.has(d.id)) continue;
+    admins.push({ email: d.id, name: d.get('name') ?? '', schoolId: d.get('adminSchoolId') ?? '', status: 'PENDING_SIGNUP' });
   }
   admins.sort((a, b) => a.schoolId.localeCompare(b.schoolId) || a.email.localeCompare(b.email));
   return { admins };
 });
 
-// Makes an account the event admin of one school, or removes the role (schoolId null). SafePass team admins and
-// the operator are never changed here.
+// Makes an account the event admin of one school, or removes the role (schoolId null). This is also how an old
+// SafePass team account (an admin with no school) gets a school. The operator is never changed here.
 export const opsSetEventAdmin = onCall<unknown, Promise<OpsSetEventAdminResponse>>(callableOptions, async (request) => {
   const caller = requireAuth(request);
   const data = (request.data ?? {}) as { email?: unknown; schoolId?: unknown };
@@ -237,10 +238,7 @@ export const opsSetEventAdmin = onCall<unknown, Promise<OpsSetEventAdminResponse
     const seedRef = db.doc(`seedProfiles/${email}`);
     const seed = await tx.get(seedRef);
     const current = account ?? (seed.exists ? seed : null);
-    // A team admin (admin without a school) stays as it is
-    if (current?.get('role') === 'admin' && !current.get('adminSchoolId')) {
-      throw new HttpsError('failed-precondition', 'A SafePass team admin cannot be changed.');
-    }
+    if (current?.get('operator') === true) throw new HttpsError('failed-precondition', 'An operator account cannot be changed.');
     const grant = { role: 'admin', adminSchoolId: schoolId, staffSchoolId: FieldValue.delete() };
     const revoke = { role: 'student', adminSchoolId: FieldValue.delete() };
 

@@ -85,15 +85,12 @@ const retiredEvents = ['test-reassign', 'koyon-basketball', 'koyon-icehockey', '
 const OPS_ID = process.env.OPS_ID ?? 'ops';
 const OPS_EMAIL = `${OPS_ID}@ops.safepass.app`;
 
-// A profile only applies before the first sign-in. Add test accounts here first.
-// An admin with adminSchoolId manages only that school (e.g. { ..., role: 'admin', adminSchoolId: 'korea' }).
-// An admin without it is a SafePass team account that manages every school and can open new school spaces.
-// Replace the demo-* addresses with the team's real school accounts before the rehearsal.
-// Event admins (행사 담당자) are admins with adminSchoolId. Students sign up against the student roster, so they need
-// no profile here.
+// A profile only applies before the first sign-in (and only to a verified email).
+// Admins are the operator (operator: true, no school) or event admins of one school (adminSchoolId), which the
+// operator assigns in /ops. There is no school-less team admin any more. Students sign up against the student
+// roster, so they need no profile here.
 const profiles = [
   { email: OPS_EMAIL, name: '어둠의 운영진', studentId: '', role: 'admin', operator: true },
-  { email: 'tigerex91@gmail.com', name: '관리자', studentId: '', role: 'admin' },
   { email: 'demo-staff@korea.ac.kr', name: '검표 스태프', studentId: '', role: 'staff', staffSchoolId: 'korea' },
 ];
 

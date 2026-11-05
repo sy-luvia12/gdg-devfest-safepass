@@ -39,32 +39,38 @@ export async function requireRole(
   return snap.data()!;
 }
 
-// Admin of this school: a school admin (adminSchoolId) for that school only, a team admin (no adminSchoolId) for any.
+// Admins are event admins of one school (adminSchoolId) or the operator, who works for every school. An admin with
+// neither (an old SafePass team account) has no school and no admin access until the operator assigns one in /ops.
+export const isOperator = (user: DocumentData) => user.role === 'admin' && user.operator === true && !user.adminSchoolId;
+
+// Admin of this school: its event admin, or the operator.
 export async function requireSchoolAdmin(tx: Transaction, uid: string, schoolId: string): Promise<DocumentData> {
   const user = await requireRole(tx, uid, ['admin']);
-  if (user.adminSchoolId && user.adminSchoolId !== schoolId) {
-    throw new HttpsError('permission-denied', 'This admin manages another school.');
-  }
+  if (isOperator(user)) return user;
+  if (!user.adminSchoolId) throw new HttpsError('permission-denied', 'No school assigned to this admin yet.');
+  if (user.adminSchoolId !== schoolId) throw new HttpsError('permission-denied', 'This admin manages another school.');
   return user;
 }
 
 // The SafePass operator: an admin with no school and the operator flag (from its seed profile).
 export async function requireOperator(tx: Transaction, uid: string): Promise<DocumentData> {
   const user = await requireRole(tx, uid, ['admin']);
-  if (user.operator !== true || user.adminSchoolId) throw new HttpsError('permission-denied', 'Operator only.');
+  if (!isOperator(user)) throw new HttpsError('permission-denied', 'Operator only.');
   return user;
 }
 
-// The school an operator works for: adminSchoolId for an admin, staffSchoolId for staff. Undefined means a
-// SafePass team account (or staff added before schools were scoped), which may work at every school.
-export function operatorSchoolId(user: DocumentData): string | undefined {
-  return (user.role === 'admin' ? user.adminSchoolId : user.staffSchoolId) || undefined;
+// The school a staff member or admin works for. undefined: every school (the operator, or staff the operator added
+// without a school). null: none (an admin with no school assigned).
+export function operatorSchoolId(user: DocumentData): string | undefined | null {
+  if (user.role === 'admin') return user.adminSchoolId || (isOperator(user) ? undefined : null);
+  return user.staffSchoolId || undefined;
 }
 
-// Staff and school admins only work at events their school takes part in.
+// Staff and event admins only work at events their school takes part in.
 export async function requireEventSchool(tx: Transaction, user: DocumentData, eventId: string): Promise<void> {
   const school = operatorSchoolId(user);
-  if (!school) return;
+  if (school === undefined) return;
+  if (school === null) throw new HttpsError('permission-denied', 'No school assigned to this admin yet.');
   const schoolIds = (await tx.get(db.doc(`events/${eventId}`))).get('schoolIds');
   if (!Array.isArray(schoolIds) || !schoolIds.includes(school)) {
     throw new HttpsError('permission-denied', 'This event belongs to another school.');

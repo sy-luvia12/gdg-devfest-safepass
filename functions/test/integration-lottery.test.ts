@@ -65,7 +65,8 @@ beforeAll(async () => {
     enteredCount: 0,
     reassignMode: 'lottery',
   });
-  await db.doc(`seedProfiles/${ADMIN}`).set({ name: 'Admin', studentId: '', photoUrl: null, role: 'admin' });
+  // The operator: an admin with no school works for every school only with the operator flag
+  await db.doc(`seedProfiles/${ADMIN}`).set({ name: 'Admin', studentId: '', photoUrl: null, role: 'admin', operator: true });
   [seller, seller2, chief] = await Promise.all([SELLER, SELLER2, ADMIN].map(signIn));
   waiters.push(...(await Promise.all(W.map(signIn))));
   await Promise.all([seller, seller2, chief, ...waiters].map((c) => c.ensureUser()));

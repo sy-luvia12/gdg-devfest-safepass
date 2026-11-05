@@ -92,7 +92,8 @@ beforeAll(async () => {
   });
   await db.doc(`seedProfiles/${ALICE}`).set({ name: 'Alice Kim', studentId: '2024000001', photoUrl: 'https://example.com/a.png', role: 'student' });
   await db.doc(`seedProfiles/${STAFF}`).set({ name: 'Gate Staff', studentId: '', photoUrl: null, role: 'staff' });
-  await db.doc(`seedProfiles/${CHIEF}`).set({ name: 'Chief Admin', studentId: '', photoUrl: null, role: 'admin' });
+  // An admin with no school works only as the operator (there is no school-less team admin any more)
+  await db.doc(`seedProfiles/${CHIEF}`).set({ name: 'Chief Admin', studentId: '', photoUrl: null, role: 'admin', operator: true });
   [alice, bob, carol, dave, erin, staff, outsider, chief, frank] = await Promise.all(
     [ALICE, BOB, CAROL, DAVE, ERIN, STAFF, OUTSIDER, CHIEF, FRANK].map(signIn),
   );
