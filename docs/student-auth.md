@@ -16,11 +16,11 @@
 | 함수 | 언제 | 성공 | 실패 (`ApiError.code`) |
 |---|---|---|---|
 | `listOpenSchools()` | 가입 화면 학교 고르기 (로그인 전) | `{ id, name, domain }[]` | `unknown` |
-| `precheckStudent({ email, studentId, name })` | 가입: 메일 보내기 전 | `{ schoolId, schoolName }` | `not_school_account` 명단 있는 학교 메일 아님 · `not_in_roster` 명단에 없음(이름 틀림 포함) · `email_mismatch` 그 학번의 메일이 아님 · `student_id_taken` 이미 가입된 학번 |
+| `precheckStudent({ email, studentId, name })` | 가입: 메일 보내기 전. 통과하면 서버가 메일 기준으로 가입 정보(학교·학번)를 1시간 저장한다 (`signupIntents`) | `{ schoolId, schoolName }` | `not_school_account` 명단 있는 학교 메일 아님 · `not_in_roster` 명단에 없음(이름 틀림 포함) · `email_mismatch` 그 학번의 메일이 아님 · `student_id_taken` 이미 가입된 학번 |
 | `precheckStudent({ email, studentId })` | 학번 로그인: 메일 보내기 전 | 위와 같음 | 위와 같음 + `not_registered` 아직 가입 안 함 |
-| `sendSignInLink(email, signup?)` | 메일 보내기. 가입이면 `signup = { schoolId, name, studentId }` | 없음 | `unknown` |
+| `sendSignInLink(email)` | 메일 보내기. 가입 정보는 직전 `precheckStudent`가 서버에 남겨 두어 따로 넘기지 않는다 (두 번째 인자는 호환용으로 무시) | 없음 | `unknown` |
 | `isSignInLink(location.href)` | `/auth/finish`에서 이 주소가 링크인지 | `boolean` | |
-| `pendingSignInEmail()` | `/auth/finish`에서 보낸 메일 주소 (같은 브라우저면 있음) | `string \| null` | |
+| `pendingSignInEmail()` | `/auth/finish`에서 보낸 메일 주소 (같은 브라우저면 있음. 없으면 메일을 다시 입력받는다) | `string \| null` | |
 | `completeSignInLink(location.href, email?)` | `/auth/finish`. 다른 기기에서 열어 `pendingSignInEmail()`이 null이면 메일을 입력받아 넘긴다 | `User` | `not_registered` 가입 안 한 메일로 로그인 · 가입 중이면 `not_in_roster` / `email_mismatch` / `student_id_taken` · `invalid_state` 메일을 모름·링크 만료 |
 | `submitProfilePhoto(photoDataUrl)` | 온보딩 마지막. `ImagePicker`의 JPEG data URL (300KB 이하) | `User` (`verifyStatus: 'approved'`) | `invalid_state` 명단 대조 전 · `unknown` |
 

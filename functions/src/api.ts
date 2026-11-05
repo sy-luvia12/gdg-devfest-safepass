@@ -325,13 +325,17 @@ export interface UpdateEventResponse {
 
 // Sign-up check, called by the signed-in student. The row is found by student id; the name must match it and the
 // signed-in (Google-verified) email must be the row's email. A student id can back only one account.
-export const VERIFY_STUDENT_REASONS = ['NOT_IN_ROSTER', 'EMAIL_MISMATCH', 'STUDENT_ID_TAKEN'] as const;
+// Without any field it uses what precheckStudent saved for the signed-in email (signupIntents), so the email link can
+// be opened in any browser. A student who already finished the roster check gets ok again. NO_SIGNUP: neither.
+export const VERIFY_STUDENT_REASONS = ['NOT_IN_ROSTER', 'EMAIL_MISMATCH', 'STUDENT_ID_TAKEN', 'NO_SIGNUP'] as const;
 export type VerifyStudentReason = (typeof VERIFY_STUDENT_REASONS)[number];
 export interface VerifyStudentRosterRequest {
-  schoolId: string;
-  name: string;
-  studentId: string;
+  schoolId?: string;
+  name?: string;
+  studentId?: string;
 }
+// How long a passed sign-up check stays usable by the email link.
+export const SIGNUP_INTENT_TTL_MS = 60 * 60 * 1000;
 export type VerifyStudentRosterResponse = { ok: true; profile: UserProfile } | { ok: false; reason: VerifyStudentReason };
 
 // ---------- Student sign-up and sign-in by email link (no sign-in needed for these two) ----------
