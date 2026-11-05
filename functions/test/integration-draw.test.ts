@@ -154,6 +154,7 @@ describe('operator interventions on chain', () => {
     expect(record.docs[0].data()).toMatchObject({ mode: 'revoke', fromUid: dee.uid, toUid: null });
 
     expect(await reasonOf(dee.call('issueTicket', { eventId: EV_OPEN }))).toBe('CANCELLED_BEFORE');
+    expect((await dee.call('myRosterStatus', { eventIds: [EV_OPEN] })).status[EV_OPEN]).toBe('cancelled');
     expect(await admin.call('revokeTicket', { ticketId })).toEqual({ ok: false, reason: 'NOT_ISSUED' });
   });
 
