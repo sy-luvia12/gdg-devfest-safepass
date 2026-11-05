@@ -260,6 +260,8 @@ verifyMyDraw(entry): Promise<DrawCheck>                   // S7 직접 검증 (D
 enterDraw(eventId): Promise<EntryDraw>                    // 한 학번·한 행사에 한 번만. 다시 불러도 같은 응모 (재추첨 없음)
 getMyEntryDraw(eventId): Promise<EntryDraw | null>        // pending → won / lost. 당첨자만 issueTicket (아니면 'draw_not_won')
 verifyMyEntry(entry): Promise<EntryVerification>          // 폰에서 다시 계산: 응모 번호·확률·시드(블록 해시)·점수·결과
+listEntryDraws(eventId): Promise<EntryDrawAdmin>          // 관리자: 응모자 이름·학번·결과 (실시간 현황 카드, "추첨 결과" 메뉴)
+updateDrawSettings(eventId, { instantDraw, drawPool })    // 관리자 행사 설정: 추첨 켜기, 재학생 수 (확률 = 정원 ÷ 재학생 수)
 
 // 취소표 추첨 (reassignMode 'lottery' 행사만). docs/api.md 14장
 getMyLottery(eventId): Promise<MyLottery>                 // 대기 중 / 당첨(기한) / 수락 완료 / 기한 지남 / 마감. receipt → verifyMyDraw
@@ -368,7 +370,7 @@ firebase deploy --only hosting   # 저장소 루트에서
   - 모든 재학생 행사(`requireRoster` 끔): 고연전·연고전의 야구·축구·럭비, 석탑대동제, 성균관대 대동제, KAIST 태울석림제.
   - 둘 다 행사 담당자가 "행사 설정"에서 바꿀 수 있다.
 - 학생은 넣지 않는다. 학교마다 빈 재학생 명단으로 시작하고, 팀원이 운영진 콘솔에서 자기 학교 계정을 넣는다. 이미 있는 명단은 건드리지 않는다.
-- 운영진 콘솔에서 재학생 명단은 언제든 고칠 수 있다. 행사 명단은 **행사 담당자가 시트로 한 번 불러온 뒤에만** 고칠 수 있다(그 전에는 `NO_SHEET_IMPORT`로 거부, 콘솔은 읽기만).
+- 운영진 콘솔에서 재학생 명단은 언제든 고칠 수 있다. 재학생 명단에서 학생을 지우면 그 학생의 입장권(입장 전이면 체인에서 반납)·검표 기록·취소 기록·추첨 응모·기기·학생증·가입 표시도 정리되어, 다시 넣으면 처음부터 가입한다 (`functions/src/handlers/purgeStudent.ts`). 체인 기록은 지우지 않는다. 행사 명단은 **행사 담당자가 시트로 한 번 불러온 뒤에만** 고칠 수 있다(그 전에는 `NO_SHEET_IMPORT`로 거부, 콘솔은 읽기만).
 - 운영진 계정: `OPS_PASSWORD=... npm --prefix functions run seed`로 만들거나 비밀번호를 바꾼다(아이디 기본 `ops`, `OPS_ID`로 변경). 비밀번호는 코드에 두지 않는다. 처음 한 번 Firebase 콘솔에서 **Authentication → 이메일/비밀번호 로그인 사용**이 필요하다.
 - 예전 시드의 행사(`test-reassign`, 두 학교 공동 `koyon-*`, 경기 구분 없던 `korea-koyon`·`yonsei-yonko`)는 시드가 경고만 하고, `SEED_PRUNE=1`일 때 그 행사의 명단·입장권·검표 기록·재배정 기록까지 지운다.
 - mock 운영진: 아이디 `ops` / 비밀번호 `ops` (화면에는 표시하지 않는다).

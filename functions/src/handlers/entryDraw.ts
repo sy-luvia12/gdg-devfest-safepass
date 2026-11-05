@@ -1,12 +1,12 @@
 import { FieldValue, type DocumentData } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { hexlify, randomBytes } from 'ethers';
-import type { EntryDrawResponse, EntryDrawView, IssueReason } from '../api';
+import type { EntryDrawResponse, EntryDrawView, IssueReason, ListEntryDrawsResponse } from '../api';
 import { eventKeyOf } from '../chain/ids';
 import { entryIdOf, studentRefOf, winBpsOf } from '../domain/entryDraw';
 import { emailDomain } from '../domain/ticket';
 import { db } from '../firebase';
-import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
+import { eventFromSnap, hostOf, readDocId, requireAuth, requireRole, requireSchoolAdmin } from './boundary';
 import { callableOptions } from './callableOptions';
 import { schoolForEmail } from './rosterStore';
 
@@ -16,7 +16,8 @@ import { schoolForEmail } from './rosterStore';
 // One entry per student id and event, ever: removing and re-adding a student to the roster does not draw again.
 
 export const entryDrawRef = (eventId: string, studentId: string) => db.doc(`entryDraws/${eventId}_${studentId}`);
-export const entryOpId = (eventId: string, studentId: string) => `entry-${eventId}_${studentId}`;
+// The salt makes it unique, so an entry made again after the operator cleared a student gets its own op.
+export const entryOpId = (eventId: string, studentId: string, salt: string) => `entry-${eventId}_${studentId}_${salt.slice(2, 10)}`;
 
 const millis = (v: unknown) => (v && typeof (v as { toMillis?: unknown }).toMillis === 'function' ? (v as { toMillis(): number }).toMillis() : 0);
 
@@ -83,7 +84,7 @@ export const enterDraw = onCall<unknown, Promise<EntryDrawResponse>>(callableOpt
       createdAt: FieldValue.serverTimestamp(),
     };
     tx.create(ref, doc);
-    tx.create(db.doc(`chainOps/${entryOpId(eventId, studentId)}`), {
+    tx.create(db.doc(`chainOps/${entryOpId(eventId, studentId, salt)}`), {
       kind: 'openEntry',
       eventId,
       entryDocId: ref.id,
@@ -108,4 +109,39 @@ export const getMyEntryDraw = onCall<unknown, Promise<EntryDrawResponse>>(callab
   const snap = await entryDrawRef(eventId, studentId).get();
   if (!snap.exists || snap.get('uid') !== caller.uid) return { entry: null };
   return { entry: entryView(snap.data()!) };
+});
+
+const ADMIN_LIST_MAX = 500;
+
+/** The event's entries for its school admin: who entered, and what the chain decided. Newest first. */
+export const listEntryDraws = onCall<unknown, Promise<ListEntryDrawsResponse>>(callableOptions, async (request) => {
+  const caller = requireAuth(request);
+  const eventId = readDocId(request.data, 'eventId');
+  const eventSnap = await db.doc(`events/${eventId}`).get();
+  const event = eventFromSnap(eventSnap);
+  if (!event) throw new HttpsError('not-found', 'Event not found.');
+  await db.runTransaction((tx) => requireSchoolAdmin(tx, caller.uid, hostOf(eventSnap.get('schoolIds'))));
+
+  const docs = (await db.collection('entryDraws').where('eventId', '==', eventId).get()).docs;
+  const uids = [...new Set(docs.map((d) => d.get('uid') as string).filter(Boolean))];
+  const names = new Map<string, string>();
+  for (let i = 0; i < uids.length; i += 300) {
+    for (const u of await db.getAll(...uids.slice(i, i + 300).map((uid) => db.doc(`users/${uid}`)))) names.set(u.id, (u.get('name') as string) ?? '');
+  }
+  const entries = docs
+    .map((d) => {
+      const v = entryView(d.data());
+      return { name: names.get(d.get('uid')) || '알 수 없음', studentId: d.get('studentId') ?? '', status: v.status, score: v.score, createdAt: v.createdAt };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const count = (s: string) => entries.filter((e) => e.status === s).length;
+  // Same rate enterDraw gives a new entry: the event's pool, else the host school's student roster size.
+  const rosterCount = ((await db.doc(`schools/${hostOf(eventSnap.get('schoolIds'))}`).get()).get('studentRoster.count') as number | undefined) ?? 0;
+  return {
+    capacity: event.capacity,
+    drawPool: event.drawPool,
+    winBps: winBpsOf(event.capacity, event.drawPool || rosterCount),
+    counts: { total: entries.length, pending: count('pending'), won: count('won'), lost: count('lost') },
+    entries: entries.slice(0, ADMIN_LIST_MAX),
+  };
 });

@@ -55,6 +55,9 @@ export const updateEvent = onCall<unknown, Promise<UpdateEventResponse>>(callabl
       capacity: readOptional(request.data, 'capacity', readCount),
       faceValue: readOptional(request.data, 'faceValue', readCount),
       requireRoster: readOptional(request.data, 'requireRoster', readBoolean),
+      // Instant draw: win rate = capacity / drawPool (the students the tickets are shared among)
+      instantDraw: readOptional(request.data, 'instantDraw', readBoolean),
+      drawPool: readOptional(request.data, 'drawPool', readCount),
     }).filter(([, v]) => v !== undefined),
   );
 

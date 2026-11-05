@@ -16,6 +16,7 @@ import {
 } from '../api';
 import { eventRowProblem, matchEventRow, studentRowProblem, type EventRosterRow, type RosterRow } from '../domain/roster';
 import { db } from '../firebase';
+import { purgeStudent } from './purgeStudent';
 import { hostOf, readDocId, requireAuth, requireOperator } from './boundary';
 import { callableOptions } from './callableOptions';
 import { eventRosterPlace, schoolRowsFor, studentRosterPlace, writeSummary, type RosterPlace } from './rosterStore';
@@ -154,6 +155,20 @@ export const opsEditRoster = onCall<unknown, Promise<OpsEditRosterResponse>>(cal
   const toDelete = new Set(deletes.filter((d) => !keep.has(d)));
   if (replace) for (const ref of await place.rows.listDocuments()) if (!keep.has(ref.id)) toDelete.add(ref.id);
 
+  // A student deleted from a school roster loses their records too (purgeStudent), so they can be added again and
+  // start over. Find the account first: the row's claimedBy, or a user who signed up with that student id.
+  const purge: { studentId: string; uid: string | null }[] = [];
+  if (kind === 'school') {
+    for (const studentId of toDelete) {
+      if (!/^[A-Za-z0-9-]{1,32}$/.test(studentId)) continue;
+      const claimed = (await place.rows.doc(studentId).get()).get('claimedBy') as string | undefined;
+      const byId = claimed
+        ? null
+        : (await db.collection('users').where('studentId', '==', studentId).get()).docs.find((u) => u.get('schoolId') === id);
+      purge.push({ studentId, uid: claimed ?? byId?.id ?? null });
+    }
+  }
+
   const writer = db.bulkWriter();
   for (const studentId of toDelete) {
     if (/^[A-Za-z0-9-]{1,32}$/.test(studentId)) void writer.delete(place.rows.doc(studentId));
@@ -162,9 +177,17 @@ export const opsEditRoster = onCall<unknown, Promise<OpsEditRosterResponse>>(cal
   for (const row of byId.values()) void writer.set(place.rows.doc(row.studentId), row, { merge: true });
   await writer.close();
 
+  const purged = { students: 0, tickets: 0, entries: 0 };
+  for (const p of purge) {
+    const r = await purgeStudent(id, p.studentId, p.uid);
+    purged.students += 1;
+    purged.tickets += r.tickets;
+    purged.entries += r.entries;
+  }
+
   const count = (await place.rows.count().get()).data().count;
   const summary = await writeSummary(place, count);
-  return { ok: true, saved: byId.size, deleted: toDelete.size, skipped, summary };
+  return { ok: true, saved: byId.size, deleted: toDelete.size, skipped, summary, ...(kind === 'school' ? { purged } : {}) };
 });
 
 export const opsListStudents = onCall<unknown, Promise<OpsListStudentsResponse>>(callableOptions, async (request) => {

@@ -45,9 +45,9 @@ import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
 import { checkEntry, entryIdOf, scoreOf, studentRefOf } from './chain/entry';
 import type { ChainDraw, ChainEntry, ChainEventStatus, DrawCheck, EntryVerification, MyDrawEntry } from './chain/types';
-import type { ClaimResult, EntryDraw, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
+import type { ClaimResult, EntryDraw, EntryDrawAdmin, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v9';
+const STATE_KEY = 'safepass-mock-v10';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
@@ -217,6 +217,7 @@ function seed(): MockState {
       reassignMode: 'queue',
       // 푸른대 축제는 즉석 추첨 행사 (mock: 브라우저에서 결과를 정한다)
       instantDraw: school.id === 'pureun',
+      drawPool: Math.round(event.capacity * 2.5),
       allowReissueAfterCancel: false,
       dataRetentionDays: 7,
     });
@@ -1615,7 +1616,7 @@ export async function enterDraw(eventId: string): Promise<EntryDraw> {
   const entry: EntryDraw = {
     eventId,
     status: 'pending',
-    winBps: winBpsOf(event.capacity, Math.round(event.capacity * MOCK_POOL_FACTOR)),
+    winBps: winBpsOf(event.capacity, event.drawPool ?? Math.round(event.capacity * MOCK_POOL_FACTOR)),
     studentRef,
     salt,
     entryId: entryIdOf(eventId, studentRef, salt),
@@ -1628,6 +1629,42 @@ export async function enterDraw(eventId: string): Promise<EntryDraw> {
   };
   localStorage.setItem(MOCK_ENTRIES, JSON.stringify({ ...mockEntries(), [`${eventId}:${user.uid}`]: entry }));
   return entry;
+}
+
+export async function listEntryDraws(eventId: string): Promise<EntryDrawAdmin> {
+  await wait();
+  const s = load();
+  requireUser(s, ['admin']);
+  const event = findEvent(s, eventId);
+  const pool = event.drawPool ?? Math.round(event.capacity * MOCK_POOL_FACTOR);
+  const entries = Object.entries(mockEntries())
+    .filter(([key]) => key.startsWith(`${eventId}:`))
+    .map(([key]) => {
+      const uid = key.slice(eventId.length + 1);
+      const e = mockEntry(eventId, uid)!;
+      const u = s.users.find((x) => x.uid === uid);
+      return { name: u?.name ?? '알 수 없음', studentId: u?.studentId ?? '', status: e.status, score: e.score, createdAt: e.createdAt };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const count = (st: string) => entries.filter((e) => e.status === st).length;
+  return {
+    capacity: event.capacity,
+    drawPool: pool,
+    winBps: winBpsOf(event.capacity, pool),
+    counts: { total: entries.length, pending: count('pending'), won: count('won'), lost: count('lost') },
+    entries,
+  };
+}
+
+export async function updateDrawSettings(eventId: string, draw: { instantDraw: boolean; drawPool: number }): Promise<Event> {
+  await wait();
+  const s = load();
+  requireUser(s, ['admin']);
+  const event = findEvent(s, eventId);
+  event.instantDraw = draw.instantDraw;
+  event.drawPool = draw.drawPool;
+  save(s);
+  return event;
 }
 
 export async function getMyEntryDraw(eventId: string): Promise<EntryDraw | null> {

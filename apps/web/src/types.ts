@@ -75,6 +75,8 @@ export type Event = {
   lottery?: boolean;
   /** 즉석 추첨 행사: 행사를 열면 응모되고, 체인이 정한 당첨자만 입장권을 받는다 (events.instantDraw) */
   instantDraw?: boolean;
+  /** 즉석 추첨의 응모 대상 재학생 수. 당첨 확률 = 정원 ÷ drawPool */
+  drawPool?: number;
   /** 테스트용: 취소한 학생도 다시 받을 수 있음. 실제 행사는 false (노션 "요청 처리 방침") */
   allowReissueAfterCancel: boolean;
   dataRetentionDays: number; // 행사 후 개인정보 보관 기간 (기술 설계 2.6)
@@ -270,6 +272,8 @@ export type OpsEditResult = {
   deleted: number;
   skipped: { index: number; reason: RosterSkipReason }[];
   summary: RosterSummary;
+  /** 재학생 명단에서 지운 학생의 기록 정리 (입장권·추첨·가입 정보) */
+  purged?: { students: number; tickets: number; entries: number };
 };
 
 /** 운영진 기기 관리용 학생 (가입한 학생) */
@@ -364,4 +368,13 @@ export type EntryDraw = {
   openTx: string | null;
   settleTx: string | null;
   createdAt: number;
+};
+
+/** 관리자 추첨 현황 (listEntryDraws). 이름·학번·결과만, 응모 salt는 없다 */
+export type EntryDrawAdmin = {
+  capacity: number;
+  drawPool: number;
+  winBps: number;
+  counts: { total: number; pending: number; won: number; lost: number };
+  entries: { name: string; studentId: string; status: 'pending' | 'won' | 'lost'; score: number | null; createdAt: number }[];
 };

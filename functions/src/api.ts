@@ -331,7 +331,9 @@ export interface CreateEventResponse {
 // schoolIds cannot change after creation. capacity cannot go below issuedCount.
 // lottery changes only the fields it names; the rest keeps the stored value or the default (docs/api.md 14장).
 export type LotteryPatch = Partial<Omit<LotterySettings, 'finalPhase'>> & { finalPhase?: Partial<LotterySettings['finalPhase']> };
-export type UpdateEventRequest = { eventId: string; lottery?: LotteryPatch } & Partial<Omit<EventFields, 'schoolIds'>>;
+export type UpdateEventRequest = { eventId: string; lottery?: LotteryPatch; instantDraw?: boolean; drawPool?: number } & Partial<
+  Omit<EventFields, 'schoolIds'>
+>;
 export interface UpdateEventResponse {
   ok: true;
 }
@@ -434,6 +436,8 @@ export interface OpsEditRosterResponse {
   /** index into upserts */
   skipped: { index: number; reason: RosterSkipReason }[];
   summary: RosterSummary;
+  /** School rosters: deleted students whose records were cleared (tickets released or detached, draws, sign-up). */
+  purged?: { students: number; tickets: number; entries: number };
 }
 export interface OpsListStudentsRequest {
   schoolId: string;
@@ -561,6 +565,7 @@ export interface Callables {
   claimTicket: [ClaimTicketRequest, ClaimTicketResponse];
   revokeTicket: [RevokeTicketRequest, RevokeTicketResponse];
   enterDraw: [EntryDrawRequest, EntryDrawResponse];
+  listEntryDraws: [EntryDrawRequest, ListEntryDrawsResponse];
   getMyEntryDraw: [EntryDrawRequest, EntryDrawResponse];
 }
 
@@ -587,4 +592,21 @@ export interface EntryDrawView {
 }
 export interface EntryDrawResponse {
   entry: EntryDrawView | null;
+}
+
+// listEntryDraws: the event's instant-draw entries for its school admin (or the operator). Names and student ids only,
+// no salts: the admin sees results but cannot rebuild anyone's entry.
+export interface AdminEntryRow {
+  name: string;
+  studentId: string;
+  status: EntryDrawStatus;
+  score: number | null;
+  createdAt: number;
+}
+export interface ListEntryDrawsResponse {
+  capacity: number;
+  drawPool: number;
+  winBps: number;
+  counts: { total: number; pending: number; won: number; lost: number };
+  entries: AdminEntryRow[];
 }

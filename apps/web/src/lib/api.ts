@@ -133,6 +133,10 @@ export type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chai
 // 취소표 추첨 (추첨 행사만, docs/api.md 14장). 상태: 추첨 대기 중 / 당첨(수락 대기, 기한) / 수락 완료 / 수락 기한 지남 / 추첨 마감
 // 즉석 추첨 (instantDraw 행사). 행사 화면을 열면 응모되고, 체인이 정한 당첨자만 입장권을 받는다
 export const enterDraw: typeof mock.enterDraw = real ? fb.enterDraw : mock.enterDraw;
+/** 관리자: 응모자와 결과 (실시간 현황, 추첨 결과 화면) */
+export const listEntryDraws: typeof mock.listEntryDraws = real ? fb.listEntryDraws : mock.listEntryDraws;
+/** 관리자: 즉석 추첨 켜기·끄기, 재학생 수 */
+export const updateDrawSettings: typeof mock.updateDrawSettings = real ? fb.updateDrawSettings : mock.updateDrawSettings;
 export const getMyEntryDraw: typeof mock.getMyEntryDraw = real ? fb.getMyEntryDraw : mock.getMyEntryDraw;
 /** "다시 검증하기": 체인의 응모·시드를 읽어 폰에서 다시 계산 */
 export const verifyMyEntry: typeof mock.verifyMyEntry = real ? lazyChain((m) => m.verifyMyEntry) : mock.verifyMyEntry;
