@@ -42,7 +42,9 @@ export interface IssueTicketResponse {
 export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'ROLE', 'DOMAIN', 'NOT_IN_ROSTER', 'NOT_REGISTERED'] as const;
 export type IssueReason = (typeof ISSUE_REASONS)[number];
 
-export const REASSIGN_MODES = ['queue', 'random'] as const;
+// lottery: a cancelled ticket waits in a pool and goes to a waitlist entry drawn at a fixed announcement time
+// (docs/api.md 14장). The draw is committed on chain before its seed exists, so nobody can pick the winner.
+export const REASSIGN_MODES = ['queue', 'random', 'lottery'] as const;
 export type ReassignMode = (typeof REASSIGN_MODES)[number];
 
 // Device binding. The phone keeps a non-extractable ECDSA P-256 key and signs
@@ -134,7 +136,8 @@ export interface CancelTicketRequest {
   ticketId: string;
 }
 // REASSIGNED: the ticket went to someone on the waitlist. RELEASED: nobody could take it, so it is issuable again.
-export type CancelTicketResponse = { ok: true; outcome: 'REASSIGNED' | 'RELEASED' } | { ok: false; reason: CancelReason };
+// POOLED (lottery events): the ticket waits for the next draw. The canceller is not told where it goes.
+export type CancelTicketResponse = { ok: true; outcome: 'REASSIGNED' | 'RELEASED' | 'POOLED' } | { ok: false; reason: CancelReason };
 
 export interface RegisterDeviceRequest {
   publicKeyJwk: DeviceKey;
@@ -282,7 +285,9 @@ export interface CreateEventResponse {
   eventId: string;
 }
 // schoolIds cannot change after creation. capacity cannot go below issuedCount.
-export type UpdateEventRequest = { eventId: string } & Partial<Omit<EventFields, 'schoolIds'>>;
+// lottery changes only the fields it names; the rest keeps the stored value or the default (docs/api.md 14장).
+export type LotteryPatch = Partial<Omit<LotterySettings, 'finalPhase'>> & { finalPhase?: Partial<LotterySettings['finalPhase']> };
+export type UpdateEventRequest = { eventId: string; lottery?: LotteryPatch } & Partial<Omit<EventFields, 'schoolIds'>>;
 export interface UpdateEventResponse {
   ok: true;
 }
@@ -419,6 +424,53 @@ export interface OpsSetEventAdminResponse {
   status: 'UPDATED' | 'PENDING_SIGNUP' | 'REMOVED';
 }
 
+// Cancelled-ticket lottery (reassignMode 'lottery'). Times are Asia/Seoul wall clock "HH:MM".
+export interface LotteryPhase {
+  announceTimes: string[];
+  minDrawGapHours: number;
+}
+export interface LotterySettings extends LotteryPhase {
+  // From this many hours before the event start, finalPhase replaces the times and the gap.
+  finalPhase: LotteryPhase & { startsBeforeHours: number };
+  claimWindowMinutes: number;
+  drawCloseBeforeStartHours: number;
+}
+
+export interface RunDrawNowRequest {
+  eventId: string;
+}
+// Demo and operations: snapshot now, commit on chain, announce as soon as the seed is stored.
+export type RunDrawNowResponse =
+  | { ok: true; round: number; tickets: number; entries: number }
+  | { ok: false; reason: 'NOT_LOTTERY' | 'NO_TICKETS' | 'NO_ENTRIES' | 'ROUND_OPEN' };
+
+export interface GetMyLotteryRequest {
+  eventId: string;
+}
+// The student's own entry. Waitlist size, order and odds are never returned.
+export interface DrawReceipt {
+  eventId: string;
+  round: number;
+  uid: string;
+  salt: string;
+  proof: string[];
+  root: string;
+  tokenIds: string[];
+}
+export type GetMyLotteryResponse = {
+  state: 'NONE' | 'WAITING' | 'WON' | 'CLAIMED' | 'EXPIRED' | 'CLOSED';
+  nextAnnounceAt: number | null;
+  offer: { ticketId: string; expiresAt: number } | null;
+  receipt: DrawReceipt | null; // the latest round this student was in
+};
+
+export interface ClaimTicketRequest {
+  eventId: string;
+}
+export type ClaimTicketResponse =
+  | { ok: true; ticketId: string }
+  | { ok: false; reason: 'NO_OFFER' | 'EXPIRED' };
+
 // Callable name -> [request, response]. Function names are the keys.
 export interface Callables {
   ensureUser: [void, EnsureUserResponse];
@@ -450,4 +502,7 @@ export interface Callables {
   opsListStudents: [OpsListStudentsRequest, OpsListStudentsResponse];
   opsListEventAdmins: [void, OpsListEventAdminsResponse];
   opsSetEventAdmin: [OpsSetEventAdminRequest, OpsSetEventAdminResponse];
+  runDrawNow: [RunDrawNowRequest, RunDrawNowResponse];
+  getMyLottery: [GetMyLotteryRequest, GetMyLotteryResponse];
+  claimTicket: [ClaimTicketRequest, ClaimTicketResponse];
 }

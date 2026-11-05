@@ -6,6 +6,7 @@ import { enqueueChainOps } from '../chain/outbox';
 import { REASON } from '../chain/ids';
 import { candidateOrder, isDomainAllowed } from '../domain/ticket';
 import { db } from '../firebase';
+import { lotteryClosed, poolTicket } from '../lottery/rounds';
 import { eventFromSnap, qrTokenRef, readDocId, requireAuth, ticketFromSnap } from './boundary';
 import { callableOptions } from './callableOptions';
 
@@ -24,7 +25,30 @@ export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(calla
     if (ticket.status === 'used') return { ok: false, reason: 'TICKET_USED' };
 
     const eventRef = db.doc(`events/${ticket.eventId}`);
-    const event = eventFromSnap(await tx.get(eventRef))!;
+    const eventSnap = await tx.get(eventRef);
+    const event = eventFromSnap(eventSnap)!;
+    // After the draw closes no round would ever take a pooled ticket, so it is released as below instead.
+    const lotteryOpen = event.reassignMode === 'lottery' && !(await lotteryClosed(tx, db, ticket.eventId, eventSnap.data()!, Date.now()));
+    if (lotteryOpen) {
+      // The ticket waits for the next draw (lottery/rounds.ts). Nothing on chain yet: the token stays where it
+      // is until a winner claims it, so the cancel time and the eventual holder are not linked on chain.
+      const fromName = ((await tx.get(db.doc(`users/${caller.uid}`))).get('name') as string | undefined) ?? '';
+      const reassignmentRef = db.collection('reassignments').doc();
+      tx.create(reassignmentRef, {
+        ticketId,
+        eventId: ticket.eventId,
+        nftNumber: ticket.nftNumber,
+        fromUid: caller.uid,
+        fromName,
+        toUid: null,
+        toName: null,
+        mode: 'lottery',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      tx.delete(qrTokenRef(ticketId));
+      poolTicket(tx, ticketRef, reassignmentRef.id);
+      return { ok: true, outcome: 'POOLED' };
+    }
     const waitlist = eventRef.collection('waitlist');
     const waiting = (await tx.get(waitlist.where('status', '==', 'waiting'))).docs.map((d) => ({
       email: d.id,
@@ -33,7 +57,8 @@ export const cancelTicket = onCall<unknown, Promise<CancelTicketResponse>>(calla
 
     const fromName = ((await tx.get(db.doc(`users/${caller.uid}`))).get('name') as string | undefined) ?? '';
     let recipient: { uid: string; email: string; name: string } | null = null;
-    for (const entry of candidateOrder(event.reassignMode, waiting, unitRandom)) {
+    // A lottery event past its close gives nobody the ticket here: it is released like the pool at the close.
+    for (const entry of event.reassignMode === 'lottery' ? [] : candidateOrder(event.reassignMode, waiting, unitRandom)) {
       if (!isDomainAllowed(event, entry.email)) continue;
       const account = (await tx.get(db.collection('users').where('email', '==', entry.email).limit(1))).docs[0];
       if (!account) continue;

@@ -24,3 +24,7 @@ export { listOpenSchools } from './handlers/listOpenSchools';
 export { precheckStudent } from './handlers/precheckStudent';
 export { submitProfilePhoto } from './handlers/submitProfilePhoto';
 export { opsListRoster, opsEditRoster, opsListStudents, opsListEventAdmins, opsSetEventAdmin } from './handlers/ops';
+export { runDrawNow } from './handlers/runDrawNow';
+export { getMyLottery } from './handlers/getMyLottery';
+export { claimTicket } from './handlers/claimTicket';
+export { lotteryTick } from './handlers/lotteryTick';

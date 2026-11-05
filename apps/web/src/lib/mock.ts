@@ -41,6 +41,10 @@ import {
   type VerifyResult,
   type WaitlistEntry,
 } from '@/types';
+import demoDraw from './chain/demo-draw.json';
+import { checkMyDraw } from './chain/draw';
+import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
+import type { ClaimResult, MyLottery, RunDrawResult } from '@/types';
 
 const STATE_KEY = 'safepass-mock-v7';
 const SESSION_KEY = 'safepass-mock-session';
@@ -1436,4 +1440,58 @@ export async function opsSetEventAdmin(email: string, schoolId: string | null): 
     rest.push({ email: addr, name: addr.split('@')[0], schoolId, pending: true });
   }
   localStorage.setItem(MOCK_PENDING_ADMINS, JSON.stringify(rest));
+}
+
+// ---------- 체인 직접 읽기 (mock: 데모 회차 값과 고정 현황) ----------
+
+/** 고정 현황. 실제 연결은 chain/live.ts가 Base Sepolia에서 읽는다 */
+export async function getChainEventStatus(_eventId: string): Promise<ChainEventStatus> {
+  await wait();
+  return {
+    exists: true,
+    capacity: 300,
+    active: 5,
+    withinCapacity: true,
+    issued: 6,
+    used: 2,
+    reassigned: { queue: 0, lottery: 2 },
+    released: { noWaiter: 0, adminRevoke: 1 },
+    drawRounds: 1,
+    asOfBlock: '54300000',
+    contractUrl: 'https://base-sepolia.blockscout.com/address/0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE',
+  };
+}
+
+/** 데모 회차만 있다 (실제 체인에 올라간 값과 같다) */
+export async function getChainDraw(eventId: string, round: number): Promise<ChainDraw | null> {
+  await wait();
+  if (eventId !== demoDraw.eventId || round !== demoDraw.round) return null;
+  return { commitment: demoDraw.commitment, seedBlock: String(demoDraw.seedBlock), seed: demoDraw.seed, commitTx: demoDraw.commitTx, seedTx: demoDraw.seedTx };
+}
+
+export async function verifyMyDraw(entry: MyDrawEntry): Promise<DrawCheck> {
+  return checkMyDraw(entry, await getChainDraw(entry.eventId, entry.round));
+}
+
+// ---------- 취소표 추첨 (mock: 데모 회차의 첫 응모자로 대기 중) ----------
+
+export async function getMyLottery(_eventId: string): Promise<MyLottery> {
+  await wait();
+  const e = demoDraw.entries[0];
+  return {
+    state: 'waiting',
+    nextAnnounceAt: Date.now() + 3 * 3_600_000,
+    offer: null,
+    receipt: { eventId: demoDraw.eventId, round: demoDraw.round, uid: e.uid, salt: e.salt, proof: e.proof, root: demoDraw.root, tokenIds: demoDraw.tokenIds },
+  };
+}
+
+export async function claimTicket(_eventId: string): Promise<ClaimResult> {
+  await wait();
+  return 'no_offer';
+}
+
+export async function runDrawNow(_eventId: string): Promise<RunDrawResult> {
+  await wait();
+  return { ok: false, reason: 'not_lottery' };
 }

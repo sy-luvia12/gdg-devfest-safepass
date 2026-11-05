@@ -306,9 +306,24 @@ export class ApiError extends Error {
     | 'sheet_missing_columns' // 첫 줄에 필요한 열(이름·학번, 재학생 명단은 이메일까지)이 없음
     | 'wrong_password' // 운영진 로그인: 아이디나 비밀번호가 다름
     | 'too_many_attempts' // 운영진 로그인: 잠시 막힘
+    | 'chain_unavailable' // 체인(RPC)을 읽지 못함. 다시 시도
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);
     this.code = code;
   }
 }
+
+/** 추첨 행사에서 내 상태 (getMyLottery). 대기 인원·순번·확률은 오지 않는다. 낙첨 상태는 없다(다음 회차를 기다림) */
+export type LotteryState = 'none' | 'waiting' | 'won' | 'claimed' | 'expired' | 'closed';
+export type MyLottery = {
+  state: LotteryState;
+  nextAnnounceAt: number | null; // 다음 발표 시각 (공개 고정 시각)
+  offer: { ticketId: string; expiresAt: number } | null; // 당첨: 이 시각까지 claimTicket
+  /** 가장 최근에 들어간 회차의 내 응모 정보. verifyMyDraw에 그대로 넘긴다 */
+  receipt: { eventId: string; round: number; uid: string; salt: string; proof: string[]; root: string; tokenIds: string[] } | null;
+};
+export type ClaimResult = 'claimed' | 'no_offer' | 'expired';
+export type RunDrawResult =
+  | { ok: true; round: number; tickets: number; entries: number }
+  | { ok: false; reason: 'not_lottery' | 'no_tickets' | 'no_entries' | 'round_open' };

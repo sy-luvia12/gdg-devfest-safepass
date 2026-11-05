@@ -3,6 +3,7 @@
 // 백엔드에 아직 없는 기능은 실제 연결에서 빈 결과를 돌려주거나 invalid_state로 거절한다 (화면은 "다음 단계" 표시).
 import { ApiError } from '@/types';
 import { firebaseConfigured } from './firebase';
+import * as chain from './chain/live';
 import * as fb from './firebaseApi';
 import * as mock from './mock';
 
@@ -84,7 +85,7 @@ export const getMyTicket: typeof mock.getMyTicket = real ? fb.getMyTicket : mock
 export const subscribeMyTicket: typeof mock.subscribeMyTicket = real ? fb.subscribeMyTicket : mock.subscribeMyTicket;
 export const refreshQrToken: typeof mock.refreshQrToken = real ? fb.refreshQrToken : mock.refreshQrToken;
 export const formatQrPayload: typeof fb.formatQrPayload = real ? fb.formatQrPayload : mock.formatQrPayload;
-export const getTicketHistory: typeof mock.getTicketHistory = real ? empty([]) : mock.getTicketHistory;
+export const getTicketHistory: typeof mock.getTicketHistory = real ? chain.getChainTicketHistory : mock.getTicketHistory;
 
 // 입장권 취소 → 대기 명단 재배정 (양도 대체)
 export const cancelTicket: typeof mock.cancelTicket = real ? fb.cancelTicket : mock.cancelTicket;
@@ -109,3 +110,20 @@ export const listTickets: typeof mock.listTickets = real ? fb.listTickets : mock
 export const listStaff: typeof mock.listStaff = real ? fb.listStaff : mock.listStaff;
 export const addStaff: typeof mock.addStaff = real ? fb.addStaff : mock.addStaff;
 export const removeStaff: typeof mock.removeStaff = real ? fb.removeStaff : mock.removeStaff;
+
+// 체인 직접 읽기 (Firebase를 거치지 않음). 화면에는 "체인 기록" 배지를 붙이고 서버 기록과 섞지 않는다
+/** S8 공개 현황판: 정원·활성·발급·입장·재배정·회수 건수 */
+export const getChainEventStatus: typeof mock.getChainEventStatus = real ? chain.getChainEventStatus : mock.getChainEventStatus;
+/** 추첨 회차의 체인 기록 (commitment, 시드). 커밋 전이면 null */
+export const getChainDraw: typeof mock.getChainDraw = real ? chain.getChainDraw : mock.getChainDraw;
+/** S7 "직접 검증하기": 내 응모가 스냅샷에 있고 체인의 커밋·시드와 맞는지 */
+export const verifyMyDraw: typeof mock.verifyMyDraw = real ? chain.verifyMyDraw : mock.verifyMyDraw;
+/** S7 데모 회차 (Base Sepolia 실제 회차, 가짜 응모자 10명). 응모자 하나를 골라 verifyMyDraw에 넘긴다 */
+export const DEMO_DRAW = chain.DEMO_DRAW;
+export type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
+
+// 취소표 추첨 (추첨 행사만, docs/api.md 14장). 상태: 추첨 대기 중 / 당첨(수락 대기, 기한) / 수락 완료 / 수락 기한 지남 / 추첨 마감
+export const getMyLottery: typeof mock.getMyLottery = real ? fb.getMyLottery : mock.getMyLottery;
+export const claimTicket: typeof mock.claimTicket = real ? fb.claimTicket : mock.claimTicket;
+/** 관리자 "지금 추첨" */
+export const runDrawNow: typeof mock.runDrawNow = real ? fb.runDrawNow : mock.runDrawNow;

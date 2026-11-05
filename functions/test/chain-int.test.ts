@@ -4,10 +4,12 @@ import { Contract, id as hashOf, JsonRpcProvider, Wallet } from 'ethers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FESTIVAL_TICKET_ABI } from '../src/chain/abi';
 import { ChainError, createChainClient, type ChainClient } from '../src/chain/client';
-import { REASON, tokenIdOf } from '../src/chain/ids';
+import { eventKeyOf, REASON, tokenIdOf } from '../src/chain/ids';
 import { processChainOp, walletAddressFor, WaitingForPrevious } from '../src/chain/process';
 import { preflightChain } from '../src/chain/preflight';
 import { deriveAddress } from '../src/chain/wallets';
+import { buildSnapshot, drawWinners, merkleProof, newSalt, verifyProof } from '../src/lottery/draw';
+import { drawRef, planRef, snapshotRound } from '../src/lottery/rounds';
 
 // Hardhat's default account 0 (deployer and minter in scripts/deploy.js). Public test key, local chain only.
 const MINTER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
@@ -187,4 +189,95 @@ describe('go-live preflight on a local chain', () => {
     expect(byName(r).rpc.ok).toBe(false);
     expect(JSON.stringify(r)).not.toContain('secret-key-path');
   }, 30_000);
+});
+
+describe('lottery round on a local chain', () => {
+  it('commits the snapshot, seeds it from a later block hash and draws the same winners anyone can recompute', async () => {
+    const eventId = id('ev-draw');
+    await client.ensureEvent(eventId, 10);
+    const entries = Array.from({ length: 6 }, (_, i) => ({ uid: `waiter-${i}`, salt: newSalt() }));
+    const tokenIds = [tokenIdOf(id('dt1')), tokenIdOf(id('dt2'))];
+    const snap = buildSnapshot({ eventId, round: 1, entries, tokenIds });
+
+    const provider = new JsonRpcProvider(RPC, undefined, { cacheTimeout: -1 });
+    const minter = new Contract(CONTRACT, FESTIVAL_TICKET_ABI, new Wallet(MINTER_KEY, provider));
+    const receipt = await (await minter.commitDraw(snap.eventKey, 1, snap.commitment)).wait();
+    const committed = receipt.logs.map((l: { topics: string[]; data: string }) => minter.interface.parseLog(l)).find((l: { name?: string } | null) => l?.name === 'DrawCommitted');
+    const seedBlock = Number(committed.args.seedBlock);
+
+    await provider.send('hardhat_mine', ['0x6']);
+    await (await minter.seedDraw(snap.eventKey, 1)).wait();
+    const [commitment, storedSeedBlock, seed] = await reader.draws(snap.eventKey, 1);
+    expect(commitment).toBe(snap.commitment);
+    expect(Number(storedSeedBlock)).toBe(seedBlock);
+    expect(seed).toBe((await provider.getBlock(seedBlock))!.hash);
+
+    const winners = drawWinners({ seed, leaves: snap.leaves, tokenIds });
+    expect(winners).toHaveLength(2);
+    expect(drawWinners({ seed, leaves: [...snap.leaves].reverse(), tokenIds: [...tokenIds].reverse() })).toEqual(winners);
+    for (const w of winners) expect(verifyProof(w.leaf, merkleProof(snap.leaves, w.leaf), snap.root)).toBe(true);
+  }, 60_000);
+});
+
+describe('lottery round through processChainOp', () => {
+  it('commits, waits for the seed block, seeds and announces the winners the chain seed decides', async () => {
+    const eventId = id('lev');
+    await db.doc(`events/${eventId}`).set({ capacity: 5, reassignMode: 'lottery', allowedDomains: ['korea.ac.kr'] });
+    for (let i = 0; i < 4; i++) {
+      await db.doc(`users/${id(`lw${i}`)}`).set({ email: `${id(`lw${i}`)}@korea.ac.kr`, name: `w${i}`, role: 'student' });
+      await db.doc(`events/${eventId}/waitlist/${id(`lw${i}`)}@korea.ac.kr`).set({ order: i, status: 'waiting' });
+    }
+    for (const t of ['lt1', 'lt2']) await db.doc(`tickets/${id(t)}`).set({ eventId, status: 'pooled', ownerUid: null, drawRound: null });
+
+    const r = await snapshotRound(db, eventId, { nowMs: Date.now(), announceAtMs: Date.now(), announceOnSeed: true, commitNow: true });
+    expect(r).toMatchObject({ ok: true, round: 1, tickets: 2, entries: 4 });
+
+    // Hardhat mines only on transactions; keep blocks coming while the processor waits for the seed block.
+    const provider = new JsonRpcProvider(RPC);
+    const miner = setInterval(() => void provider.send('evm_mine', []), 200);
+    try {
+      expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+    } finally {
+      clearInterval(miner);
+    }
+
+    const draw = (await drawRef(db, eventId, 1).get()).data()!;
+    expect(draw.status).toBe('announced');
+    const [commitment, , seed] = await reader.draws(eventKeyOf(eventId), 1);
+    expect(commitment).toBe(draw.commitment);
+    expect(seed).toBe(draw.seed);
+    const expected = drawWinners({ seed, leaves: draw.leaves, tokenIds: draw.tokenIds }).map((w) => w.leaf);
+    expect(draw.winners.map((w: { leaf: string }) => w.leaf)).toEqual(expected);
+    for (const w of draw.winners) expect((await db.doc(`tickets/${w.ticketId}`).get()).get('status')).toBe('offered');
+    // A repeat finds the round seeded and changes nothing.
+    await db.doc(`chainOps/draw-${eventId}-1`).update({ status: 'pending' });
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+  }, 120_000);
+
+  it('voids a round whose seed window passed instead of committing it a second time', async () => {
+    const eventId = id('lev2');
+    await db.doc(`events/${eventId}`).set({ capacity: 5, reassignMode: 'lottery', allowedDomains: ['korea.ac.kr'] });
+    await db.doc(`users/${id('vw')}`).set({ email: `${id('vw')}@korea.ac.kr`, name: 'v', role: 'student' });
+    await db.doc(`events/${eventId}/waitlist/${id('vw')}@korea.ac.kr`).set({ order: 0, status: 'waiting' });
+    await db.doc(`tickets/${id('vt')}`).set({ eventId, status: 'pooled', ownerUid: null, drawRound: null });
+    await client.ensureEvent(eventId, 5);
+    expect((await snapshotRound(db, eventId, { nowMs: Date.now(), announceAtMs: Date.now(), announceOnSeed: true, commitNow: true })).ok).toBe(true);
+    const draw = (await drawRef(db, eventId, 1).get()).data()!;
+
+    // The commit reached the chain, then the processor stayed down for longer than the 256-block window.
+    const provider = new JsonRpcProvider(RPC, undefined, { cacheTimeout: -1 });
+    const minter = new Contract(CONTRACT, FESTIVAL_TICKET_ABI, new Wallet(MINTER_KEY, provider));
+    await (await minter.commitDraw(eventKeyOf(eventId), 1, draw.commitment)).wait();
+    await provider.send('hardhat_mine', ['0x120']);
+
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `draw-${eventId}-1`)).toBe('done');
+    expect((await drawRef(db, eventId, 1).get()).get('status')).toBe('void');
+    expect((await planRef(db, eventId).get()).get('status')).toBe('skipped');
+    expect((await db.doc(`tickets/${id('vt')}`).get()).get('drawRound')).toBeNull();
+    const [commitment, , seed] = await reader.draws(eventKeyOf(eventId), 1);
+    expect(commitment).toBe(draw.commitment); // no second commit
+    expect(seed).toBe(`0x${'0'.repeat(64)}`);
+    const commits = await reader.queryFilter(reader.filters.DrawCommitted(eventKeyOf(eventId), 1));
+    expect(commits).toHaveLength(1);
+  }, 120_000);
 });

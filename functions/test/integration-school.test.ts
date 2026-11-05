@@ -168,6 +168,32 @@ describe('school scoping', () => {
     expect(stored).not.toHaveProperty('staffSchoolId');
   });
 
+  it('a school admin cannot change another school student, unscoped team staff, or a pending address of another school (#28)', async () => {
+    const adminA = await login('admin@sch-a.test');
+    const studentB = await login('pupil@sch-b.test');
+    await login('walkin@sch-team.test');
+
+    expect(await codeOf(adminA.call('setStaff', { email: 'pupil@sch-b.test', staff: true }))).toBe('functions/permission-denied');
+    expect((await db.doc(`users/${studentB.uid}`).get()).get('role')).toBe('student');
+    expect(await codeOf(adminA.call('setStaff', { email: 'walkin@sch-team.test', staff: false }))).toBe('functions/permission-denied');
+    expect(await codeOf(adminA.call('setStaff', { email: 'newcomer@sch-b.test', staff: true }))).toBe('functions/permission-denied');
+    expect((await db.doc('seedProfiles/newcomer@sch-b.test').get()).exists).toBe(false);
+  });
+
+  it('a seeded role goes only to a verified email (#28 hardening)', async () => {
+    await db.doc('seedProfiles/boss@sch-a.test').set({ role: 'admin', adminSchoolId: A, name: 'Boss' });
+    const app = initializeApp({ projectId: PROJECT, apiKey: 'fake-api-key' }, 'sch-unverified');
+    apps.push(app);
+    const auth = getAuth(app);
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    const email = 'boss@sch-a.test';
+    const idToken = JSON.stringify({ sub: 'unverified-boss', email, email_verified: false, name: 'x' });
+    const { user } = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    const profile = await connect(app)('ensureUser', undefined);
+    expect(profile.role).toBe('student');
+    expect((await db.doc(`users/${user.uid}`).get()).get('role')).toBe('student');
+  });
+
   it('school staff cannot scan a ticket of an event their school is not part of; unscoped staff still can', async () => {
     const holderB = await login('holder-b@sch-c.test');
     const holderA = await login('holder-a@sch-c.test');
@@ -206,6 +232,23 @@ describe('school scoping', () => {
     expect(await adminA.call('upsertSchool', { ...edit(A, ['sch-a.test']), name: 'Alpha Univ' })).toEqual({ ok: true, created: false });
     expect((await db.doc(`schools/${A}`).get()).data()).toMatchObject({ studentRoster: summary, brandColor: '#abcdef' });
     expect(await team.call('upsertSchool', edit('sch-new', ['sch-new.test']))).toEqual({ ok: true, created: true });
+  });
+
+  it('updateEvent saves lottery settings: partial changes merge with the stored ones, bad rules are refused, other hosts are refused', async () => {
+    const adminA = await login('admin@sch-a.test');
+    const adminB = await login('admin@sch-b.test');
+
+    expect(await adminA.call('updateEvent', { eventId: EV_A, lottery: { claimWindowMinutes: 30, finalPhase: { announceTimes: ['11:00'] } } })).toEqual({ ok: true });
+    const first = (await db.doc(`events/${EV_A}`).get()).get('lottery');
+    expect(first).toMatchObject({ claimWindowMinutes: 30, announceTimes: ['12:00'], finalPhase: { announceTimes: ['11:00'], startsBeforeHours: 72 } });
+
+    await adminA.call('updateEvent', { eventId: EV_A, lottery: { announceTimes: ['13:00'] } });
+    expect((await db.doc(`events/${EV_A}`).get()).get('lottery')).toMatchObject({ claimWindowMinutes: 30, announceTimes: ['13:00'] });
+
+    expect(await codeOf(adminA.call('updateEvent', { eventId: EV_A, lottery: { announceTimes: ['25:99'] } }))).toBe('functions/invalid-argument');
+    expect(await codeOf(adminA.call('updateEvent', { eventId: EV_A, lottery: { claimWindowMinutes: 'soon' as unknown as number } }))).toBe('functions/invalid-argument');
+    expect((await db.doc(`events/${EV_A}`).get()).get('lottery')).toMatchObject({ announceTimes: ['13:00'] });
+    expect(await codeOf(adminB.call('updateEvent', { eventId: EV_A, lottery: { claimWindowMinutes: 10 } }))).toBe('functions/permission-denied');
   });
 
   it('createEvent sets safe defaults for the host admin, and refuses other hosts and unknown schools', async () => {
