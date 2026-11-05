@@ -107,7 +107,7 @@ export function TicketPage() {
       title="내 입장권"
       right={
         <>
-          {events.length > 1 && <IconButton icon={LayoutList} label="축제 목록" onClick={() => navigate('/events')} />}
+          {events.length > 0 && <IconButton icon={LayoutList} label="축제 목록" onClick={() => navigate('/events')} />}
           {user?.role === 'admin' && (
             <IconButton icon={LayoutDashboard} label="관리자 화면" onClick={() => navigate('/admin')} />
           )}

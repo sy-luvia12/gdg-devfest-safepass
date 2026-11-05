@@ -24,7 +24,7 @@ export function DevicePage() {
 
   if (!user) return null;
   const gate = studentGatePath(user);
-  if (gate !== '/device') return <Navigate to={gate ?? '/ticket'} replace />;
+  if (gate !== '/device') return <Navigate to={gate ?? '/events'} replace />;
 
   const onRequest = async () => {
     setBusy(true);

@@ -30,6 +30,8 @@ function status({ event, ticket }: Row): { tone: BadgeTone; text: string } {
   if (ticket?.status === 'used') return { tone: 'muted', text: '입장함' };
   if (ticket) return { tone: 'success', text: '받음' };
   if (event.capacity - event.issuedCount <= 0) return { tone: 'muted', text: '마감' };
+  // 명단 행사는 행사 담당자가 시트로 올린 명단의 학생만 받는다. 명단이 아직 없으면 아무도 못 받는다
+  if (event.settings.requireRoster) return event.roster ? { tone: 'neutral', text: '명단 대상' } : { tone: 'muted', text: '명단 준비 중' };
   return { tone: 'neutral', text: '받을 수 있어요' };
 }
 
