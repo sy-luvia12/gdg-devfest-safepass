@@ -24,6 +24,7 @@ export { verifyStudentRoster } from './handlers/verifyStudentRoster';
 export { listOpenSchools } from './handlers/listOpenSchools';
 export { precheckStudent } from './handlers/precheckStudent';
 export { submitProfilePhoto } from './handlers/submitProfilePhoto';
+export { myRosterStatus } from './handlers/myRosterStatus';
 export { opsListRoster, opsEditRoster, opsListStudents, opsListEventAdmins, opsSetEventAdmin } from './handlers/ops';
 export { runDrawNow } from './handlers/runDrawNow';
 export { getMyLottery } from './handlers/getMyLottery';

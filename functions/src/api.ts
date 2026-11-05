@@ -274,6 +274,15 @@ export interface ImportWaitlistRequest {
   eventId: string;
   sheetUrl: string;
 }
+// myRosterStatus: whether the signed-in student may take a ticket at each event, as far as the event roster goes.
+// open: not a roster event. no_roster: a roster event whose roster is not loaded yet, so nobody may take one.
+export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster';
+export interface MyRosterStatusRequest {
+  eventIds: string[];
+}
+export interface MyRosterStatusResponse {
+  status: Record<string, RosterStatus>;
+}
 export interface GetWaitlistRequest {
   eventId: string;
 }
@@ -357,6 +366,8 @@ export type PrecheckStudentResponse =
 export const PROFILE_PHOTO_MAX_BYTES = 300_000;
 export interface SubmitProfilePhotoRequest {
   photoDataUrl: string;
+  // The front of the student ID card, same format and size limit. Kept in idCards/{uid}, which no client reads.
+  idCardDataUrl: string;
 }
 export interface SubmitProfilePhotoResponse {
   ok: true;
@@ -520,6 +531,7 @@ export interface Callables {
   listOpenSchools: [void, ListOpenSchoolsResponse];
   precheckStudent: [PrecheckStudentRequest, PrecheckStudentResponse];
   submitProfilePhoto: [SubmitProfilePhotoRequest, SubmitProfilePhotoResponse];
+  myRosterStatus: [MyRosterStatusRequest, MyRosterStatusResponse];
   importWaitlist: [ImportWaitlistRequest, ImportRosterResponse];
   getWaitlist: [GetWaitlistRequest, GetWaitlistResponse];
   opsListRoster: [OpsListRosterRequest, OpsListRosterResponse];

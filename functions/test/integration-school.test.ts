@@ -362,7 +362,7 @@ describe('student sign-up and tickets', () => {
 
     expect(await reasonOf(student.call('issueTicket', { eventId: EV_A }))).toBe('NOT_REGISTERED');
     expect(await codeOf(student.call('issueTicket', { eventId: EV_A }))).toBe('functions/failed-precondition');
-    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG }))).toBe('functions/failed-precondition');
+    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG, idCardDataUrl: TINY_JPEG }))).toBe('functions/failed-precondition');
 
     expect(await verify(student, '2024101', 'Someone Else')).toEqual({ ok: false, reason: 'NOT_IN_ROSTER' });
     expect(await verify(student, '2099999', 'Cho Han')).toEqual({ ok: false, reason: 'NOT_IN_ROSTER' });
@@ -376,13 +376,17 @@ describe('student sign-up and tickets', () => {
     expect((await db.doc(`schools/${A}/roster/2024101`).get()).get('claimedBy')).toBe(student.uid);
     expect(await reasonOf(student.call('issueTicket', { eventId: EV_A }))).toBe('NOT_REGISTERED');
 
-    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: 'data:image/png;base64,AAAA' }))).toBe('functions/invalid-argument');
+    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: 'data:image/png;base64,AAAA', idCardDataUrl: TINY_JPEG }))).toBe('functions/invalid-argument');
     const oversized = `data:image/jpeg;base64,${'A'.repeat(500_000)}`;
-    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: oversized }))).toBe('functions/invalid-argument');
+    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG, idCardDataUrl: oversized }))).toBe('functions/invalid-argument');
     expect((await db.doc(`users/${student.uid}`).get()).get('photoSubmitted')).toBeUndefined();
+    // The ID card is required with the face photo
+    expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG } as never))).toBe('functions/invalid-argument');
 
-    const photo = await student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG });
+    const photo = await student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG, idCardDataUrl: TINY_JPEG });
     expect(photo.profile).toMatchObject({ rosterVerified: true, photoSubmitted: true, photoUrl: TINY_JPEG });
+    expect((await db.doc(`idCards/${student.uid}`).get()).data()).toMatchObject({ dataUrl: TINY_JPEG, schoolId: A, studentId: '2024101' });
+    expect((await db.doc(`users/${student.uid}`).get()).get('idCardSubmitted')).toBe(true);
     const ticket = await student.call('issueTicket', { eventId: EV_A });
     expect(ticket.nftNumber).toMatch(/^#\d{4}$/);
     expect((await db.doc(`tickets/${ticket.ticketId}`).get()).get('ownerUid')).toBe(student.uid);
@@ -395,7 +399,7 @@ describe('student sign-up and tickets', () => {
     await seedRosterRow(A, { studentId: '2024202', name: 'Gus Min', email: 'recheck2@sch-a.test' });
     const finishSignUp = async (c: Client, studentId: string, name: string) => {
       await c.call('verifyStudentRoster', { schoolId: A, studentId, name });
-      await c.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG });
+      await c.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG, idCardDataUrl: TINY_JPEG });
     };
     await finishSignUp(removed, '2024201', 'Fay Kang');
     await finishSignUp(reclaimed, '2024202', 'Gus Min');

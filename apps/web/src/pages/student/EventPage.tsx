@@ -11,10 +11,10 @@ import { BottomBar, Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { IconButton } from '@/components/IconButton';
 import { StateView } from '@/components/StateView';
-import { getEvent, getMyTicket, issueTicket } from '@/lib/api';
-import { ApiError, type Event, type Ticket } from '@/types';
+import { getEvent, getMyTicket, issueTicket, myRosterStatus } from '@/lib/api';
+import { ApiError, type Event, type RosterStatus, type Ticket } from '@/types';
 
-type Data = { event: Event; ticket: Ticket | null };
+type Data = { event: Event; ticket: Ticket | null; roster: RosterStatus };
 
 export function EventPage() {
   const eventId = useEventId();
@@ -28,10 +28,11 @@ export function EventPage() {
 
   const load = useCallback(() => {
     setLoadError(false);
-    Promise.all([getEvent(eventId), getMyTicket(eventId)])
-      .then(([event, ticket]) => setData({ event, ticket }))
+    // 명단 행사: 서버가 행사 명단과 대조한 결과로 받기 버튼을 막는다 (발급할 때 서버가 다시 확인한다)
+    Promise.all([getEvent(eventId), getMyTicket(eventId), user?.role === 'student' ? myRosterStatus([eventId]) : {}])
+      .then(([event, ticket, roster]) => setData({ event, ticket, roster: (roster as Record<string, RosterStatus>)[eventId] ?? 'open' }))
       .catch(() => setLoadError(true));
-  }, [eventId]);
+  }, [eventId, user?.role]);
   useEffect(load, [load]);
 
   const onIssue = async () => {
@@ -147,6 +148,10 @@ export function EventPage() {
           <Button disabled>학생 계정으로만 받을 수 있어요</Button>
         ) : soldOut ? (
           <Button disabled>모두 발급되었어요</Button>
+        ) : data.roster === 'not_on_roster' ? (
+          <Button disabled>행사 명단에 없어서 받을 수 없어요</Button>
+        ) : data.roster === 'no_roster' ? (
+          <Button disabled>행사 명단이 아직 올라오지 않았어요</Button>
         ) : (
           <Button loading={issuing} onClick={onIssue}>
             입장권 받기

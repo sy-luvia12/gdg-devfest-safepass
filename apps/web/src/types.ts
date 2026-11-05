@@ -331,3 +331,6 @@ export type ClaimResult = 'claimed' | 'no_offer' | 'expired';
 export type RunDrawResult =
   | { ok: true; round: number; tickets: number; entries: number }
   | { ok: false; reason: 'not_lottery' | 'no_tickets' | 'no_entries' | 'round_open' };
+
+/** 행사 명단 기준으로 받을 수 있는지. open: 명단 행사 아님 / no_roster: 명단이 아직 없음 */
+export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster';
