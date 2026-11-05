@@ -13,6 +13,8 @@ import { StudentRosterPage } from '@/pages/admin/StudentRosterPage';
 import { TicketsPage } from '@/pages/admin/TicketsPage';
 import { MePage } from '@/pages/common/MePage';
 import { OpsAdminsPage } from '@/pages/ops/OpsAdminsPage';
+import { BoardPage } from '@/pages/student/BoardPage';
+import { DrawPage } from '@/pages/student/DrawPage';
 import { OpsDevicesPage } from '@/pages/ops/OpsDevicesPage';
 import { OpsEventPage } from '@/pages/ops/OpsEventPage';
 import { OpsHomePage } from '@/pages/ops/OpsHomePage';
@@ -67,6 +69,8 @@ export const router = createBrowserRouter([
               { path: '/event', element: <EventPage /> },
               { path: '/ticket', element: <TicketPage /> },
               { path: '/ticket/history', element: <HistoryPage /> },
+              { path: '/event/board', element: <BoardPage /> },
+              { path: '/event/draw', element: <DrawPage /> },
             ],
           },
         ],

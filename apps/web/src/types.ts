@@ -71,6 +71,8 @@ export type Event = {
   /** 행사 명단 요약 (당첨자·참가자). settings.requireRoster가 켜져 있으면 여기 있는 학생만 발급 */
   roster?: RosterSummary;
   reassignMode: ReassignMode;
+  /** 취소표 추첨 행사 (서버 reassignMode 'lottery'). 화면의 reassignMode는 random으로 보인다 */
+  lottery?: boolean;
   /** 테스트용: 취소한 학생도 다시 받을 수 있음. 실제 행사는 false (노션 "요청 처리 방침") */
   allowReissueAfterCancel: boolean;
   dataRetentionDays: number; // 행사 후 개인정보 보관 기간 (기술 설계 2.6)
