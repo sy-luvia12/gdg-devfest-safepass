@@ -18,6 +18,13 @@ SafePass 입장권 컨트랙트 `FestivalTicket` (ERC-721, OpenZeppelin 5.6.1, H
   - 시드는 커밋한 블록보다 `SEED_DELAY`(5) 블록 뒤 블록의 해시다. 그 블록이 생기면 누구나 `seedDraw`로 저장할 수 있다.
   - 커밋할 때는 시드가 아직 존재하지 않으므로, 서버도 스냅샷을 보고 결과를 고를 수 없다.
   - EVM은 최근 256블록의 해시만 보관한다(Base, Polygon 모두 약 2초 블록이라 약 8분). 그 안에 `seedDraw`가 실행되지 않으면 같은 회차를 다시 커밋할 수 있지만, 두 번째 `DrawCommitted` 이벤트가 남아 재시도가 공개로 드러난다.
+- 즉석 추첨(학생 한 명 × 행사 하나)은 컨트랙트가 결과를 정한다.
+  - 서버가 `openEntry(eventKey, entryId, winBps)`로 응모를 연다. `entryId`는 학생을 솔트와 함께 해시한 값이라 체인에 개인 정보가 없다. `winBps`는 당첨 확률(1/10000)이고 응모를 열 때 고정된다.
+  - `SEED_DELAY`(5) 블록 뒤 블록 해시가 생기면 누구나 `settleEntry`를 부를 수 있다. `score = uint256(keccak256(abi.encode(seed, entryId))) % 10000`이 `winBps`보다 작으면 당첨이다.
+  - 당첨자 수는 행사 정원을 넘을 수 없다. 정원이 차면 이후 응모는 모두 낙첨이다.
+  - 결과가 난 응모는 다시 열 수 없다. 256블록 안에 결과를 내지 못한 응모만 다시 열 수 있고, 두 번째 `EntryOpened` 이벤트가 남는다.
+  - 행사별 결과 수는 `entryStats(eventKey)`(결과 난 응모 수, 당첨 수)로 바로 읽는다.
+- 입장권을 옮기지 않는 운영진 개입은 `recordAction(eventKey, kind, ref)`로 남긴다: 1 분실 재발급, 2 환불, 3 예외 입장(대면 확인). 행사별 건수는 `actionCount(eventKey, kind)`. 운영진 회수는 지금처럼 사유 4의 `reassign`/`release`다.
 - 프록시가 없어 업그레이드할 수 없다.
 
 ## 식별자
@@ -67,9 +74,10 @@ score       = uint256(keccak256(abi.encode(bytes32 seed, bytes32 leaf)))
 ## 배포 현황
 | 네트워크 | 주소 | 배포 tx | 소스 검증 |
 |---|---|---|---|
-| Base Sepolia (84532) | [`0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE`](https://sepolia.basescan.org/address/0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE) | [`0x6227…ed91`](https://sepolia.basescan.org/tx/0x622705532864316d553c0303e3289aded330d36dd541688b1c8892bcacb5ed91) | Sourcify exact match |
+| Base Sepolia (84532) | [`0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2`](https://sepolia.basescan.org/address/0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2) | [`0xfc2f…75ff`](https://sepolia.basescan.org/tx/0xfc2f43af579144167b0ef689a7fca01e070190f69623d1c6fa4cdad7953275ff) | Sourcify exact match |
 
-- 2026-11-04 배포. admin과 minter는 모두 `0x3eAC838ccfFc2d1e76Efb66aA1E6664AE2FA7aB8`이다.
+- 2026-11-05 다시 배포(블록 54788886): 즉석 추첨(`openEntry`·`settleEntry`)과 개입 기록(`recordAction`)을 더했다. admin과 minter는 모두 `0x3eAC838ccfFc2d1e76Efb66aA1E6664AE2FA7aB8`이다.
+- 예전 컨트랙트 `0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE`(2026-11-04)는 그대로 체인에 남는다. 그때 발급된 입장권과 추첨 데모 회차(`deployments/draw-demo.baseSepolia.json`)는 예전 주소에 있다.
 - 실제 배포비는 0.0000116 ETH였다.
 
 ## 테스트넷 배포 런북
@@ -91,7 +99,7 @@ NETWORK=amoy contracts/scripts/chain.sh preflight   # Amoy로 할 때
 
 | 작업 | 가스 | Base Sepolia 0.011 gwei일 때 ETH | Amoy 30 gwei일 때 POL |
 |---|---|---|---|
-| 배포 | 1,932,154 | 0.0000213 | 0.0580 |
+| 배포 | 2,356,473 | 0.0000259 | 0.0707 |
 | createEvent | 48,624 | 0.0000005 | 0.0015 |
 | mint | 102,881 | 0.0000011 | 0.0031 |
 | markUsed | 49,737 | 0.0000005 | 0.0015 |
@@ -99,9 +107,12 @@ NETWORK=amoy contracts/scripts/chain.sh preflight   # Amoy로 할 때
 | release | 41,419 | 0.0000005 | 0.0012 |
 | commitDraw (회차당) | 76,095 | 0.0000008 | 0.0023 |
 | seedDraw (회차당) | 50,726 | 0.0000006 | 0.0015 |
+| recordAction (개입 1건) | 51,772 | 0.0000006 | 0.0016 |
+| openEntry (즉석 추첨 응모) | 52,112 | 0.0000006 | 0.0016 |
+| settleEntry (즉석 추첨 결과) | 53,552 | 0.0000006 | 0.0016 |
 
 - Base Sepolia: 0.011 gwei는 2026-11-04에 잰 maxFee다. 티켓 1장(발급+입장)은 약 0.0000017 ETH라서, faucet 0.01 ETH로 배포 후 수천 장을 처리한다. Base는 L1 데이터 수수료가 따로 붙지만, 배포 1회에 약 1e-14 ETH로 측정되어 무시한다.
-- Amoy: 티켓 1장은 약 0.0046 POL이다. 0.1 POL이면 배포와 행사 1개 생성 후 약 8장을 처리한다(30 gwei 기준).
+- Amoy: 티켓 1장은 약 0.0046 POL이다. 0.1 POL이면 배포와 행사 1개 생성 후 약 6장을 처리한다(30 gwei 기준).
 - `test/budget.test.js`가 가스를 다시 재서 5% 넘게 달라지면 실패하므로, 컨트랙트를 고치면 표와 `GAS` 상수를 같이 고친다.
 
 키는 커밋하지 않는다. 백엔드가 부르는 체인 모듈 약속은 `docs/api.md` 8장.

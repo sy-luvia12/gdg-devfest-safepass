@@ -45,6 +45,34 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
 
     mapping(bytes32 eventKey => mapping(uint32 round => Draw)) public draws;
 
+    /// @notice Operator actions that move no ticket but must stay visible per event. A count per kind is kept
+    /// so the public board reads them without scanning logs. Revocation stays `release`/`reassign` with reason 4.
+    uint8 public constant ACTION_LOST_REISSUE = 1; // lost phone or account, ticket issued again
+    uint8 public constant ACTION_REFUND = 2; // paid ticket refunded
+    uint8 public constant ACTION_MANUAL_ENTRY = 3; // let in by a face-to-face check without a valid QR
+
+    mapping(bytes32 eventKey => mapping(uint8 kind => uint32)) public actionCount;
+
+    /// @notice Instant entry draw: one student, one event. The server opens an entry with its win rate, and the
+    /// contract itself decides the result from a block hash that did not exist when the entry was opened.
+    /// entryId is a salted hash of the student, so the chain holds no personal data.
+    /// result: 0 open, 1 won, 2 lost. Winners never exceed the event capacity.
+    uint16 public constant BPS = 10_000;
+
+    struct Entry {
+        uint64 seedBlock;
+        uint16 winBps; // win rate in 1/10000, fixed when the entry opens
+        uint8 result;
+    }
+
+    struct EntryStats {
+        uint32 settled;
+        uint32 won;
+    }
+
+    mapping(bytes32 eventKey => mapping(bytes32 entryId => Entry)) public entries;
+    mapping(bytes32 eventKey => EntryStats) public entryStats;
+
     event EventCreated(bytes32 indexed eventKey, uint32 capacity);
     event Issued(uint256 indexed tokenId, bytes32 indexed eventKey, address to);
     event Reassigned(uint256 indexed tokenId, address from, address to, uint8 reason);
@@ -52,6 +80,9 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
     event Used(uint256 indexed tokenId);
     event DrawCommitted(bytes32 indexed eventKey, uint32 indexed round, bytes32 commitment, uint64 seedBlock);
     event DrawSeeded(bytes32 indexed eventKey, uint32 indexed round, bytes32 seed);
+    event ActionRecorded(bytes32 indexed eventKey, uint8 indexed kind, bytes32 ref);
+    event EntryOpened(bytes32 indexed eventKey, bytes32 indexed entryId, uint16 winBps, uint64 seedBlock);
+    event EntrySettled(bytes32 indexed eventKey, bytes32 indexed entryId, bytes32 seed, uint16 score, bool won);
 
     error EventExists(bytes32 eventKey);
     error UnknownEvent(bytes32 eventKey);
@@ -66,6 +97,12 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
     error SeedNotReady(uint64 seedBlock);
     error SeedExpired(uint64 seedBlock);
     error EmptyCommitment();
+    error InvalidAction(uint8 kind);
+    error InvalidWinRate(uint16 winBps);
+    error EmptyEntry();
+    error EntryAlreadyOpen(bytes32 entryId);
+    error EntryNotOpen(bytes32 entryId);
+    error EntryAlreadySettled(bytes32 entryId);
 
     constructor(address admin, address minter) ERC721("SafePass Festival Ticket", "SPASS") {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -150,6 +187,49 @@ contract FestivalTicket is ERC721, AccessControl, IERC5192 {
         if (seed == bytes32(0)) revert SeedExpired(d.seedBlock);
         d.seed = seed;
         emit DrawSeeded(eventKey, round, seed);
+    }
+
+    /// @notice Records an operator action for an event. ref is a hash of the case (e.g. the ticket id), never personal data.
+    function recordAction(bytes32 eventKey, uint8 kind, bytes32 ref) external onlyRole(MINTER_ROLE) {
+        if (!_events[eventKey].exists) revert UnknownEvent(eventKey);
+        if (kind != ACTION_LOST_REISSUE && kind != ACTION_REFUND && kind != ACTION_MANUAL_ENTRY) revert InvalidAction(kind);
+        actionCount[eventKey][kind] += 1;
+        emit ActionRecorded(eventKey, kind, ref);
+    }
+
+    /// @notice Opens one student's entry. The seed block is fixed SEED_DELAY blocks ahead.
+    /// An entry can be opened again only when its seed block hash expired unsettled; the second EntryOpened
+    /// event stays on-chain, so a retry is always visible. A settled entry can never be drawn again.
+    function openEntry(bytes32 eventKey, bytes32 entryId, uint16 winBps) external onlyRole(MINTER_ROLE) {
+        if (!_events[eventKey].exists) revert UnknownEvent(eventKey);
+        if (entryId == bytes32(0)) revert EmptyEntry();
+        if (winBps > BPS) revert InvalidWinRate(winBps);
+        Entry storage e = entries[eventKey][entryId];
+        if (e.result != 0) revert EntryAlreadySettled(entryId);
+        if (e.seedBlock != 0 && block.number <= e.seedBlock + 256) revert EntryAlreadyOpen(entryId);
+        uint64 seedBlock = uint64(block.number) + SEED_DELAY;
+        e.seedBlock = seedBlock;
+        e.winBps = winBps;
+        emit EntryOpened(eventKey, entryId, winBps, seedBlock);
+    }
+
+    /// @notice Settles an entry once its seed block exists. Anyone may call it.
+    /// score = uint256(keccak256(abi.encode(seed, entryId))) % 10000; won when score < winBps and the event
+    /// still has fewer winners than its capacity.
+    function settleEntry(bytes32 eventKey, bytes32 entryId) external returns (bool won) {
+        Entry storage e = entries[eventKey][entryId];
+        if (e.seedBlock == 0) revert EntryNotOpen(entryId);
+        if (e.result != 0) revert EntryAlreadySettled(entryId);
+        if (block.number <= e.seedBlock) revert SeedNotReady(e.seedBlock);
+        bytes32 seed = blockhash(e.seedBlock);
+        if (seed == bytes32(0)) revert SeedExpired(e.seedBlock);
+        uint16 score = uint16(uint256(keccak256(abi.encode(seed, entryId))) % BPS);
+        EntryStats storage st = entryStats[eventKey];
+        won = score < e.winBps && st.won < _events[eventKey].capacity;
+        e.result = won ? 1 : 2;
+        st.settled += 1;
+        if (won) st.won += 1;
+        emit EntrySettled(eventKey, entryId, seed, score, won);
     }
 
     /// @notice Public lookup for anyone holding a ticket id: never reverts.
