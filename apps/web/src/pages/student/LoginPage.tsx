@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Menu, RotateCcw, X } from 'lucide-react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { homePathFor, studentGatePath } from '@/app/config';
@@ -18,6 +18,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const goHome = (u: User) => {
     if (u.role !== 'student') return navigate(homePathFor(u.role), { replace: true });
@@ -27,6 +28,7 @@ export function LoginPage() {
   };
 
   const onStart = async () => {
+    setMenuOpen(false);
     setSubmitting(true);
     setError(null);
     try {
@@ -50,56 +52,101 @@ export function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-app flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-4">
-      <div className="flex">
-        <Link
-          to="/about"
-          className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-2 text-caption text-ink-2 hover:bg-surface-2"
-        >
-          <ChevronLeft size={14} strokeWidth={2} />
-          Campass 소개 보러가기
-        </Link>
-      </div>
-      <section className="flex flex-1 flex-col items-center justify-center gap-10 py-10 text-center">
-        <Orb size={200} />
-        <div className="flex flex-col gap-2">
-          <h1 className="text-display text-ink">Campass</h1>
-          <p className="text-body text-ink-2">재학생만을 위한 축제 입장권</p>
+    <>
+      {/* 가운데 폰 폭만 흰 배경, 화면이 더 넓으면 양옆은 옅은 회색. MobileLayout 밖까지 칠하려고 화면 전체에 깐다 */}
+      <div className="fixed inset-0 -z-10 bg-surface-2" aria-hidden />
+      <main className="mx-auto flex min-h-dvh w-full max-w-app flex-col bg-bg px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-4">
+        <div className="flex items-center justify-between">
+          <Link
+            to="/about"
+            className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-2 text-caption text-ink-2 hover:bg-surface-2"
+          >
+            <ChevronLeft size={14} strokeWidth={2} />
+            Campass 소개 보러가기
+          </Link>
+          <button
+            type="button"
+            aria-label="메뉴"
+            onClick={() => setMenuOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-2 hover:bg-surface-2"
+          >
+            <Menu size={20} strokeWidth={1.75} />
+          </button>
         </div>
-      </section>
+        <section className="flex flex-1 flex-col items-center justify-center gap-10 py-10 text-center">
+          <Orb size={200} />
+          <div className="flex flex-col gap-2">
+            <h1 className="text-display text-ink">Campass</h1>
+            <p className="text-body text-ink-2">재학생만을 위한 축제 입장권</p>
+          </div>
+        </section>
 
-      <section className="flex flex-col gap-3">
-        {error && (
-          <p role="alert" className="rounded-md bg-danger-bg px-4 py-3 text-center text-label text-danger">
-            {error}
+        <section className="flex flex-col gap-3">
+          {error && (
+            <p role="alert" className="rounded-md bg-danger-bg px-4 py-3 text-center text-label text-danger">
+              {error}
+            </p>
+          )}
+          <Button onClick={() => navigate('/signin')}>로그인</Button>
+          <p className="text-center text-label text-ink-2">
+            아직 계정이 없으신가요?{' '}
+            <Link to="/signup" className="text-ink underline underline-offset-4">회원가입 하러가기</Link>
           </p>
-        )}
-        <Button onClick={() => navigate('/signin')}>로그인</Button>
-        <p className="text-center text-label text-ink-2">
-          아직 계정이 없으신가요?{' '}
-          <Link to="/signup" className="text-ink underline underline-offset-4">회원가입 하러가기</Link>
-        </p>
-        <Button variant="ghost" loading={submitting} onClick={onStart}>운영진 로그인 (Google)</Button>
-        <p className="text-center text-caption text-ink-3">
-          시작하면{' '}
-          <Link to="/terms" className="text-link">
-            이용약관
-          </Link>
-          과{' '}
-          <Link to="/privacy" className="text-link">
-            개인정보 처리방침
-          </Link>
-          에 동의하게 돼요
-        </p>
-        {SHOW_DEMO_PANEL && <>
-          <DemoPanel />
-          <Button variant="secondary" loading={submitting} onClick={onStart}>선택한 데모 계정으로 바로 로그인</Button>
-        </>}
-        <Link to="/ops/login" className="self-center text-caption text-ink-3">
-          운영진
+          <p className="text-center text-caption text-ink-3">
+            시작하면{' '}
+            <Link to="/terms" className="text-link">
+              이용약관
+            </Link>
+            과{' '}
+            <Link to="/privacy" className="text-link">
+              개인정보 처리방침
+            </Link>
+            에 동의하게 돼요
+          </p>
+          {SHOW_DEMO_PANEL && <>
+            <DemoPanel />
+            <Button variant="secondary" loading={submitting} onClick={onStart}>선택한 데모 계정으로 바로 로그인</Button>
+          </>}
+        </section>
+      </main>
+        {menuOpen && <LoginMenu onClose={() => setMenuOpen(false)} onAdminLogin={onStart} />}
+    </>
+  );
+}
+
+/** 오른쪽 위 메뉴. 관리자(학생회·스태프, 구글)와 운영진(아이디·비밀번호) 로그인은 여기에만 둔다 */
+function LoginMenu({ onClose, onAdminLogin }: { onClose: () => void; onAdminLogin: () => void }) {
+  return (
+    <>
+      <div className="fixed inset-0 z-30 bg-black/20 animate-fade-in" onClick={onClose} aria-hidden />
+      <aside
+        role="dialog"
+        aria-label="메뉴"
+        className="fixed right-0 top-0 z-40 flex h-full w-64 flex-col gap-2 bg-bg p-5 shadow-float"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-label text-ink-3">메뉴</span>
+          <button
+            type="button"
+            aria-label="닫기"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-ink-2"
+          >
+            <X size={16} strokeWidth={1.75} />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onAdminLogin}
+          className="rounded-lg bg-surface px-4 py-4 text-label text-ink hover:bg-surface-2"
+        >
+          관리자 로그인
+        </button>
+        <Link to="/ops/login" className="rounded-lg bg-surface px-4 py-4 text-center text-label text-ink hover:bg-surface-2">
+          운영진 로그인
         </Link>
-      </section>
-    </main>
+      </aside>
+    </>
   );
 }
 
