@@ -14,11 +14,10 @@ import { studentAuthMessage } from '@/lib/studentAuthForm';
 export function OnboardingPage() {
   const { user, refreshUser, signOut } = useAuth();
   const navigate = useNavigate();
-  // 학생증 단계 전에 가입한 학생은 본인 사진이 이미 있다. 그대로 두고 학생증만 더 받는다
-  const [photo, setPhoto] = useState<string | null>(() => user?.photoUrl || null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [idCard, setIdCard] = useState<string | null>(null);
-  // 본인 사진 → 학생증 순서. 본인 사진이 이미 있는 예전 가입자는 학생증부터
-  const [stage, setStage] = useState<'photo' | 'idCard'>(() => (user?.photoUrl ? 'idCard' : 'photo'));
+  // 누구나 본인 사진 → 학생증 순서로 낸다
+  const [stage, setStage] = useState<'photo' | 'idCard'>('photo');
   const [processing, setProcessing] = useState(false);
   const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
