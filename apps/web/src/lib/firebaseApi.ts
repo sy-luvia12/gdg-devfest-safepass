@@ -25,6 +25,7 @@ import {
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 import type {
   Callables,
+  RosterStatus,
   GetRosterResponse,
   ImportRosterResponse,
   PrecheckReason,
@@ -434,8 +435,8 @@ export async function completeSignInLink(href: string, email?: string): Promise<
 }
 
 /** 가입 마지막 단계: 검표 때 보여줄 본인 사진 (ImagePicker의 JPEG data URL) */
-export async function submitProfilePhoto(photoDataUrl: string): Promise<User> {
-  const { data } = await run(() => call('submitProfilePhoto')({ photoDataUrl }));
+export async function submitProfilePhoto(photoDataUrl: string, idCardDataUrl: string): Promise<User> {
+  const { data } = await run(() => call('submitProfilePhoto')({ photoDataUrl, idCardDataUrl }));
   const user = await profileToUser(data.profile);
   if (!user) throw new ApiError('not_school_account');
   return user;
@@ -569,16 +570,10 @@ export async function verifyStudentRoster(schoolId: string, name: string, studen
 
 // ---------- 입장권 ----------
 
-/** 이 행사 명단에 내 학번 줄이 있고 이름이 같은지. 보안 규칙상 자기 줄만 읽을 수 있다. 발급 여부는 서버가 다시 확인한다 */
-export async function amIOnEventRoster(eventId: string): Promise<boolean> {
-  const uid = auth.currentUser?.uid;
-  if (!uid) throw new ApiError('unauthenticated');
-  const me = (await getDoc(doc(db, 'users', uid))).data();
-  const studentId = typeof me?.studentId === 'string' ? me.studentId : '';
-  if (!studentId) return false;
-  const row = await getDoc(doc(db, 'events', eventId, 'roster', studentId)).catch(() => null);
-  const clean = (v: unknown) => String(v ?? '').normalize('NFC').replace(/[\s\p{Cf}]/gu, '');
-  return !!row?.exists() && clean(row.get('name')) === clean(me?.name);
+/** 행사마다 내가 받을 수 있는지 (행사 명단 기준). 서버가 행사 명단과 대조한다. 발급할 때 서버가 다시 확인한다 */
+export async function myRosterStatus(eventIds: string[]): Promise<Record<string, RosterStatus>> {
+  if (eventIds.length === 0) return {};
+  return (await run(() => call('myRosterStatus')({ eventIds }))).data.status;
 }
 
 export async function getMyTicket(eventId: string): Promise<Ticket | null> {

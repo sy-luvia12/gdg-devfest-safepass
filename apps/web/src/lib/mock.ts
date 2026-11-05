@@ -44,7 +44,7 @@ import {
 import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
 import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
-import type { ClaimResult, MyLottery, RunDrawResult } from '@/types';
+import type { ClaimResult, MyLottery, RosterStatus, RunDrawResult } from '@/types';
 
 const STATE_KEY = 'safepass-mock-v8';
 const SESSION_KEY = 'safepass-mock-session';
@@ -820,11 +820,12 @@ export async function completeSignInLink(href: string, email?: string): Promise<
   return user;
 }
 
-export async function submitProfilePhoto(photoDataUrl: string): Promise<User> {
+export async function submitProfilePhoto(photoDataUrl: string, idCardDataUrl: string): Promise<User> {
   await wait();
   const s = load();
   const user = requireUser(s, ['student']);
   user.photoUrl = photoDataUrl;
+  user.idCardUrl = idCardDataUrl;
   user.verifyStatus = 'approved';
   save(s);
   return user;
@@ -966,12 +967,25 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   return ticket;
 }
 
-export async function amIOnEventRoster(eventId: string): Promise<boolean> {
+export async function myRosterStatus(eventIds: string[]): Promise<Record<string, RosterStatus>> {
   await wait();
   const s = load();
   const user = requireUser(s);
   const name = user.name.replace(/\s+/g, '');
-  return !!s.rosters[eventId]?.entries.some((r) => r.studentId === user.studentId && r.name.replace(/\s+/g, '') === name);
+  const out: Record<string, RosterStatus> = {};
+  for (const id of eventIds) {
+    const event = s.events.find((e) => e.id === id);
+    if (!event) continue;
+    const roster = s.rosters[id];
+    out[id] = !event.settings.requireRoster
+      ? 'open'
+      : !roster
+        ? 'no_roster'
+        : roster.entries.some((r) => r.studentId === user.studentId && r.name.replace(/\s+/g, '') === name)
+          ? 'on_roster'
+          : 'not_on_roster';
+  }
+  return out;
 }
 
 export async function getMyTicket(eventId: string): Promise<Ticket | null> {

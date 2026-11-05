@@ -98,7 +98,7 @@ firebase.json             #                                    ← 백엔드
 | `/onboarding` | 첫 로그인: 동의 → 본인 사진 → 학생증 → 승인 요청 | 학생 |
 | `/onboarding/pending` | 학생회 승인 대기 | 학생 |
 | `/device` | 다른 기기에 이미 등록됨 → 초기화 요청 | 학생 |
-| `/events` | 학교가 참여하는 축제 목록 (학생 첫 화면. 명단 행사는 "명단 대상"·"명단 준비 중") | 학생 |
+| `/events` | 학교가 참여하는 축제 목록 (학생 첫 화면. 명단 행사는 서버 대조 결과로 "명단에 없음"·"명단 준비 중") | 학생 |
 | `/event` | 축제 상세 · 입장권 발급 | 학생 |
 | `/ticket` | 내 입장권 (QR), 취소 | 학생 |
 | `/ticket/history` | 발급·재배정·입장 기록 | 학생 |
@@ -209,6 +209,7 @@ resolveDeviceReset(id): Promise<void>               // admin → deviceStatus 'r
 
 // 입장권
 issueTicket(eventId): Promise<Ticket>               // 도메인·1인 1매·정원·취소 이력 확인. 학생만
+myRosterStatus(eventIds): Promise<Record<eventId, RosterStatus>>   // 서버가 행사 명단과 대조: 'open' | 'no_roster' | 'on_roster' | 'not_on_roster'. 목록 배지·받기 버튼용
 getMyTicket(eventId): Promise<Ticket | null>
 subscribeMyTicket(eventId, cb, onError?): () => void   // 실시간. 재배정·입장·취소가 새로고침 없이 반영
 refreshQrToken(ticketId): Promise<{ token; expiresAt }> // 25초마다. 기기 서명을 붙인다
@@ -274,7 +275,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - 색 생성 규칙은 `DESIGN.md` 2.1장. 컴포넌트에서 테마 색 hex를 직접 쓰지 않는다.
 
 ### 로그인 규칙
-- **학생**: 학교 메일 링크(Firebase 이메일 링크, 비밀번호 없음). 가입 = 학교·이름·학번 → `precheckStudent` → 메일 링크 → `completeSignInLink`(명단 대조) → 본인 사진 `submitProfilePhoto`. 로그인 = 메일(+학번) → 메일 링크. 화면 연결은 `docs/student-auth.md`.
+- **학생**: 학교 메일 링크(Firebase 이메일 링크, 비밀번호 없음). 가입 = 학교·이름·학번 → `precheckStudent` → 메일 링크 → `completeSignInLink`(명단 대조) → 본인 사진·학생증 사진 `submitProfilePhoto(photo, idCard)`. 학생증은 `idCards/{uid}`에 두고 클라이언트는 읽지 못한다. 로그인 = 메일(+학번) → 메일 링크. 화면 연결은 `docs/student-auth.md`.
 - **운영진(스태프·학생회)**: 구글 로그인(`signInWithSchoolAccount`).
 - 재학생 명단을 불러온 학교는 가입을 마친 학생만 들어오고 발급받는다(`not_registered`). 명단이 없는 학교는 예전처럼 구글 로그인으로 들어온다.
 - 로그인할 때마다 서버가 명단을 다시 본다. 명단에서 빠진 학생은 다시 가입해야 한다.

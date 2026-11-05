@@ -55,6 +55,7 @@ async function signIn(email: string): Promise<Client> {
     setAllowReissue: call('setAllowReissue'),
     setStaff: call('setStaff'),
     requestDeviceReset: call('requestDeviceReset'),
+    myRosterStatus: call('myRosterStatus'),
     fs,
   };
 }
@@ -364,16 +365,29 @@ describe('admin features and security rules', () => {
     expect(await codeOf(getDocs(collection(staff.fs, 'scanLogs')))).toBe('permission-denied');
   });
 
-  it('a student reads only their own event roster row, never the list or another row', async () => {
-    await db.doc(`events/${EVENT}/roster/2024000001`).set({ name: 'Alice Kim', studentId: '2024000001' });
-    await db.doc(`events/${EVENT}/roster/2024000099`).set({ name: 'Other', studentId: '2024000099' });
-    expect(await codeOf(getDoc(clientDoc(alice.fs, 'events', EVENT, 'roster', '2024000001')))).toBe('resolved');
-    expect(await codeOf(getDoc(clientDoc(alice.fs, 'events', EVENT, 'roster', '2024000099')))).toBe('permission-denied');
-    expect(await codeOf(getDocs(collection(alice.fs, 'events', EVENT, 'roster')))).toBe('permission-denied');
-    // bob has no student id, so no row is his
-    expect(await codeOf(getDoc(clientDoc(bob.fs, 'events', EVENT, 'roster', '2024000001')))).toBe('permission-denied');
-    await db.doc(`events/${EVENT}/roster/2024000001`).delete();
-    await db.doc(`events/${EVENT}/roster/2024000099`).delete();
+  it('myRosterStatus: the server compares event rosters, and clients still cannot read a roster', async () => {
+    const base = { name: 'R', capacity: 10, allowedDomains: ['korea.ac.kr'] };
+    const summary = { sheetUrl: 'x', count: 1 };
+    await db.doc('events/r-open').set({ ...base, requireRoster: false });
+    await db.doc('events/r-empty').set({ ...base, requireRoster: true });
+    await db.doc('events/r-on').set({ ...base, requireRoster: true, roster: summary });
+    await db.doc('events/r-off').set({ ...base, requireRoster: true, roster: summary });
+    await db.doc('events/r-name').set({ ...base, requireRoster: true, roster: summary });
+    await db.doc('events/r-on/roster/2024000001').set({ name: 'Alice  Kim', studentId: '2024000001' });
+    await db.doc('events/r-off/roster/2024000099').set({ name: 'Other', studentId: '2024000099' });
+    await db.doc('events/r-name/roster/2024000001').set({ name: 'Someone Else', studentId: '2024000001' });
+    const ids = ['r-open', 'r-empty', 'r-on', 'r-off', 'r-name', 'r-missing'];
+    expect((await alice.myRosterStatus({ eventIds: ids })).status).toEqual({
+      'r-open': 'open', 'r-empty': 'no_roster', 'r-on': 'on_roster', 'r-off': 'not_on_roster', 'r-name': 'not_on_roster',
+    });
+    // bob has no student id: on no roster
+    expect((await bob.myRosterStatus({ eventIds: ['r-on'] })).status).toEqual({ 'r-on': 'not_on_roster' });
+    expect(await codeOf(alice.myRosterStatus({ eventIds: ['bad id!'] }))).toBe('functions/invalid-argument');
+    expect(await codeOf(getDoc(clientDoc(alice.fs, 'events', 'r-on', 'roster', '2024000001')))).toBe('permission-denied');
+    expect(await codeOf(getDocs(collection(alice.fs, 'events', 'r-on', 'roster')))).toBe('permission-denied');
+    // issueTicket follows the same rule
+    expect(await codeOf(alice.issueTicket({ eventId: 'r-off' }))).toBe('functions/failed-precondition');
+    for (const id of ids.slice(0, 5)) await db.recursiveDelete(db.doc(`events/${id}`));
   });
 
   it('staff reads only the scans they made', async () => {
