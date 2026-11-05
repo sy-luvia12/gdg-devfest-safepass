@@ -36,6 +36,10 @@ export interface FestivalEvent {
   allowReissueAfterCancel: boolean;
   // The scanner shows the holder's photo and a staff member confirms before anyone is admitted.
   twoStepCheck: boolean;
+  // Instant entry draw: a student enters by opening the event, and only winners take a ticket. Replaces requireRoster.
+  instantDraw: boolean;
+  // Expected number of students the draw is shared with (the whole school). Win rate = capacity / drawPool.
+  drawPool: number;
 }
 
 export const QR_PREFIX = 'TTV1';

@@ -255,6 +255,11 @@ getChainEventStatus(eventId): Promise<ChainEventStatus>   // S8 공개 현황판
 getChainDraw(eventId, round): Promise<ChainDraw | null>   // 추첨 회차 커밋·시드
 verifyMyDraw(entry): Promise<DrawCheck>                   // S7 직접 검증 (DEMO_DRAW.entries로 시연)
 
+// 즉석 추첨 (events.instantDraw 행사). 행사 화면을 열면 응모, 체인(openEntry → 5블록 뒤 settleEntry)이 당첨을 정한다
+enterDraw(eventId): Promise<EntryDraw>                    // 한 학번·한 행사에 한 번만. 다시 불러도 같은 응모 (재추첨 없음)
+getMyEntryDraw(eventId): Promise<EntryDraw | null>        // pending → won / lost. 당첨자만 issueTicket (아니면 'draw_not_won')
+verifyMyEntry(entry): Promise<EntryVerification>          // 폰에서 다시 계산: 응모 번호·확률·시드(블록 해시)·점수·결과
+
 // 취소표 추첨 (reassignMode 'lottery' 행사만). docs/api.md 14장
 getMyLottery(eventId): Promise<MyLottery>                 // 대기 중 / 당첨(기한) / 수락 완료 / 기한 지남 / 마감. receipt → verifyMyDraw
 claimTicket(eventId): Promise<ClaimResult>                // 'claimed' | 'no_offer' | 'expired'
@@ -308,7 +313,8 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - `events`: 로그인 사용자 읽기 가능 (관리자 실시간 구독).
 
 ## 구현 상태 (실제 연동 vs 화면만)
-- 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia)와 아웃박스(`functions/src/chain`)가 있다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
+- 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia `0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2`, 2026-11-05 재배포)와 아웃박스(`functions/src/chain`)가 있다. 서버 `CHAIN_CONTRACT_ADDRESS`는 배포하는 사람의 `functions/.env.ttv-festival-pass`에서 온다.
+- 운영진 개입 기록(`recordAction`: 분실 재발급·환불·예외 입장)은 컨트랙트와 공개 현황판에만 있다. 서버에서 부르는 화면은 아직 없다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
 - 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).
@@ -357,7 +363,7 @@ firebase deploy --only hosting   # 저장소 루트에서
 - `functions/seed.ts`: 학교 4곳(고려대·연세대·성균관대·KAIST)과 행사.
   - 고려대: 입실렌티, **고연전**(야구·농구·아이스하키·축구·럭비 경기 4개), 석탑대동제 / 연세대: 아카라카, **연고전**(같은 경기 4개) / 성균관대: 대동제 / KAIST: 태울석림제.
   - 고연전·연고전은 학교마다 따로 만든 경기 행사 4개를 묶음 이름(`seriesName`)으로 묶는다. 학생 행사 목록에서 묶음 제목 아래에 모여 보인다. 경기마다 입장권·정원·명단·검표가 따로다.
-  - 행사 명단 행사(`requireRoster` 켬): 입실렌티, 아카라카, 고연전·연고전의 농구·아이스하키. 행사 담당자가 시트로 올린 명단의 학생만 받는다.
+  - 즉석 추첨 행사(`instantDraw` 켬, 예전 행사 명단 행사): 입실렌티, 아카라카, 고연전·연고전의 농구·아이스하키. 학생이 행사를 열면 응모되고, 컨트랙트가 블록 해시로 당첨을 정한다. 당첨 확률 = 정원 ÷ `drawPool`(학교 재학생 수, 시드 값). 당첨자만 받는다. 형식은 `functions/src/domain/entryDraw.ts`.
   - 모든 재학생 행사(`requireRoster` 끔): 고연전·연고전의 야구·축구·럭비, 석탑대동제, 성균관대 대동제, KAIST 태울석림제.
   - 둘 다 행사 담당자가 "행사 설정"에서 바꿀 수 있다.
 - 학생은 넣지 않는다. 학교마다 빈 재학생 명단으로 시작하고, 팀원이 운영진 콘솔에서 자기 학교 계정을 넣는다. 이미 있는 명단은 건드리지 않는다.

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Blocks, ChevronRight, LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
+import { Blocks, ChevronRight, Dices, LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import calendarIcon from '@/assets/icons/festival-calendar.svg';
 import locationIcon from '@/assets/icons/festival-location.svg';
@@ -9,10 +9,14 @@ import { eventTitle, formatEventDate } from '@/app/format';
 import { AppHeader } from '@/components/AppHeader';
 import { BottomBar, Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { EntryDrawCard } from '@/components/EntryDrawCard';
 import { IconButton } from '@/components/IconButton';
 import { StateView } from '@/components/StateView';
-import { getEvent, getMyTicket, issueTicket, myRosterStatus } from '@/lib/api';
-import { ApiError, type Event, type RosterStatus, type Ticket } from '@/types';
+import { enterDraw, getEvent, getMyEntryDraw, getMyTicket, issueTicket, myRosterStatus } from '@/lib/api';
+import { ApiError, type EntryDraw, type Event, type RosterStatus, type Ticket } from '@/types';
+
+// 추첨 결과를 기다리는 동안 다시 묻는 간격
+const DRAW_POLL_MS = 3_000;
 
 type Data = { event: Event; ticket: Ticket | null; roster: RosterStatus };
 
@@ -25,6 +29,11 @@ export function EventPage() {
   const [issuing, setIssuing] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
   const [cancelledBefore, setCancelledBefore] = useState(false);
+  // 즉석 추첨 행사: 화면을 열면 응모하고, 체인 결과가 나올 때까지 다시 묻는다
+  const [entry, setEntry] = useState<EntryDraw | null>(null);
+  const [entering, setEntering] = useState(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
+  const entered = useRef<string | null>(null);
 
   const load = useCallback(() => {
     setLoadError(false);
@@ -34,6 +43,38 @@ export function EventPage() {
       .catch(() => setLoadError(true));
   }, [eventId, user?.role]);
   useEffect(load, [load]);
+
+  const drawEvent = !!data?.event.instantDraw && user?.role === 'student' && !data.ticket;
+  useEffect(() => {
+    if (!drawEvent || entered.current === eventId) return;
+    entered.current = eventId;
+    setEntering(true);
+    setDrawError(null);
+    // 이미 응모했으면 그 응모를 그대로 돌려받는다 (다시 뽑지 않는다)
+    enterDraw(eventId)
+      .then(setEntry)
+      .catch((e) => {
+        const code = e instanceof ApiError ? e.code : 'unknown';
+        setDrawError(
+          code === 'not_registered'
+            ? '회원가입(사진·학생증)을 마친 뒤에 응모할 수 있어요'
+            : code === 'not_school_account'
+              ? '이 학교 학생만 응모할 수 있어요'
+              : '잠시 후 다시 열어 주세요',
+        );
+      })
+      .finally(() => setEntering(false));
+  }, [drawEvent, eventId]);
+
+  useEffect(() => {
+    if (entry?.status !== 'pending') return;
+    const timer = setInterval(() => {
+      getMyEntryDraw(eventId)
+        .then((next) => next && setEntry(next))
+        .catch(() => undefined);
+    }, DRAW_POLL_MS);
+    return () => clearInterval(timer);
+  }, [entry?.status, eventId]);
 
   const onIssue = async () => {
     setIssuing(true);
@@ -55,6 +96,8 @@ export function EventPage() {
             ? '학교 계정으로만 받을 수 있어요'
             : code === 'not_in_roster'
               ? '학생회 명단에 없어서 받을 수 없어요. 학생회에 문의해 주세요'
+              : code === 'draw_not_won'
+                ? '추첨에 당첨된 학생만 받을 수 있어요'
               : '입장권을 받지 못했어요. 다시 시도해 주세요',
       );
       setIssuing(false);
@@ -134,8 +177,13 @@ export function EventPage() {
           <Guide icon={UserCheck} text="학교 계정 1개당 1매만 받을 수 있어요" />
           <Guide icon={Smartphone} text="입장권은 받은 기기에 묶여요. 다른 기기나 계정으로는 쓸 수 없어요" />
           <Guide icon={ShieldCheck} text="입장권 번호는 블록체인에 기록돼서 위조할 수 없어요" />
+          {event.instantDraw && (
+            <Guide icon={Dices} text="추첨 행사예요. 이 화면을 열면 응모되고, 블록체인이 정한 당첨자만 입장권을 받아요" />
+          )}
           <Guide icon={ListOrdered} text="못 가게 되면 취소해 주세요. 표는 학생회가 정한 방식으로 대기 명단의 재학생에게 넘어가요" />
         </ul>
+
+        {drawEvent && <EntryDrawCard entry={entry} entering={entering} error={drawError} />}
 
         <nav className="flex flex-col">
           <LinkRow icon={Blocks} label="공개 현황판" hint="발행량·재배정·운영진 기록" onClick={() => navigate('/event/board')} />
@@ -155,6 +203,16 @@ export function EventPage() {
           <Button disabled>학생 계정으로만 받을 수 있어요</Button>
         ) : soldOut ? (
           <Button disabled>모두 발급되었어요</Button>
+        ) : event.instantDraw ? (
+          entry?.status === 'won' ? (
+            <Button loading={issuing} onClick={onIssue}>
+              입장권 받기
+            </Button>
+          ) : entry?.status === 'lost' ? (
+            <Button disabled>추첨에 당첨되지 않았어요</Button>
+          ) : (
+            <Button disabled>추첨 결과를 기다리는 중이에요</Button>
+          )
         ) : data.roster === 'not_on_roster' ? (
           <Button disabled>행사 명단에 없어서 받을 수 없어요</Button>
         ) : data.roster === 'no_roster' ? (

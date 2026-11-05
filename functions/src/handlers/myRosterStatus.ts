@@ -4,6 +4,7 @@ import { isStudentId, normalizeName } from '../domain/roster';
 import { db } from '../firebase';
 import { DOC_ID, requireAuth } from './boundary';
 import { callableOptions } from './callableOptions';
+import { entryDrawRef } from './entryDraw';
 
 const MAX_EVENTS = 50;
 
@@ -23,14 +24,22 @@ export const myRosterStatus = onCall<unknown, Promise<MyRosterStatusResponse>>(c
   const status: Record<string, RosterStatus> = {};
   if (eventIds.length === 0) return { status };
   const events = await db.getAll(...eventIds.map((id) => db.doc(`events/${id}`)));
-  const rosterOnly = events.filter((e) => e.exists && e.get('requireRoster') === true && e.get('roster'));
+  const rosterOnly = events.filter((e) => e.exists && e.get('instantDraw') !== true && e.get('requireRoster') === true && e.get('roster'));
   const rows = studentId && rosterOnly.length
     ? await db.getAll(...rosterOnly.map((e) => db.doc(`events/${e.id}/roster/${studentId}`)))
     : [];
   const rowOf = new Map(rows.map((r, i) => [rosterOnly[i].id, r]));
+  // Draw events answer with the student's own entry instead of a roster row.
+  const drawEvents = events.filter((e) => e.exists && e.get('instantDraw') === true);
+  const entries = studentId && drawEvents.length ? await db.getAll(...drawEvents.map((e) => entryDrawRef(e.id, studentId))) : [];
+  const entryOf = new Map(entries.map((d, i) => [drawEvents[i].id, d]));
   for (const e of events) {
     if (!e.exists) continue;
-    if (e.get('requireRoster') !== true) status[e.id] = 'open';
+    if (e.get('instantDraw') === true) {
+      const entry = entryOf.get(e.id);
+      const s = entry?.exists && entry.get('uid') === caller.uid ? entry.get('status') : null;
+      status[e.id] = s === 'won' ? 'draw_won' : s === 'lost' ? 'draw_lost' : s ? 'draw_pending' : 'draw_open';
+    } else if (e.get('requireRoster') !== true) status[e.id] = 'open';
     else if (!e.get('roster')) status[e.id] = 'no_roster';
     else {
       const row = rowOf.get(e.id);

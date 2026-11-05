@@ -126,6 +126,14 @@ export const DEMO_DRAW = chain.DEMO_DRAW;
 export type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
 
 // 취소표 추첨 (추첨 행사만, docs/api.md 14장). 상태: 추첨 대기 중 / 당첨(수락 대기, 기한) / 수락 완료 / 수락 기한 지남 / 추첨 마감
+// 즉석 추첨 (instantDraw 행사). 행사 화면을 열면 응모되고, 체인이 정한 당첨자만 입장권을 받는다
+export const enterDraw: typeof mock.enterDraw = real ? fb.enterDraw : mock.enterDraw;
+export const getMyEntryDraw: typeof mock.getMyEntryDraw = real ? fb.getMyEntryDraw : mock.getMyEntryDraw;
+/** "다시 검증하기": 체인의 응모·시드를 읽어 폰에서 다시 계산 */
+export const verifyMyEntry: typeof mock.verifyMyEntry = real ? chain.verifyMyEntry : mock.verifyMyEntry;
+export type { EntryCheck, EntryVerification } from './chain/types';
+export { formatRate } from './chain/entry';
+
 export const getMyLottery: typeof mock.getMyLottery = real ? fb.getMyLottery : mock.getMyLottery;
 export const claimTicket: typeof mock.claimTicket = real ? fb.claimTicket : mock.claimTicket;
 /** 관리자 "지금 추첨" */

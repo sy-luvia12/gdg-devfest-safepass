@@ -8,6 +8,7 @@ import { eventKeyOf, REASON, tokenIdOf } from '../src/chain/ids';
 import { processChainOp, walletAddressFor, WaitingForPrevious } from '../src/chain/process';
 import { preflightChain } from '../src/chain/preflight';
 import { deriveAddress } from '../src/chain/wallets';
+import { entryIdOf, scoreOf, studentRefOf } from '../src/domain/entryDraw';
 import { buildSnapshot, drawWinners, merkleProof, newSalt, verifyProof } from '../src/lottery/draw';
 import { drawRef, planRef, snapshotRound } from '../src/lottery/rounds';
 
@@ -279,5 +280,42 @@ describe('lottery round through processChainOp', () => {
     expect(seed).toBe(`0x${'0'.repeat(64)}`);
     const commits = await reader.queryFilter(reader.filters.DrawCommitted(eventKeyOf(eventId), 1));
     expect(commits).toHaveLength(1);
+  }, 120_000);
+});
+
+describe('instant entry draw through processChainOp', () => {
+  it('opens the entry, settles it from a later block hash and stores the result the contract decided', async () => {
+    const eventId = id('eev');
+    await db.doc(`events/${eventId}`).set({ capacity: 5, instantDraw: true, drawPool: 10, allowedDomains: ['korea.ac.kr'] });
+    const studentRef = studentRefOf('korea', id('s1'));
+    const salt = newSalt();
+    const entryId = entryIdOf(eventKeyOf(eventId), studentRef, salt);
+    const docId = `${eventId}_${id('s1')}`;
+    await db.doc(`entryDraws/${docId}`).set({ eventId, studentRef, salt, entryId, winBps: 5000, status: 'pending' });
+    await db.doc(`chainOps/entry-${docId}`).set({ kind: 'openEntry', eventId, entryDocId: docId, seq: 1, status: 'pending' });
+
+    const provider = new JsonRpcProvider(RPC);
+    const miner = setInterval(() => void provider.send('evm_mine', []), 200);
+    try {
+      expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `entry-${docId}`)).toBe('done');
+    } finally {
+      clearInterval(miner);
+    }
+
+    const entry = (await db.doc(`entryDraws/${docId}`).get()).data()!;
+    const [seedBlock, winBps, result] = await reader.entries(eventKeyOf(eventId), entryId);
+    expect(Number(winBps)).toBe(5000);
+    expect(entry.seedBlock).toBe(Number(seedBlock));
+    // Anyone can recompute: the seed is the seed block's hash, and the score decides against the fixed rate.
+    expect(entry.seed).toBe((await provider.getBlock(entry.seedBlock))!.hash);
+    expect(entry.score).toBe(scoreOf(entry.seed, entryId));
+    expect(entry.status).toBe(entry.score < 5000 ? 'won' : 'lost');
+    expect(Number(result)).toBe(entry.status === 'won' ? 1 : 2);
+
+    // A repeat finds the entry settled and draws nothing again.
+    await db.doc(`chainOps/entry-${docId}`).update({ status: 'pending' });
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, `entry-${docId}`)).toBe('done');
+    expect((await db.doc(`entryDraws/${docId}`).get()).get('score')).toBe(entry.score);
+    expect(await reader.queryFilter(reader.filters.EntrySettled(eventKeyOf(eventId), entryId))).toHaveLength(1);
   }, 120_000);
 });

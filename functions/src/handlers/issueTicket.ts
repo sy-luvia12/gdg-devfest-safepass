@@ -6,6 +6,7 @@ import { emailDomain, formatNftNumber } from '../domain/ticket';
 import { db } from '../firebase';
 import { eventFromSnap, readDocId, requireAuth, requireRole } from './boundary';
 import { callableOptions } from './callableOptions';
+import { entryDrawRef } from './entryDraw';
 import { onEventRoster, schoolForEmail } from './rosterStore';
 
 export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callableOptions, async (request) => {
@@ -41,9 +42,17 @@ export const issueTicket = onCall<unknown, Promise<IssueTicketResponse>>(callabl
         throw new HttpsError('failed-precondition', 'A cancelled ticket cannot be taken again.', { reason });
       }
     }
+    // Draw events issue only to the student whose entry won (the chain decided it in settleEntry).
+    if (event.instantDraw) {
+      const entry = student.studentId ? await tx.get(entryDrawRef(eventId, student.studentId)) : null;
+      if (entry?.get('status') !== 'won' || entry.get('uid') !== caller.uid) {
+        const reason: IssueReason = 'DRAW_NOT_WON';
+        throw new HttpsError('failed-precondition', 'Only a draw winner can take a ticket.', { reason });
+      }
+    }
     // Event rosters list names and student ids. The student's id and name (set at sign-up from the school roster,
     // or by a seed profile) must match a row.
-    if (event.requireRoster && !(await onEventRoster(tx, eventId, student.studentId, student.name))) {
+    else if (event.requireRoster && !(await onEventRoster(tx, eventId, student.studentId, student.name))) {
       const reason: IssueReason = 'NOT_IN_ROSTER';
       throw new HttpsError('failed-precondition', 'Not on this event roster.', { reason });
     }

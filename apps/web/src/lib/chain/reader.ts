@@ -1,7 +1,7 @@
 import type { Address, Hex } from 'viem';
-import { CHAIN_EVENTS, FESTIVAL_TICKET_READ_ABI, REASON } from './abi';
+import { ACTION, CHAIN_EVENTS, FESTIVAL_TICKET_READ_ABI, REASON } from './abi';
 import { eventKeyOf, tokenIdOf } from './ids';
-import type { ChainDraw, ChainEventStatus, ChainTicketStep } from './types';
+import type { ChainDraw, ChainEntry, ChainEventStatus, ChainTicketStep } from './types';
 
 // Reads FestivalTicket straight from the chain, without Firebase. Fetches every contract log from the deploy
 // block once, then only new blocks. Fine for a demo-sized contract; a large deployment needs an indexer.
@@ -19,7 +19,7 @@ export interface ChainClientLike {
   getBlockNumber(): Promise<bigint>;
   getLogs(args: { address: Address; events: typeof CHAIN_EVENTS; fromBlock: bigint; toBlock: bigint; strict: true }): Promise<DecodedLog[]>;
   readContract(args: { address: Address; abi: typeof FESTIVAL_TICKET_READ_ABI; functionName: string; args: readonly unknown[] }): Promise<unknown>;
-  getBlock(args: { blockNumber: bigint }): Promise<{ timestamp: bigint }>;
+  getBlock(args: { blockNumber: bigint }): Promise<{ timestamp: bigint; hash?: Hex | null }>;
 }
 
 export interface ChainReaderOptions {
@@ -63,10 +63,17 @@ export function createChainReader(o: ChainReaderOptions) {
 
   async function eventStatus(eventId: string): Promise<ChainEventStatus> {
     const key = eventKeyOf(eventId);
-    const [info, all] = await Promise.all([
-      o.client.readContract({ address: o.contract, abi: FESTIVAL_TICKET_READ_ABI, functionName: 'eventInfo', args: [key] }),
+    const read = (functionName: string, args: readonly unknown[]) =>
+      o.client.readContract({ address: o.contract, abi: FESTIVAL_TICKET_READ_ABI, functionName, args });
+    const [info, all, stats, lost, refund, manual] = await Promise.all([
+      read('eventInfo', [key]),
       allLogs(),
+      read('entryStats', [key]),
+      read('actionCount', [key, ACTION.LOST_REISSUE]),
+      read('actionCount', [key, ACTION.REFUND]),
+      read('actionCount', [key, ACTION.MANUAL_ENTRY]),
     ]);
+    const [settled, won] = stats as [number, number];
     const [capacity, active, exists] = info as [number, number, boolean];
     const tokens = new Set(all.filter((l) => l.eventName === 'Issued' && l.args.eventKey === key).map((l) => String(l.args.tokenId)));
     const mine = all.filter((l) => tokens.has(String(l.args.tokenId)));
@@ -82,6 +89,8 @@ export function createChainReader(o: ChainReaderOptions) {
       reassigned: { queue: count('Reassigned', REASON.CANCEL_QUEUE), lottery: count('Reassigned', REASON.CANCEL_RANDOM) },
       released: { noWaiter: count('Released', REASON.CANCEL_RELEASED), adminRevoke: count('Released', REASON.ADMIN_REVOKE) },
       drawRounds: new Set(all.filter((l) => l.eventName === 'DrawCommitted' && l.args.eventKey === key).map((l) => Number(l.args.round))).size,
+      entries: { settled: Number(settled), won: Number(won) },
+      actions: { lostReissue: Number(lost), refund: Number(refund), manualEntry: Number(manual) },
       asOfBlock: asOf(),
       contractUrl: `${o.explorer}/address/${o.contract}`,
     };
@@ -120,7 +129,37 @@ export function createChainReader(o: ChainReaderOptions) {
     return { commitment, seedBlock: seedBlock.toString(), seed: seed === ZERO ? null : seed, commitTx: of('DrawCommitted'), seedTx: of('DrawSeeded') };
   }
 
-  return { eventStatus, ticketHistory, draw };
+  /** One instant-draw entry: what the contract stored, and the seed and score from its EntrySettled event. */
+  async function entry(eventId: string, entryId: string): Promise<ChainEntry | null> {
+    const key = eventKeyOf(eventId);
+    const [stored, all] = await Promise.all([
+      o.client.readContract({ address: o.contract, abi: FESTIVAL_TICKET_READ_ABI, functionName: 'entries', args: [key, entryId] }),
+      allLogs(),
+    ]);
+    const [seedBlock, winBps, result] = stored as [bigint, number, number];
+    if (seedBlock === 0n) return null;
+    const mine = (name: string) => all.filter((l) => l.eventName === name && l.args.eventKey === key && String(l.args.entryId).toLowerCase() === entryId.toLowerCase()).at(-1);
+    const settled = mine('EntrySettled');
+    return {
+      seedBlock: Number(seedBlock),
+      winBps: Number(winBps),
+      result: Number(result) as 0 | 1 | 2,
+      seed: settled ? String(settled.args.seed) : null,
+      score: settled ? Number(settled.args.score) : null,
+      openTx: mine('EntryOpened')?.transactionHash ?? null,
+      settleTx: settled?.transactionHash ?? null,
+    };
+  }
+
+  /** The block hash the seed must equal, read straight from the chain. */
+  async function blockHash(block: number): Promise<string | null> {
+    return (await o.client.getBlock({ blockNumber: BigInt(block) })).hash ?? null;
+  }
+
+  const txUrl = (hash: string) => `${o.explorer}/tx/${hash}`;
+  const blockUrl = (block: number) => `${o.explorer}/block/${block}`;
+
+  return { eventStatus, ticketHistory, draw, entry, blockHash, txUrl, blockUrl };
 }
 
 export type ChainReader = ReturnType<typeof createChainReader>;

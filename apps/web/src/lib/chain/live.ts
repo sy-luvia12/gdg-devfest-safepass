@@ -4,12 +4,14 @@ import { CHAIN_CONTRACT } from '@/app/config';
 import { ApiError, type TicketHistoryItem } from '@/types';
 import demo from './demo-draw.json';
 import { checkMyDraw } from './draw';
+import { checkEntry } from './entry';
 import { createChainReader, type ChainClientLike, type ChainReader } from './reader';
-import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './types';
+import type { ChainDraw, ChainEventStatus, DrawCheck, EntryVerification, MyDrawEntry } from './types';
+import type { EntryDraw } from '@/types';
 
 // The deployed contract and where its logs start (contracts/deployments/baseSepolia.json, deploy tx block).
-const BASE_SEPOLIA_CONTRACT = '0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE';
-const BASE_SEPOLIA_DEPLOY_BLOCK = 54203696n;
+const BASE_SEPOLIA_CONTRACT = '0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2';
+const BASE_SEPOLIA_DEPLOY_BLOCK = 54788886n;
 const RPC = import.meta.env.VITE_CHAIN_RPC || 'https://base-sepolia-rpc.publicnode.com';
 const FROM_BLOCK = import.meta.env.VITE_CHAIN_FROM_BLOCK ? BigInt(import.meta.env.VITE_CHAIN_FROM_BLOCK) : BASE_SEPOLIA_DEPLOY_BLOCK;
 // The reader builds explorer links itself, so it does not inherit the Amoy default of VITE_CHAIN_EXPLORER.
@@ -37,6 +39,23 @@ export const getChainEventStatus = (eventId: string): Promise<ChainEventStatus> 
 export const getChainDraw = (eventId: string, round: number): Promise<ChainDraw | null> => guard(() => live().draw(eventId, round));
 export const verifyMyDraw = async (entry: MyDrawEntry): Promise<DrawCheck> =>
   checkMyDraw(entry, await getChainDraw(entry.eventId, entry.round));
+
+/** 즉석 추첨 "다시 검증하기": 체인의 응모·시드를 읽어 내 폰에서 다시 계산한다 */
+export const verifyMyEntry = (mine: EntryDraw): Promise<EntryVerification> =>
+  guard(async () => {
+    const r = live();
+    const chain = await r.entry(mine.eventId, mine.entryId);
+    const hash = chain?.seed ? await r.blockHash(chain.seedBlock) : null;
+    return {
+      chain,
+      check: checkEntry(mine, chain, hash),
+      links: {
+        open: chain?.openTx ? r.txUrl(chain.openTx) : null,
+        settle: chain?.settleTx ? r.txUrl(chain.settleTx) : null,
+        block: chain ? r.blockUrl(chain.seedBlock) : null,
+      },
+    };
+  });
 
 const REASON_TEXT: Record<number, string> = { 1: '대기 순서로 배정', 2: '추첨으로 배정', 3: '대기자 없음', 4: '운영진 회수' };
 
