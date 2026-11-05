@@ -71,7 +71,7 @@ async function mayTakeTicket(db: Firestore, tx: Transaction, eventId: string, ev
   const user = await tx.get(db.doc(`users/${uid}`));
   if (user.get('role') !== 'student') return false;
   // Schools with a loaded student roster only take students who finished sign-up, as issueTicket does.
-  if ((await schoolForEmail(email, tx))?.get('studentRoster') && !(user.get('rosterVerified') && user.get('photoSubmitted'))) return false;
+  if ((await schoolForEmail(email, tx))?.get('studentRoster') && !(user.get('rosterVerified') && user.get('photoSubmitted') && user.get('idCardSubmitted'))) return false;
   const held = await tx.get(db.collection('tickets').where('eventId', '==', eventId).where('ownerUid', '==', uid).limit(1));
   if (!held.empty) return false;
   if (eventData.allowReissueAfterCancel !== true) {

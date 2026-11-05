@@ -245,7 +245,8 @@ async function profileToUser(p: UserProfile): Promise<User | null> {
   if (!school && p.role === 'student') return null;
   if (p.role === 'student' && school?.hasRoster) {
     if (!p.rosterVerified) throw new ApiError('not_registered');
-    return withDevice(toUser(p, school.id, 'registered', p.photoSubmitted ? 'approved' : 'none'));
+    // 본인 사진과 학생증 사진을 둘 다 내야 가입이 끝난다. 학생증 단계가 생기기 전에 가입한 학생도 학생증을 내러 /onboarding으로 간다
+    return withDevice(toUser(p, school.id, 'registered', p.photoSubmitted && p.idCardSubmitted ? 'approved' : 'none'));
   }
   return withDevice(toUser(p, school?.id ?? ''));
 }

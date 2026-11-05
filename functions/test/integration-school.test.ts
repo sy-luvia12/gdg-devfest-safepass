@@ -383,8 +383,11 @@ describe('student sign-up and tickets', () => {
     // The ID card is required with the face photo
     expect(await codeOf(student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG } as never))).toBe('functions/invalid-argument');
 
+    // An account that signed up before the ID card step (face photo only) is not done yet
+    await db.doc(`users/${student.uid}`).update({ photoSubmitted: true, photoUrl: TINY_JPEG });
+    expect(await reasonOf(student.call('issueTicket', { eventId: EV_A }))).toBe('NOT_REGISTERED');
     const photo = await student.call('submitProfilePhoto', { photoDataUrl: TINY_JPEG, idCardDataUrl: TINY_JPEG });
-    expect(photo.profile).toMatchObject({ rosterVerified: true, photoSubmitted: true, photoUrl: TINY_JPEG });
+    expect(photo.profile).toMatchObject({ rosterVerified: true, photoSubmitted: true, idCardSubmitted: true, photoUrl: TINY_JPEG });
     expect((await db.doc(`idCards/${student.uid}`).get()).data()).toMatchObject({ dataUrl: TINY_JPEG, schoolId: A, studentId: '2024101' });
     expect((await db.doc(`users/${student.uid}`).get()).get('idCardSubmitted')).toBe(true);
     const ticket = await student.call('issueTicket', { eventId: EV_A });
@@ -667,7 +670,7 @@ describe('operator console', () => {
 describe('waitlist on a roster event', () => {
   const signedUp = async (email: string, studentId: string, name: string) => {
     const c = await login(email);
-    await db.doc(`users/${c.uid}`).update({ schoolId: A, studentId, name, rosterVerified: true, photoSubmitted: true });
+    await db.doc(`users/${c.uid}`).update({ schoolId: A, studentId, name, rosterVerified: true, photoSubmitted: true, idCardSubmitted: true });
     return c;
   };
 

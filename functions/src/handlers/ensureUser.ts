@@ -59,6 +59,7 @@ export function profileOf(uid: string, d: DocumentData): UserProfile {
     ...(d.schoolId ? { schoolId: d.schoolId } : {}),
     ...(d.rosterVerified ? { rosterVerified: true } : {}),
     ...(d.photoSubmitted ? { photoSubmitted: true } : {}),
+    ...(d.idCardSubmitted ? { idCardSubmitted: true } : {}),
     ...(d.operator === true ? { operator: true } : {}),
   };
 }
