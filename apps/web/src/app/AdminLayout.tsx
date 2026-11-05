@@ -12,7 +12,6 @@ import {
   Sheet,
   Smartphone,
   Ticket,
-  UserCheck,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -21,11 +20,12 @@ import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
 import { eventTitle } from '@/app/format';
 import { SchoolSwitcher } from '@/components/SchoolSwitcher';
-import { getEvent, listDeviceResets, listPendingVerifications } from '@/lib/api';
+import { getEvent, listDeviceResets } from '@/lib/api';
 import type { Event } from '@/types';
 import { useAuth } from './AuthProvider';
 
-type NavItem = { to: string; label: string; icon: LucideIcon; badge?: 'approvals' | 'devices' };
+/** teamOnly: 학교 담당자 일이라 행사 담당자(adminSchoolId 있음)에게는 숨긴다. 운영진 콘솔(/ops)에서 한다 */
+type NavItem = { to: string; label: string; icon: LucideIcon; badge?: 'devices'; teamOnly?: boolean };
 
 // 학교 메뉴는 행사를 바꿔도 그대로, 행사 메뉴는 지금 고른 행사 기준
 const NAV: { group: string; items: NavItem[] }[] = [
@@ -44,18 +44,19 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: '학교',
     items: [
       { to: '/admin/events', label: '행사 목록', icon: CalendarDays },
-      { to: '/admin/students', label: '재학생 명단', icon: GraduationCap },
-      { to: '/admin/approvals', label: '재학생 승인', icon: UserCheck, badge: 'approvals' },
-      { to: '/admin/devices', label: '기기 초기화', icon: Smartphone, badge: 'devices' },
+      { to: '/admin/students', label: '재학생 명단', icon: GraduationCap, teamOnly: true },
+      { to: '/admin/devices', label: '기기 초기화', icon: Smartphone, badge: 'devices', teamOnly: true },
       { to: '/admin/staff', label: '스태프 관리', icon: Users },
     ],
   },
 ];
 
+const TEAM_ONLY_PATHS = ['/admin/students', '/admin/devices', '/admin/setup'];
+
 export type AdminContext = {
   event: Event | null;
   setEvent: (e: Event) => void;
-  /** 승인·초기화 처리 후 메뉴 배지 숫자를 다시 센다 */
+  /** 기기 초기화 처리 후 메뉴 배지 숫자를 다시 센다 */
   refreshBadges: () => void;
 };
 
@@ -69,7 +70,10 @@ export function AdminLayout() {
   const { pathname } = useLocation();
   const { user, school, eventId, signOut } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
-  const [badges, setBadges] = useState({ approvals: 0, devices: 0 });
+  const [badges, setBadges] = useState({ devices: 0 });
+  // 행사 담당자: 자기 학교 행사만, 학교 담당자 메뉴(재학생 명단·기기 초기화·스페이스)는 없다
+  const eventAdmin = !!user?.adminSchoolId;
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !(eventAdmin && i.teamOnly)) }));
 
   useEffect(() => {
     // 학교를 바꾸면 이전 행사 이름이 남지 않게 비운다
@@ -85,17 +89,17 @@ export function AdminLayout() {
   }, [eventId]);
 
   const refreshBadges = useCallback(() => {
-    Promise.all([listPendingVerifications(), listDeviceResets()])
-      .then(([v, d]) => setBadges({ approvals: v.length, devices: d.filter((r) => r.status === 'pending').length }))
+    if (eventAdmin) return;
+    listDeviceResets()
+      .then((d) => setBadges({ devices: d.filter((r) => r.status === 'pending').length }))
       .catch(() => {});
-  }, []);
+  }, [eventAdmin]);
   useEffect(refreshBadges, [refreshBadges, pathname]);
 
   const ctx: AdminContext = { event, setEvent, refreshBadges };
   const inSetup = pathname === '/admin/setup';
-  // 학교 관리자는 스페이스와 재학생 명단부터 만든다
-  const needsSetup = !!user?.adminSchoolId && (!school || !school.studentRoster);
-  if (needsSetup && !inSetup) return <Navigate to="/admin/setup" replace />;
+  // 학교 담당자 화면에 직접 들어온 행사 담당자는 실시간 현황으로
+  if (eventAdmin && TEAM_ONLY_PATHS.includes(pathname)) return <Navigate to="/admin" replace />;
 
   return (
     <div className="min-h-dvh bg-bg">
@@ -140,7 +144,7 @@ export function AdminLayout() {
           aria-label="관리자 메뉴"
           className={cx('gap-1 overflow-x-auto px-5 pb-3 [scrollbar-width:none] lg:hidden', inSetup ? 'hidden' : 'flex')}
         >
-          {NAV.flatMap((g) => g.items).map((item) => (
+          {nav.flatMap((g) => g.items).map((item) => (
             <NavItemLink key={item.to} item={item} count={item.badge ? badges[item.badge] : 0} compact />
           ))}
         </nav>
@@ -151,7 +155,7 @@ export function AdminLayout() {
           aria-label="관리자 메뉴"
           className={cx('sticky top-24 hidden h-fit w-52 shrink-0 flex-col gap-6', !inSetup && 'lg:flex')}
         >
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div key={g.group} className="flex flex-col gap-1">
               <p className="px-3 pb-1 text-caption text-ink-3">{g.group}</p>
               {g.items.map((item) => (

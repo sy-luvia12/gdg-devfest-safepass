@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { useAdmin } from '@/app/AdminLayout';
+import { useAuth } from '@/app/AuthProvider';
 import { formatAgo } from '@/app/format';
 import { Badge } from '@/components/Badge';
 import { Card } from '@/components/Card';
@@ -17,6 +18,7 @@ import type { DeviceResetRequest } from '@/types';
 /** 폰을 바꾼 학생의 기기 초기화 요청 (기술 설계 2.2 resetDevice) */
 export function DevicesPage() {
   const { refreshBadges } = useAdmin();
+  const { school } = useAuth();
   const [rows, setRows] = useState<DeviceResetRequest[] | null>(null);
   const [error, setError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export function DevicesPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="학번@korea.ac.kr"
+            placeholder={`학번@${school?.domain ?? 'univ.ac.kr'}`}
             aria-label="학생 이메일"
             className="h-10 min-w-0 flex-1 rounded-md bg-surface px-4 text-label text-ink outline-none placeholder:text-ink-3 focus:bg-bg focus:ring-[1.5px] focus:ring-lavender"
           />

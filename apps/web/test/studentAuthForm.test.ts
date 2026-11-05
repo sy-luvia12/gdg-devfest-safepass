@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { ApiError } from '../src/types.ts';
 import { studentAuthMessage, validateStudentFields } from '../src/lib/studentAuthForm.ts';
 

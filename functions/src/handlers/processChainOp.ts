@@ -7,7 +7,8 @@ import { db } from '../firebase';
 // One instance handling one op at a time: the single minter wallet then never races its own nonce.
 // A thrown error makes Functions retry the event with backoff (chain hiccups, an op waiting for the one before it).
 export const processChainOp = onDocumentCreated(
-  { document: 'chainOps/{opId}', retry: true, maxInstances: 1, concurrency: 1, secrets: CHAIN_SECRETS },
+  // timeoutSeconds: a lottery commit waits for its seed block (about 10 s on Base Sepolia) before seedDraw.
+  { document: 'chainOps/{opId}', retry: true, maxInstances: 1, concurrency: 1, secrets: CHAIN_SECRETS, timeoutSeconds: 300 },
   async (event) => {
     const outcome = await process({ db, ...chainFromParams() }, event.params.opId);
     logger.info('chain op', { opId: event.params.opId, outcome });

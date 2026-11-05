@@ -19,6 +19,18 @@ export default {
         danger: { DEFAULT: '#E5484D', bg: '#FDECEC' },
         warning: { DEFAULT: '#E59A1A', bg: '#FFF5E5' },
         link: '#3B82F6',
+        // 운영진 콘솔 (/ops) 전용 검정 테마. 내부 데모·테스트 화면이라 DESIGN.md 흰 배경 규칙의 예외
+        ops: {
+          bg: '#0B0C10',
+          panel: '#14161C',
+          raised: '#1C1F27',
+          line: '#2A2E38',
+          ink: { DEFAULT: '#ECEEF2', 2: '#9AA1AD', 3: '#5F6672' },
+          accent: '#A99BFF',
+          ok: '#3DD68C',
+          bad: '#FF6B6B',
+          warn: '#F5B94A',
+        },
       },
       fontFamily: { sans: ['Pretendard', 'system-ui', 'sans-serif'] },
       fontSize: {

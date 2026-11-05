@@ -5,6 +5,7 @@ import {
   GoogleAuthProvider,
   isSignInWithEmailLink,
   sendSignInLinkToEmail,
+  signInWithEmailAndPassword,
   signInWithEmailLink,
   signInWithPopup,
   signOut as fbSignOut,
@@ -34,6 +35,10 @@ import type {
 import {
   ApiError,
   type CancelResult,
+  type ClaimResult,
+  type LotteryState,
+  type MyLottery,
+  type RunDrawResult,
   type ConfirmResult,
   type DeviceResetRequest,
   type Event,
@@ -48,6 +53,12 @@ import {
   type RosterView,
   type ScanLog,
   type OpenSchool,
+  type OpsEditResult,
+  type OpsEventAdmin,
+  type OpsRoster,
+  type OpsRosterEdit,
+  type OpsRosterKind,
+  type OpsStudent,
   type PrecheckResult,
   type School,
   type SchoolInput,
@@ -57,7 +68,7 @@ import {
   type TicketRow,
   type User,
   type VerifyResult,
-  type WaitlistEntry,
+  type WaitlistView,
 } from '@/types';
 import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signQr, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
@@ -124,6 +135,7 @@ function toUser(
     role: p.role,
     adminSchoolId: p.adminSchoolId,
     staffSchoolId: p.staffSchoolId,
+    operator: p.operator === true ? true : undefined,
     // 재학생 명단이 있는 학교의 학생만 가입 단계를 본다 (profileToUser). 그 밖에는 통과로 본다
     verifyStatus,
     deviceStatus,
@@ -151,7 +163,8 @@ function toEvent(id: string, d: DocumentData): Event {
     theme: { source: 'school', colors: [] },
     settings: { requireRoster: d.requireRoster === true },
     roster: rosterSummary(d.roster),
-    reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
+    // 서버의 'lottery'(정해진 시각 추첨)는 관리자 화면에 이름표가 생기기 전까지 '무작위'로 보여 준다 (docs/api.md 14장)
+    reassignMode: d.reassignMode === 'random' || d.reassignMode === 'lottery' ? 'random' : 'queue',
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };
@@ -258,6 +271,67 @@ export async function signInWithSchoolAccount(): Promise<User> {
 
 export async function signOut(): Promise<void> {
   await fbSignOut(auth);
+}
+
+// ---------- 운영진 (어둠의 운영진) ----------
+
+/** 운영진 아이디는 이 도메인의 메일 주소로 Firebase 이메일·비밀번호 계정이 된다 (시드가 만든다) */
+const OPS_EMAIL_DOMAIN = 'ops.safepass.app';
+export const opsEmailOf = (id: string) => `${id.trim().toLowerCase()}@${OPS_EMAIL_DOMAIN}`;
+
+/** 아이디·비밀번호로 운영진 계정에 들어간다. 운영진이 아닌 계정이면 로그아웃하고 wrong_password */
+export async function signInAsOperator(id: string, password: string): Promise<User> {
+  if (!/^[a-z0-9._-]{1,40}$/i.test(id.trim()) || !password) throw new ApiError('wrong_password');
+  try {
+    await signInWithEmailAndPassword(auth, opsEmailOf(id), password);
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? '';
+    if (code === 'auth/too-many-requests') throw new ApiError('too_many_attempts');
+    if (code.startsWith('auth/')) throw new ApiError('wrong_password');
+    throw toApiError(e);
+  }
+  try {
+    const { data } = await call('ensureUser')();
+    if (data.role !== 'admin' || !data.operator) throw new ApiError('wrong_password');
+    return toUser(data, '');
+  } catch (e) {
+    await fbSignOut(auth);
+    throw toApiError(e);
+  }
+}
+
+export async function opsListRoster(kind: OpsRosterKind, id: string): Promise<OpsRoster> {
+  const { data } = await run(() => call('opsListRoster')({ kind, id }));
+  return {
+    rows: data.rows,
+    summary: data.summary && fromApiSummary(data.summary),
+    schoolId: data.schoolId,
+    editable: data.editable,
+  };
+}
+
+export async function opsEditRoster(kind: OpsRosterKind, id: string, edit: OpsRosterEdit): Promise<OpsEditResult> {
+  const { data } = await run(() => call('opsEditRoster')({ kind, id, ...edit }));
+  return { saved: data.saved, deleted: data.deleted, skipped: data.skipped, summary: fromApiSummary(data.summary) };
+}
+
+export async function opsListStudents(schoolId: string): Promise<OpsStudent[]> {
+  return (await run(() => call('opsListStudents')({ schoolId }))).data.students;
+}
+
+export async function opsListEventAdmins(): Promise<OpsEventAdmin[]> {
+  const { data } = await run(() => call('opsListEventAdmins')());
+  return data.admins.map((a) => ({ email: a.email, name: a.name, schoolId: a.schoolId, pending: a.status === 'PENDING_SIGNUP' }));
+}
+
+/** 행사 담당자 지정 (schoolId) / 해제 (null). 팀 관리자·운영진 계정은 바꾸지 못한다 (invalid_state) */
+export async function opsSetEventAdmin(email: string, schoolId: string | null): Promise<void> {
+  await run(() => call('opsSetEventAdmin')({ email, schoolId }));
+}
+
+/** 학생 기기 등록을 지운다 (resetDevice). 다음에 로그인한 기기가 새로 등록된다 */
+export async function opsResetDevice(uid: string): Promise<void> {
+  await run(() => call('resetDevice')({ uid }));
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -590,7 +664,8 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   try {
     const { data } = await call('cancelTicket')({ ticketId });
     if (!data.ok) return 'used';
-    return data.outcome === 'REASSIGNED' ? 'reassigned' : 'released';
+    // POOLED (추첨 행사): 표는 다음 추첨에서 대기자에게 간다. 화면에 '취소됨' 문구가 생기기 전까지 reassigned로 보여 준다
+    return data.outcome === 'RELEASED' ? 'released' : 'reassigned';
   } catch (e) {
     throw toApiError(e);
   }
@@ -749,7 +824,7 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
         fromUid: r.fromUid,
         fromName: r.fromName || ((await userName(r.fromUid, names)) ?? '알 수 없음'),
         toName: r.toUid ? r.toName || (await userName(r.toUid, names)) : undefined,
-        mode: r.mode === 'random' ? 'random' : 'queue',
+        mode: r.mode === 'random' || r.mode === 'lottery' ? 'random' : 'queue',
         outcome: r.toUid ? 'reassigned' : 'released',
         createdAt: millis(r.createdAt),
       } satisfies Reassignment;
@@ -780,20 +855,19 @@ export async function listTickets(eventId: string): Promise<TicketRow[]> {
 }
 
 /** 대기 명단. 문서 id가 이메일이고, 가입한 사람이면 이름을 붙인다 */
-export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
-  const snap = await getDocs(collection(db, 'events', eventId, 'waitlist'));
-  const rows = await Promise.all(
-    snap.docs.map(async (d) => {
-      const account = await getDocs(query(collection(db, 'users'), where('email', '==', d.id), limit(1)));
-      return {
-        email: d.id,
-        name: (account.docs[0]?.get('name') as string | undefined) ?? '가입 전',
-        order: (d.get('order') as number | undefined) ?? 0,
-        status: d.get('status') === 'assigned' ? 'assigned' : 'waiting',
-      } satisfies WaitlistEntry;
-    }),
-  );
-  return rows.sort((a, b) => a.order - b.order);
+/** 대기 명단 (이름·학번, 대기 순서). 메일은 서버가 돌려주지 않는다 */
+export async function getWaitlist(eventId: string): Promise<WaitlistView> {
+  const { data } = await run(() => call('getWaitlist')({ eventId }));
+  return {
+    summary: data.summary && fromApiSummary(data.summary),
+    entries: data.entries,
+    serviceAccountEmail: data.serviceAccountEmail,
+  };
+}
+
+/** 대기 명단 시트 불러오기 (이름·학번, 위에서부터 대기 순서). 재학생 명단과 맞는 학생만 들어간다 */
+export async function importWaitlist(eventId: string, sheetUrl: string): Promise<RosterImport> {
+  return toRosterImport((await run(() => call('importWaitlist')({ eventId, sheetUrl }))).data);
 }
 
 export async function updateReassignMode(eventId: string, mode: ReassignMode): Promise<Event> {
@@ -917,6 +991,39 @@ export async function removeStaff(uid: string): Promise<void> {
   if (!email) throw new ApiError('not_found');
   try {
     await call('setStaff')({ email, staff: false });
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+// ---------- 취소표 추첨 (docs/api.md 14장) ----------
+
+/** 내 추첨 상태와 영수증. 대기 인원·순번은 오지 않는다 */
+export async function getMyLottery(eventId: string): Promise<MyLottery> {
+  try {
+    const { data } = await call('getMyLottery')({ eventId });
+    return { ...data, state: data.state.toLowerCase() as LotteryState };
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 당첨된 표 받기 (수락 기한 안에) */
+export async function claimTicket(eventId: string): Promise<ClaimResult> {
+  try {
+    const { data } = await call('claimTicket')({ eventId });
+    if (data.ok) return 'claimed';
+    return data.reason === 'EXPIRED' ? 'expired' : 'no_offer';
+  } catch (e) {
+    throw toApiError(e);
+  }
+}
+
+/** 관리자 "지금 추첨" (데모·운영). 체인 커밋 후 시드가 저장되면(약 10초) 바로 발표된다 */
+export async function runDrawNow(eventId: string): Promise<RunDrawResult> {
+  try {
+    const { data } = await call('runDrawNow')({ eventId });
+    return data.ok ? data : { ok: false, reason: data.reason.toLowerCase() as Extract<RunDrawResult, { ok: false }>['reason'] };
   } catch (e) {
     throw toApiError(e);
   }

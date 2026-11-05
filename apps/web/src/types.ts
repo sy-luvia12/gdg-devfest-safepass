@@ -33,6 +33,8 @@ export type User = {
   adminSchoolId?: string;
   /** 학교 관리자가 추가한 스태프가 맡은 학교. 그 학교 행사만 검표한다. 없으면 모든 학교 (팀 계정) */
   staffSchoolId?: string;
+  /** SafePass 운영진 계정 (어둠의 운영진). /ops 콘솔에서 모든 학교의 명단과 기기를 고친다 */
+  operator?: boolean;
   verifyStatus: VerifyStatus;
   rejectReason?: string;
   idCardUrl?: string; // 학생증 사진 (관리자만 열람)
@@ -131,13 +133,17 @@ export type Reassignment = {
   createdAt: number;
 };
 
-/** 대기 명단 (학생회가 구글 시트로 등록, 프로토타입은 시드) */
+/** 대기 명단 한 줄. 행사 담당자가 구글 시트(이름·학번, 대기 순서대로)로 등록한다. 메일은 보여주지 않는다 */
 export type WaitlistEntry = {
-  email: string;
+  studentId: string;
   name: string;
   order: number;
-  status: 'waiting' | 'assigned';
+  /** waiting: 대기 중 / assigned: 배정됨 / 그 밖(추첨 당첨 등)은 처리됨 */
+  status: string;
 };
+
+/** 대기 명단 화면용. summary: 시트 요약 (아직 안 올렸으면 null) */
+export type WaitlistView = { summary: RosterSummary | null; entries: WaitlistEntry[]; serviceAccountEmail: string };
 
 /** mismatch: 2단계 검표에서 스태프가 "달라요"를 눌렀다 */
 export type ScanResult = 'ok' | 'expired' | 'used' | 'invalid' | 'mismatch';
@@ -183,7 +189,8 @@ export type EventStats = {
 
 export type StaffStats = { enteredCount: number; capacity: number; myCount: number };
 
-export type RosterEntry = { email: string; name: string; studentId: string };
+/** 명단 한 줄. 행사 명단은 메일 없이 이름·학번만 (행사 담당자는 메일을 보지 않는다) */
+export type RosterEntry = { email?: string; name: string; studentId: string };
 
 /** 재학생 명단(학교)·행사 명단(행사) 요약 */
 export type RosterSummary = { sheetUrl: string; importedAt: number; count: number };
@@ -191,7 +198,15 @@ export type RosterSummary = { sheetUrl: string; importedAt: number; count: numbe
 /** 명단 화면용. entries는 앞부분만 (미리보기). serviceAccountEmail: 시트를 공유할 계정 */
 export type RosterView = { summary: RosterSummary | null; entries: RosterEntry[]; serviceAccountEmail: string };
 
-export type RosterSkipReason = 'MISSING_FIELD' | 'BAD_STUDENT_ID' | 'BAD_DOMAIN' | 'DUPLICATE_STUDENT_ID' | 'DUPLICATE_EMAIL';
+/** NOT_IN_STUDENT_ROSTER·NAME_MISMATCH: 행사 명단 줄이 주최 학교 재학생 명단과 맞지 않음 */
+export type RosterSkipReason =
+  | 'MISSING_FIELD'
+  | 'BAD_STUDENT_ID'
+  | 'BAD_DOMAIN'
+  | 'DUPLICATE_STUDENT_ID'
+  | 'DUPLICATE_EMAIL'
+  | 'NOT_IN_STUDENT_ROSTER'
+  | 'NAME_MISMATCH';
 
 /** 시트 불러오기 결과. skipped: 쓰지 못한 줄 (시트의 줄 번호) */
 export type RosterImport = { summary: RosterSummary; skipped: { row: number; reason: RosterSkipReason }[] };
@@ -218,6 +233,49 @@ export type EventInput = {
   faceValue: number;
   requireRoster: boolean;
 };
+
+// ---------- 운영진 콘솔 (/ops) ----------
+
+export type OpsRosterKind = 'school' | 'event';
+
+/** 운영진이 보는 명단 한 줄. 학교 명단은 가입 여부(claimed), 행사 명단은 재학생 명단과 맞는지(match)와 그 학생 메일 */
+export type OpsRosterRow = {
+  name: string;
+  studentId: string;
+  email?: string;
+  claimed?: boolean;
+  match?: 'OK' | 'NOT_IN_STUDENT_ROSTER' | 'NAME_MISMATCH';
+};
+
+/** editable: 행사 명단은 행사 담당자가 시트로 한 번 불러온 뒤에만 고칠 수 있다 (재학생 명단은 항상 true) */
+export type OpsRoster = { rows: OpsRosterRow[]; summary: RosterSummary | null; schoolId?: string; editable: boolean };
+
+/** 명단 고치기. upserts는 학번 기준으로 추가·덮어쓰기, deletes는 지울 학번, replace면 upserts에 없는 줄을 모두 지운다 */
+export type OpsRosterEdit = {
+  upserts: { name: string; studentId: string; email?: string }[];
+  deletes: string[];
+  replace?: boolean;
+};
+
+export type OpsEditResult = {
+  saved: number;
+  deleted: number;
+  skipped: { index: number; reason: RosterSkipReason }[];
+  summary: RosterSummary;
+};
+
+/** 운영진 기기 관리용 학생 (가입한 학생) */
+export type OpsStudent = {
+  uid: string;
+  name: string;
+  studentId: string;
+  email: string;
+  deviceRegistered: boolean;
+  resetRequested: boolean;
+};
+
+/** 행사 담당자 계정. pending: 아직 로그인 전 (처음 구글 로그인할 때 적용) */
+export type OpsEventAdmin = { email: string; name: string; schoolId: string; pending: boolean };
 
 export type DeviceResetRequest = {
   id: string;
@@ -249,10 +307,27 @@ export class ApiError extends Error {
     | 'sheet_not_shared' // 서비스 계정에 공유되지 않은 시트
     | 'sheet_not_found'
     | 'sheet_api_disabled' // 프로젝트에서 Sheets API가 꺼져 있음
-    | 'sheet_missing_columns' // 첫 줄에 이름·학번·이메일 열이 없음
+    | 'sheet_missing_columns' // 첫 줄에 필요한 열(이름·학번, 재학생 명단은 이메일까지)이 없음
+    | 'wrong_password' // 운영진 로그인: 아이디나 비밀번호가 다름
+    | 'too_many_attempts' // 운영진 로그인: 잠시 막힘
+    | 'chain_unavailable' // 체인(RPC)을 읽지 못함. 다시 시도
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);
     this.code = code;
   }
 }
+
+/** 추첨 행사에서 내 상태 (getMyLottery). 대기 인원·순번·확률은 오지 않는다. 낙첨 상태는 없다(다음 회차를 기다림) */
+export type LotteryState = 'none' | 'waiting' | 'won' | 'claimed' | 'expired' | 'closed';
+export type MyLottery = {
+  state: LotteryState;
+  nextAnnounceAt: number | null; // 다음 발표 시각 (공개 고정 시각)
+  offer: { ticketId: string; expiresAt: number } | null; // 당첨: 이 시각까지 claimTicket
+  /** 가장 최근에 들어간 회차의 내 응모 정보. verifyMyDraw에 그대로 넘긴다 */
+  receipt: { eventId: string; round: number; uid: string; salt: string; proof: string[]; root: string; tokenIds: string[] } | null;
+};
+export type ClaimResult = 'claimed' | 'no_offer' | 'expired';
+export type RunDrawResult =
+  | { ok: true; round: number; tickets: number; entries: number }
+  | { ok: false; reason: 'not_lottery' | 'no_tickets' | 'no_entries' | 'round_open' };

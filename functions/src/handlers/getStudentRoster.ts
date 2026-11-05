@@ -9,5 +9,5 @@ export const getStudentRoster = onCall<unknown, Promise<GetRosterResponse>>(call
   const caller = requireAuth(request);
   const schoolId = readDocId(request.data, 'schoolId');
   await db.runTransaction((tx) => requireSchoolAdmin(tx, caller.uid, schoolId));
-  return readRoster(studentRosterPlace(schoolId));
+  return readRoster(studentRosterPlace(schoolId), true);
 });

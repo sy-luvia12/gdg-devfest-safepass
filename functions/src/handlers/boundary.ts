@@ -48,6 +48,13 @@ export async function requireSchoolAdmin(tx: Transaction, uid: string, schoolId:
   return user;
 }
 
+// The SafePass operator: an admin with no school and the operator flag (from its seed profile).
+export async function requireOperator(tx: Transaction, uid: string): Promise<DocumentData> {
+  const user = await requireRole(tx, uid, ['admin']);
+  if (user.operator !== true || user.adminSchoolId) throw new HttpsError('permission-denied', 'Operator only.');
+  return user;
+}
+
 // The school an operator works for: adminSchoolId for an admin, staffSchoolId for staff. Undefined means a
 // SafePass team account (or staff added before schools were scoped), which may work at every school.
 export function operatorSchoolId(user: DocumentData): string | undefined {
@@ -154,8 +161,9 @@ export const qrTokenRef = (ticketId: string) => db.doc(`qrTokens/${ticketId}`);
 export function ticketFromSnap(snap: DocumentSnapshot<DocumentData>, qrSnap?: DocumentSnapshot<DocumentData>): Ticket | null {
   const d = snap.data();
   if (!d) return null;
-  // A cancelled ticket has no owner and no QR, so every caller treats it as missing.
-  if (d.status === 'cancelled') return null;
+  // A cancelled ticket has no owner and no QR, so every caller treats it as missing. So does a ticket that waits
+  // in the lottery pool (pooled) or for a winner to claim it (offered).
+  if (d.status === 'cancelled' || d.status === 'pooled' || d.status === 'offered') return null;
   const base = { id: snap.id, eventId: d.eventId, ownerUid: d.ownerUid, nftNumber: d.nftNumber };
   if (d.status === 'used') return { ...base, status: 'used', usedAtMs: ms(d.usedAt) };
   const q = qrSnap?.data();
@@ -176,7 +184,7 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
     issuedCount: d.issuedCount ?? 0,
     nftSeq: d.nftSeq ?? d.issuedCount ?? 0,
     enteredCount: d.enteredCount ?? 0,
-    reassignMode: d.reassignMode === 'random' ? 'random' : 'queue',
+    reassignMode: d.reassignMode === 'random' || d.reassignMode === 'lottery' ? d.reassignMode : 'queue',
     requireDevice: d.requireDevice === true,
     requireRoster: d.requireRoster === true,
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,

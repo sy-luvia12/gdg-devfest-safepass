@@ -46,6 +46,7 @@ export function LoginPage() {
 
   if (loading) return <StateView kind="loading" fullScreen />;
   if (user && !submitting) {
+    if (user.operator) return <Navigate to="/ops" replace />;
     return user.role === 'student' ? <StudentRedirect /> : <Navigate to={homePathFor(user.role)} replace />;
   }
 
@@ -89,6 +90,9 @@ export function LoginPage() {
           <DemoPanel />
           <Button variant="secondary" loading={submitting} onClick={onStart}>선택한 데모 계정으로 바로 로그인</Button>
         </>}
+        <Link to="/ops/login" className="self-center text-caption text-ink-3">
+          운영진
+        </Link>
       </section>
     </main>
   );

@@ -66,12 +66,12 @@
 ```sh
 npm --prefix apps/web ci
 npm --prefix apps/web run dev:mock
-node --experimental-strip-types --test apps/web/test/studentAuthForm.test.ts
+npm --prefix apps/web test
 VITE_BACKEND=mock npm --prefix apps/web run build
 npm --prefix apps/web run lint
 ```
 
-Node.js 22.6 이상에서 위 프론트 단위 테스트를 실행할 수 있다. 새 라이브러리는 추가하지 않았다.
+기존 `npm test`(Vitest)로 프론트 단위 테스트를 함께 실행한다. 이 화면 연결 작업에서는 새 라이브러리를 추가하지 않았다.
 
 성공 가입 테스트: 한빛대학교 → 윤지호 / 20242000 / member1@hanbit.ac.kr → `데모: 메일 링크 열기` → 테스트 얼굴 이미지와 동의 → 완료 → 축제·입장권. 이미 가입한 뒤에는 같은 정보로 재가입하지 않고 `/signin`에서 로그인한다. 초기화는 로그인 화면의 데모 계정 패널에 있다.
 

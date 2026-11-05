@@ -3,7 +3,7 @@ import type { ImportRosterResponse } from '../api';
 import { db } from '../firebase';
 import { readDocId, readString, requireAuth, requireSchoolAdmin } from './boundary';
 import { callableOptions } from './callableOptions';
-import { importRoster, studentRosterPlace } from './rosterStore';
+import { importStudentRows, studentRosterPlace } from './rosterStore';
 
 // Reads the school's student sheet into schools/{id}/roster. Sign-up is checked against these rows.
 export const importStudentRoster = onCall<unknown, Promise<ImportRosterResponse>>(callableOptions, async (request) => {
@@ -16,5 +16,5 @@ export const importStudentRoster = onCall<unknown, Promise<ImportRosterResponse>
     if (!school.exists) throw new HttpsError('not-found', 'Open the school space first.');
     return (school.get('domains') as string[] | undefined) ?? [];
   });
-  return importRoster(studentRosterPlace(schoolId), sheetUrl, domains);
+  return importStudentRows(studentRosterPlace(schoolId), sheetUrl, domains);
 });

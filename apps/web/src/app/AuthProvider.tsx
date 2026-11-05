@@ -16,6 +16,8 @@ type AuthState = {
   eventId: string | null;
   loading: boolean;
   signIn: () => Promise<{ user: User } & Scope>;
+  /** 운영진 로그인 (아이디·비밀번호) */
+  signInOperator: (id: string, password: string) => Promise<User>;
   signOut: () => Promise<void>;
   /** 승인 요청·기기 초기화 등으로 내 정보가 바뀐 뒤 다시 읽는다 */
   refreshUser: () => Promise<User | null>;
@@ -103,6 +105,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { user: u, school: r.school, events: r.events, eventId: r.eventId };
   }, [apply]);
 
+  const signInOperator = useCallback(
+    async (id: string, password: string) => {
+      const u = await api.signInAsOperator(id, password);
+      apply(u, await resolve(u));
+      return u;
+    },
+    [apply],
+  );
+
   const signOut = useCallback(async () => {
     await api.signOut();
     setUser(null);
@@ -150,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       eventId: scope?.eventId ?? null,
       loading,
       signIn,
+      signInOperator,
       signOut,
       refreshUser,
       schools,
@@ -157,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       selectEvent,
       refreshScope,
     }),
-    [user, scope, loading, signIn, signOut, refreshUser, schools, selectSchool, selectEvent, refreshScope],
+    [user, scope, loading, signIn, signInOperator, signOut, refreshUser, schools, selectSchool, selectEvent, refreshScope],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AdminPage } from '@/pages/admin/AdminPage';
-import { ApprovalsPage } from '@/pages/admin/ApprovalsPage';
 import { ReassignmentsPage } from '@/pages/admin/ReassignmentsPage';
 import { DevicesPage } from '@/pages/admin/DevicesPage';
 import { EntriesPage } from '@/pages/admin/EntriesPage';
@@ -13,6 +12,12 @@ import { StaffPage } from '@/pages/admin/StaffPage';
 import { StudentRosterPage } from '@/pages/admin/StudentRosterPage';
 import { TicketsPage } from '@/pages/admin/TicketsPage';
 import { MePage } from '@/pages/common/MePage';
+import { OpsAdminsPage } from '@/pages/ops/OpsAdminsPage';
+import { OpsDevicesPage } from '@/pages/ops/OpsDevicesPage';
+import { OpsEventPage } from '@/pages/ops/OpsEventPage';
+import { OpsHomePage } from '@/pages/ops/OpsHomePage';
+import { OpsLoginPage } from '@/pages/ops/OpsLoginPage';
+import { OpsSchoolPage } from '@/pages/ops/OpsSchoolPage';
 import { AboutPage } from '@/pages/public/AboutPage';
 import { PolicyPage } from '@/pages/public/PolicyPage';
 import { ScanHistoryPage } from '@/pages/staff/ScanHistoryPage';
@@ -30,6 +35,7 @@ import { PendingPage } from '@/pages/student/PendingPage';
 import { TicketPage } from '@/pages/student/TicketPage';
 import { AdminLayout } from './AdminLayout';
 import { MobileLayout } from './layouts';
+import { OpsLayout } from './OpsLayout';
 import { RequireEvent } from './RequireEvent';
 import { RequireRole } from './RequireRole';
 
@@ -90,7 +96,6 @@ export const router = createBrowserRouter([
           { path: '/admin/students', element: <StudentRosterPage /> },
           { path: '/admin/events', element: <EventListPage /> },
           { path: '/admin/events/new', element: <EventFormPage /> },
-          { path: '/admin/approvals', element: <ApprovalsPage /> },
           { path: '/admin/devices', element: <DevicesPage /> },
           { path: '/admin/staff', element: <StaffPage /> },
           {
@@ -107,6 +112,18 @@ export const router = createBrowserRouter([
           },
         ],
       },
+    ],
+  },
+  // 운영진 콘솔 (검정 테마). 아이디·비밀번호로 들어오는 SafePass 운영진만
+  { path: '/ops/login', element: <OpsLoginPage /> },
+  {
+    element: <OpsLayout />,
+    children: [
+      { path: '/ops', element: <OpsHomePage /> },
+      { path: '/ops/schools/:schoolId', element: <OpsSchoolPage /> },
+      { path: '/ops/events/:eventId', element: <OpsEventPage /> },
+      { path: '/ops/admins', element: <OpsAdminsPage /> },
+      { path: '/ops/devices', element: <OpsDevicesPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
