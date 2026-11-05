@@ -347,7 +347,8 @@ export async function getCurrentUser(): Promise<User | null> {
 // ---------- 학생 가입·로그인: 메일 링크 (docs/student-auth.md) ----------
 
 const LINK_KEY = 'safepass-email-link';
-type PendingLink = { email: string; signup?: SignupInfo };
+// 메일 주소만 기억한다(같은 브라우저에서 열면 다시 묻지 않으려고). 가입 정보는 서버가 가진다
+type PendingLink = { email: string };
 
 function storeLink(v: PendingLink | null) {
   try {
@@ -390,13 +391,13 @@ export async function precheckStudent(input: { email: string; studentId: string;
   return { schoolId: data.schoolId, schoolName: data.schoolName };
 }
 
-/** 학교 메일로 로그인 링크를 보낸다. 가입이면 signup(학교·이름·학번)을 같이 넘겨 두면 링크를 열 때 명단 대조까지 한다 */
-export async function sendSignInLink(email: string, signup?: SignupInfo): Promise<void> {
+/** 학교 메일로 로그인 링크를 보낸다. 가입 정보는 직전 precheckStudent가 서버에 남겨 두므로 여기서는 받지 않는다 (_signup은 mock과 모양을 맞추려고 둔 자리) */
+export async function sendSignInLink(email: string, _signup?: SignupInfo): Promise<void> {
   const normalized = email.trim().toLowerCase();
   await run(() =>
     sendSignInLinkToEmail(auth, normalized, { url: `${location.origin}/auth/finish`, handleCodeInApp: true }),
   );
-  storeLink({ email: normalized, signup });
+  storeLink({ email: normalized });
 }
 
 /** 지금 주소가 메일의 로그인 링크인지 (/auth/finish 화면에서) */
@@ -414,15 +415,19 @@ export function pendingSignInEmail(): string | null {
  * 가입하지 않은 메일이면 로그아웃하고 ApiError('not_registered').
  */
 export async function completeSignInLink(href: string, email?: string): Promise<User> {
-  const pending = storedLink();
-  const address = (email ?? pending?.email ?? '').trim().toLowerCase();
+  const address = (email ?? storedLink()?.email ?? '').trim().toLowerCase();
   if (!address) throw new ApiError('invalid_state');
   try {
     await signInWithEmailLink(auth, address, href);
     await call('ensureUser')();
-    // 가입 정보는 같은 메일로 보낸 링크일 때만 쓴다
-    const signup = pending?.email === address ? pending.signup : undefined;
-    if (signup) await verifyStudentRoster(signup.schoolId, signup.name, signup.studentId);
+    // 가입 정보는 서버가 메일 기준으로 기억한다(precheckStudent). 어느 브라우저에서 열어도 같다
+    const verified = (await call('verifyStudentRoster')({})).data;
+    if (!verified.ok) {
+      if (verified.reason === 'EMAIL_MISMATCH') throw new ApiError('email_mismatch');
+      if (verified.reason === 'STUDENT_ID_TAKEN') throw new ApiError('student_id_taken');
+      if (verified.reason === 'NOT_IN_ROSTER') throw new ApiError('not_in_roster');
+      // NO_SIGNUP: 가입 기록이 없다. 아래 profileToUser가 가입 전 계정을 not_registered로 돌려보낸다
+    }
     storeLink(null);
     const { data } = await call('ensureUser')();
     const user = await profileToUser(data);

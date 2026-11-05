@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { readOptional, readString } from './boundary';
 import { callableOptions } from './callableOptions';
 import { schoolForEmail } from './rosterStore';
+import { newSignupIntent, signupIntentRef } from './signupIntent';
 
 // Checked before the email link is sent, so a link only goes to an address on the school roster. Open to visitors
 // who are not signed in; it answers yes or no and never returns roster data.
@@ -30,5 +31,7 @@ export const precheckStudent = onCall<unknown, Promise<PrecheckStudentResponse>>
     });
   }
   if (decision !== 'OK') return { ok: false, reason: decision };
+  // A sign-up that passed is remembered per email, so the link finishes it in whichever browser opens it.
+  if (name !== undefined) await signupIntentRef(email).set(newSignupIntent({ schoolId: school.id, studentId }, Date.now()));
   return { ok: true, schoolId: school.id, schoolName: school.get('name') ?? '' };
 });
