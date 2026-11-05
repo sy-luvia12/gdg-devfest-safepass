@@ -36,13 +36,20 @@ export function OnboardingPage() {
   const finish = async () => {
     if (lock.current || !photo || !idCard || !consented || processing) return;
     lock.current = true; setBusy(true); setError('');
+    let step = 'submit';
     try {
       const saved = await submitProfilePhoto(photo, idCard);
+      step = 'status';
       if (saved.verifyStatus !== 'approved') throw new Error('사진 등록 확인 실패');
+      step = 'refresh';
       const current = await refreshUser();
       if (!current) throw new Error('로그인 정보 확인 실패');
       setFinished(true); setPhoto(null); setIdCard(null);
-    } catch (cause) { setError(studentAuthMessage(cause)); }
+    } catch (cause) {
+      // 개인정보 없이 어느 단계에서 어떤 종류의 오류였는지만 남긴다
+      console.error('signup finish failed', step, cause instanceof Error ? `${cause.name}: ${cause.message}` : typeof cause);
+      setError(studentAuthMessage(cause));
+    }
     finally { lock.current = false; setBusy(false); }
   };
   return (

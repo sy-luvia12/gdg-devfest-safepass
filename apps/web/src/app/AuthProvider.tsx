@@ -52,30 +52,34 @@ function store(key: string, value: string) {
 }
 
 /** 학교의 행사 목록을 읽고, 지난번에 본 행사가 있으면 그 행사를 고른다 */
-async function scopeFor(school: School): Promise<Scope> {
-  const events = await api.listEvents(school.id);
+function pickScope(school: School, events: Event[]): Scope {
   const last = stored(EVENT_KEY);
   const pick =
     events.find((e) => e.id === last) ?? events.find((e) => e.id === school.currentEventId) ?? events[0];
   return { school, events, eventId: pick?.id ?? null };
 }
 
+/** 학교 문서와 행사 목록은 서로 기다릴 필요가 없다 */
+async function scopeFor(schoolId: string): Promise<Scope> {
+  const [school, events] = await Promise.all([api.getSchool(schoolId), api.listEvents(schoolId)]);
+  return pickScope(school, events);
+}
+
 /** 학생은 자기 학교. 관리자·스태프는 지난번에 고른 학교, 없으면 자기 학교나 첫 학교 */
 async function resolve(u: User): Promise<Scope & { schools: School[] }> {
-  if (u.role === 'student') return { ...(await scopeFor(await api.getSchool(u.schoolId))), schools: [] };
+  if (u.role === 'student') return { ...(await scopeFor(u.schoolId)), schools: [] };
   // 학교가 지정되지 않은 관리자는 볼 학교가 없다 (관리 화면이 "학교 지정 대기"를 보여준다)
   if (isUnassignedAdmin(u)) return { school: null, events: [], eventId: null, schools: [] };
   // 학교 관리자·스태프는 자기 학교만. 관리자가 스페이스를 아직 안 만들었으면 학교 없이 들어온다
   const ownSchoolId = u.role === 'admin' ? u.adminSchoolId : u.staffSchoolId;
   if (ownSchoolId) {
-    const own = await api.getSchool(ownSchoolId).catch(() => null);
-    return own ? { ...(await scopeFor(own)), schools: [own] } : { school: null, events: [], eventId: null, schools: [] };
+    const own = await scopeFor(ownSchoolId).catch(() => null);
+    return own ? { ...own, schools: own.school ? [own.school] : [] } : { school: null, events: [], eventId: null, schools: [] };
   }
   const schools = await api.listSchools();
   const last = stored(SCHOOL_KEY);
   const pick = schools.find((s) => s.id === last) ?? schools.find((s) => s.id === u.schoolId) ?? schools[0];
-  const school = pick ? await api.getSchool(pick.id) : await api.getSchool(u.schoolId);
-  return { ...(await scopeFor(school)), schools };
+  return { ...(await scopeFor(pick ? pick.id : u.schoolId)), schools };
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -125,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const selectSchool = useCallback(async (schoolId: string) => {
-    const next = await scopeFor(await api.getSchool(schoolId));
+    const next = await scopeFor(schoolId);
     store(SCHOOL_KEY, schoolId);
     if (next.eventId) store(EVENT_KEY, next.eventId);
     setScope(next);

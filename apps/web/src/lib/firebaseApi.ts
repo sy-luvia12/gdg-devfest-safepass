@@ -236,12 +236,22 @@ async function schoolForEmail(email: string): Promise<{ id: string; hasRoster: b
   return d ? { id: d.id, hasRoster: !!d.get('studentRoster') } : null;
 }
 
+/** 먼저 시작해 두는 학교 조회. 쓰이기 전에 실패해도 처리되지 않은 거부로 남지 않게 한다 */
+function startLookup(email: string) {
+  const lookup = schoolForEmail(email);
+  lookup.catch(() => undefined);
+  return lookup;
+}
+
 /**
  * 학생은 학교 메일이어야 한다. 스태프·관리자는 시드로 정해진 계정이라 학교 없이 들어와 학교를 고른다.
  * 재학생 명단이 있는 학교의 학생은 가입(명단 대조)을 마쳐야 들어오고, 사진을 안 냈으면 verifyStatus 'none'(→ /onboarding).
  */
-async function profileToUser(p: UserProfile): Promise<User | null> {
-  const school = await schoolForEmail(p.email);
+async function profileToUser(
+  p: UserProfile,
+  lookup: ReturnType<typeof schoolForEmail> = schoolForEmail(p.email),
+): Promise<User | null> {
+  const school = await lookup;
   if (!school && p.role === 'student') return null;
   if (p.role === 'student' && school?.hasRoster) {
     if (!p.rosterVerified) throw new ApiError('not_registered');
@@ -340,10 +350,16 @@ export async function opsResetDevice(uid: string): Promise<void> {
 
 export async function getCurrentUser(): Promise<User | null> {
   await auth.authStateReady();
+  const email = auth.currentUser?.email;
   if (!auth.currentUser) return null;
+  // 학교 조회는 ensureUser와 서로 기다릴 필요가 없다
+  const lookup = email ? startLookup(email) : undefined;
   const { data } = await call('ensureUser')();
   // 명단에서 빠진 학생(졸업·휴학)은 로그인이 풀린 것으로 본다
-  return profileToUser(data).catch(() => null);
+  return profileToUser(data, lookup).catch((e) => {
+    console.error('getCurrentUser: profile check failed', e instanceof Error ? `${e.name}: ${e.message}` : typeof e);
+    return null;
+  });
 }
 
 // ---------- 학생 가입·로그인: 메일 링크 (docs/student-auth.md) ----------
@@ -421,7 +437,8 @@ export async function completeSignInLink(href: string, email?: string): Promise<
   if (!address) throw new ApiError('invalid_state');
   try {
     await signInWithEmailLink(auth, address, href);
-    await call('ensureUser')();
+    const lookup = startLookup(address);
+    const first = (await call('ensureUser')()).data;
     // 가입 정보는 서버가 메일 기준으로 기억한다(precheckStudent). 어느 브라우저에서 열어도 같다
     const verified = (await call('verifyStudentRoster')({})).data;
     if (!verified.ok) {
@@ -431,8 +448,8 @@ export async function completeSignInLink(href: string, email?: string): Promise<
       // NO_SIGNUP: 가입 기록이 없다. 아래 profileToUser가 가입 전 계정을 not_registered로 돌려보낸다
     }
     storeLink(null);
-    const { data } = await call('ensureUser')();
-    const user = await profileToUser(data);
+    // 명단 대조가 통과하면 서버가 갱신된 프로필을 돌려준다. 다시 읽지 않는다
+    const user = await profileToUser(verified.ok ? verified.profile : first, lookup);
     if (!user) throw new ApiError('not_school_account');
     return user;
   } catch (e) {
