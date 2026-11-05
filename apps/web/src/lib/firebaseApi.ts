@@ -37,6 +37,8 @@ import {
   ApiError,
   type CancelResult,
   type ClaimResult,
+  type EntryDraw,
+  type RevokeResult,
   type LotteryState,
   type MyLottery,
   type RunDrawResult,
@@ -93,6 +95,7 @@ function toApiError(e: unknown): ApiError {
     const reason = deviceReason(e);
     if (reason === 'CANCELLED_BEFORE') return new ApiError('cancelled_before');
     if (reason === 'NOT_IN_ROSTER') return new ApiError('not_in_roster');
+    if (reason === 'DRAW_NOT_WON') return new ApiError('draw_not_won');
     if (reason === 'NOT_REGISTERED') return new ApiError('not_registered');
     if (reason && reason in SHEET_ERRORS) return new ApiError(SHEET_ERRORS[reason as SheetReason]);
     if (code === 'permission-denied') return new ApiError(reason === 'ROLE' ? 'wrong_role' : 'not_school_account');
@@ -168,6 +171,7 @@ function toEvent(id: string, d: DocumentData, viewer = viewerSchoolId): Event {
     // 서버의 'lottery'(정해진 시각 추첨)는 관리자 화면에 이름표가 생기기 전까지 '무작위'로 보여 준다 (docs/api.md 14장)
     reassignMode: d.reassignMode === 'random' || d.reassignMode === 'lottery' ? 'random' : 'queue',
     lottery: d.reassignMode === 'lottery',
+    instantDraw: d.instantDraw === true,
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     dataRetentionDays: 7,
   };
@@ -600,6 +604,18 @@ export async function myRosterStatus(eventIds: string[]): Promise<Record<string,
   return (await run(() => call('myRosterStatus')({ eventIds }))).data.status;
 }
 
+/** 즉석 추첨 행사에 응모한다. 이미 응모했으면 그 응모를 그대로 돌려준다 (다시 뽑지 않는다) */
+export async function enterDraw(eventId: string): Promise<EntryDraw> {
+  const { entry } = (await run(() => call('enterDraw')({ eventId }))).data;
+  if (!entry) throw new ApiError('invalid_state');
+  return entry;
+}
+
+/** 내 즉석 추첨 응모. 응모 전이면 null */
+export async function getMyEntryDraw(eventId: string): Promise<EntryDraw | null> {
+  return (await run(() => call('getMyEntryDraw')({ eventId }))).data.entry;
+}
+
 export async function getMyTicket(eventId: string): Promise<Ticket | null> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new ApiError('unauthenticated');
@@ -692,6 +708,12 @@ export function formatQrPayload(ticketId: string, token: string, signature?: QrS
 }
 
 /** 입장권 취소 → 대기 명단 재배정 (docs/api.md 2.5) */
+/** 운영진 회수: 입장 전 입장권을 거둬들인다. 체인에 사유 4(운영진 회수)로 남고 공개 현황판에 집계된다 */
+export async function revokeTicket(ticketId: string): Promise<RevokeResult> {
+  const { data } = await run(() => call('revokeTicket')({ ticketId }));
+  return data.ok ? 'revoked' : data.reason === 'TICKET_USED' ? 'used' : 'not_issued';
+}
+
 export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   try {
     const { data } = await call('cancelTicket')({ ticketId });
@@ -857,7 +879,7 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
         fromName: r.fromName || ((await userName(r.fromUid, names)) ?? '알 수 없음'),
         toName: r.toUid ? r.toName || (await userName(r.toUid, names)) : undefined,
         mode: r.mode === 'random' || r.mode === 'lottery' ? 'random' : 'queue',
-        outcome: r.toUid ? 'reassigned' : 'released',
+        outcome: r.mode === 'revoke' ? 'revoked' : r.toUid ? 'reassigned' : 'released',
         createdAt: millis(r.createdAt),
       } satisfies Reassignment;
     }),

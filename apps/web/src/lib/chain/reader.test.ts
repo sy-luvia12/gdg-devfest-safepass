@@ -37,6 +37,8 @@ function fakeClient(head: bigint) {
     },
     readContract: async ({ functionName, args }) => {
       if (functionName === 'eventInfo') return args[0] === EV ? [10, 1, true] : [0, 0, false];
+      if (functionName === 'entryStats') return args[0] === EV ? [7, 2] : [0, 0];
+      if (functionName === 'actionCount') return args[0] === EV && args[1] === 1 ? 3 : 0;
       if (functionName === 'draws')
         return args[1] === 1 ? [`0x${'c'.repeat(64)}`, 185n, `0x${'5'.repeat(64)}`] : [`0x${'0'.repeat(64)}`, 0n, `0x${'0'.repeat(64)}`];
       throw new Error(functionName);
@@ -63,6 +65,8 @@ describe('chain reader', () => {
       reassigned: { queue: 0, lottery: 1 }, // t3's queue reassignment belongs to the other event
       released: { noWaiter: 0, adminRevoke: 1 },
       drawRounds: 1,
+      entries: { settled: 7, won: 2 },
+      actions: { lostReissue: 3, refund: 0, manualEntry: 0 },
       asOfBlock: '200',
     });
   });

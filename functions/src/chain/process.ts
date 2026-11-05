@@ -40,6 +40,8 @@ export async function processChainOp(deps: ChainDeps, opId: string): Promise<Pro
   if (!op || op.status === 'done') return 'skipped';
   if (!client || !mnemonic) return 'disabled';
   if ((op as { kind: string }).kind === 'commitDraw') return processDrawOp(deps, client, opRef, snap.data() as DrawOpDoc);
+  if ((op as { kind: string }).kind === 'openEntry') return processEntryOp(deps, client, opRef, snap.data() as EntryOpDoc);
+  if ((op as { kind: string }).kind === 'recordAction') return processActionOp(deps, client, opRef, snap.data() as ActionOpDoc);
   if (op.seq > 1) {
     const prev = await db.doc(`chainOps/${chainOpId(op.ticketId, op.seq - 1)}`).get();
     if (prev.get('status') !== 'done') throw new WaitingForPrevious(`${opId} waits for op ${op.seq - 1}`);
@@ -84,7 +86,7 @@ export async function processChainOp(deps: ChainDeps, opId: string): Promise<Pro
         ...(txHash ? { 'chain.lastTx': txHash } : {}),
         'chain.status': latest ? 'done' : 'pending',
       });
-      if ((op.kind === 'reassign' || op.kind === 'release') && txHash) {
+      if ((op.kind === 'reassign' || op.kind === 'release') && txHash && op.reassignmentId) {
         tx.update(db.doc(`reassignments/${op.reassignmentId}`), { txHash });
       }
     });
@@ -131,6 +133,82 @@ async function processDrawOp(
       await voidRound(deps.db, op.eventId, op.round);
       await opRef.update({ status: 'done', error: e.code, doneAt: FieldValue.serverTimestamp() });
       return 'done';
+    }
+    await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
+    throw e;
+  }
+}
+
+interface EntryOpDoc {
+  kind: 'openEntry';
+  eventId: string;
+  entryDocId: string;
+}
+
+/** An instant entry draw: open, wait for the seed block, settle. The contract decides won or lost. */
+async function processEntryOp(
+  deps: ChainDeps,
+  client: ChainClient,
+  opRef: FirebaseFirestore.DocumentReference,
+  op: EntryOpDoc,
+): Promise<ProcessOutcome> {
+  const entryRef = deps.db.doc(`entryDraws/${op.entryDocId}`);
+  try {
+    const entry = (await entryRef.get()).data();
+    if (!entry) {
+      await opRef.update({ status: 'done', error: 'ENTRY_MISSING', doneAt: FieldValue.serverTimestamp() });
+      return 'skipped';
+    }
+    const capacity = ((await deps.db.doc(`events/${op.eventId}`).get()).get('capacity') as number | undefined) ?? 0;
+    await client.ensureEvent(op.eventId, capacity);
+    const r = await client.drawEntry({ eventId: op.eventId, entryId: entry.entryId, winBps: entry.winBps });
+    await deps.db.runTransaction(async (tx) => {
+      tx.update(entryRef, {
+        status: r.won ? 'won' : 'lost',
+        seedBlock: r.seedBlock,
+        seed: r.seed,
+        score: r.score,
+        ...(r.openTx ? { openTx: r.openTx } : {}),
+        settleTx: r.settleTx,
+        settledAt: FieldValue.serverTimestamp(),
+      });
+      tx.update(opRef, { status: 'done', txHash: r.settleTx ?? r.openTx, error: null, doneAt: FieldValue.serverTimestamp() });
+    });
+    return 'done';
+  } catch (e) {
+    if (e instanceof ChainError && e.code === 'INSUFFICIENT_FUNDS') {
+      await opRef.update({ status: 'blocked', error: e.code, attempts: FieldValue.increment(1) });
+      return 'blocked';
+    }
+    await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
+    throw e;
+  }
+}
+
+interface ActionOpDoc {
+  kind: 'recordAction';
+  eventId: string;
+  action: number;
+  ref: string;
+}
+
+/** An operator action record (lost reissue, refund, manual entry): one recordAction on the event. */
+async function processActionOp(
+  deps: ChainDeps,
+  client: ChainClient,
+  opRef: FirebaseFirestore.DocumentReference,
+  op: ActionOpDoc,
+): Promise<ProcessOutcome> {
+  try {
+    const capacity = ((await deps.db.doc(`events/${op.eventId}`).get()).get('capacity') as number | undefined) ?? 0;
+    await client.ensureEvent(op.eventId, capacity);
+    const { txHash } = await client.recordAction({ eventId: op.eventId, action: op.action, ref: op.ref });
+    await opRef.update({ status: 'done', txHash, error: null, doneAt: FieldValue.serverTimestamp() });
+    return 'done';
+  } catch (e) {
+    if (e instanceof ChainError && e.code === 'INSUFFICIENT_FUNDS') {
+      await opRef.update({ status: 'blocked', error: e.code, attempts: FieldValue.increment(1) });
+      return 'blocked';
     }
     await opRef.update({ error: redact(e instanceof Error ? e.message : String(e)), attempts: FieldValue.increment(1) });
     throw e;

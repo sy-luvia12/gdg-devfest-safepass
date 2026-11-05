@@ -100,17 +100,47 @@ export function BoardPage() {
           <Stat label="입장" value={`${n(status.used)}명`} />
         </div>
 
+        {status.entries.settled > 0 && (
+          <section className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-heading text-ink">추첨 결과</h2>
+              <Badge tone="neutral">체인 기록</Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <Stat label="응모" value={`${n(status.entries.settled)}명`} />
+              <Stat label="당첨" value={`${n(status.entries.won)}명`} />
+              <Stat label="경쟁률" value={status.entries.won > 0 ? `${(status.entries.settled / status.entries.won).toFixed(1)} : 1` : '-'} />
+            </div>
+            <p className="flex items-center gap-1.5 text-label text-success">
+              <CircleCheck size={16} strokeWidth={1.75} />
+              당첨자 수는 정원을 넘을 수 없어요 (컨트랙트가 막아요)
+            </p>
+            <p className="text-caption text-ink-3">응모마다 블록 해시로 컨트랙트가 결과를 정해요. 학생은 행사 화면에서 직접 검증할 수 있어요</p>
+          </section>
+        )}
+
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-heading text-ink">취소표와 운영진 기록</h2>
+            <h2 className="text-heading text-ink">운영진 개입 기록</h2>
+            <Badge tone="neutral">체인 기록</Badge>
+          </div>
+          <ul className="flex flex-col">
+            <Row label="부정 적발 회수" value={`${n(status.released.adminRevoke)}건`} strong />
+            <Row label="분실 재발급 (기기 초기화)" value={`${n(status.actions.lostReissue)}건`} strong />
+            {/* 환불·예외 입장은 컨트랙트에 자리만 있고, 아직 기록하는 운영 기능이 없어 보여 주지 않는다 */}
+          </ul>
+          <p className="text-caption text-ink-3">운영진이 입장권에 손대면 사유와 함께 체인에 남아요. 지우거나 숨길 수 없어요</p>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-heading text-ink">취소표 기록</h2>
             <Badge tone="neutral">체인 기록</Badge>
           </div>
           <ul className="flex flex-col">
             <Row label="대기 순서로 재배정" value={`${n(status.reassigned.queue)}건`} />
             <Row label="추첨으로 재배정" value={`${n(status.reassigned.lottery)}건`} />
             <Row label="대기자가 없어 반납" value={`${n(status.released.noWaiter)}건`} />
-            <Row label="운영진 회수" value={`${n(status.released.adminRevoke)}건`} strong />
-            <Row label="추첨 회차" value={`${n(status.drawRounds)}회`} />
           </ul>
         </section>
 

@@ -31,6 +31,11 @@ function status({ event, ticket, roster }: Row): { tone: BadgeTone; text: string
   if (ticket?.status === 'used') return { tone: 'muted', text: '입장함' };
   if (ticket) return { tone: 'success', text: '받음' };
   if (event.capacity - event.issuedCount <= 0) return { tone: 'muted', text: '마감' };
+  // 추첨 행사는 눌러서 들어가면 응모되고, 블록체인이 정한 당첨자만 받는다
+  if (roster === 'draw_open') return { tone: 'neutral', text: '추첨 응모' };
+  if (roster === 'draw_pending') return { tone: 'neutral', text: '추첨 중' };
+  if (roster === 'draw_won') return { tone: 'success', text: '당첨' };
+  if (roster === 'draw_lost') return { tone: 'muted', text: '낙첨' };
   // 명단 행사는 행사 담당자가 시트로 올린 명단의 학생만 받는다. 명단이 아직 없으면 아무도 못 받는다
   if (roster === 'no_roster') return { tone: 'muted', text: '명단 준비 중' };
   if (roster === 'not_on_roster') return { tone: 'muted', text: '명단에 없음' };

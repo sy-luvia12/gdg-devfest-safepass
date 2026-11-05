@@ -28,6 +28,19 @@ export interface ChainClient {
   markUsed(ticketId: string): Promise<ChainResult>;
   /** Commits a lottery round (when not already committed), waits for its seed block and stores the seed. Safe to repeat. */
   drawRound(p: { eventId: string; round: number; commitment: string }): Promise<DrawRoundResult>;
+  /** Opens a student's entry (when not already open), waits for its seed block and settles it. Safe to repeat. */
+  drawEntry(p: { eventId: string; entryId: string; winBps: number }): Promise<DrawEntryResult>;
+  /** Records an operator action. Skipped when a recent ActionRecorded event already carries this ref (a retry). */
+  recordAction(p: { eventId: string; action: number; ref: string }): Promise<ChainResult>;
+}
+
+export interface DrawEntryResult {
+  won: boolean;
+  seed: string;
+  score: number;
+  seedBlock: number;
+  openTx: string | null;
+  settleTx: string | null;
 }
 
 export interface DrawRoundResult {
@@ -129,6 +142,42 @@ export function createChainClient(cfg: ChainConfig): ChainClient {
       seedTx = await send(() => ticket.seedDraw(key, round));
       d = await read();
       return { seed: d.seed, seedBlock: d.seedBlock, commitTx, seedTx };
+    },
+    async recordAction({ eventId, action, ref }) {
+      const key = eventKeyOf(eventId);
+      // Public RPCs cap getLogs ranges; a retry happens within minutes, so the last few thousand blocks are enough.
+      const from = Math.max(0, (await provider.getBlockNumber()) - 5_000);
+      const seen = await ticket.queryFilter(ticket.filters.ActionRecorded(key, action), from);
+      if (seen.some((l) => (l as { args?: { ref?: string } }).args?.ref === ref)) return { txHash: null };
+      return { txHash: await send(() => ticket.recordAction(key, action, ref)) };
+    },
+    async drawEntry({ eventId, entryId, winBps }) {
+      const key = eventKeyOf(eventId);
+      let openTx: string | null = null;
+      const read = async () => {
+        const [b, bps, result] = (await ticket.entries(key, entryId)) as [bigint, bigint, bigint];
+        return { seedBlock: Number(b), winBps: Number(bps), result: Number(result) };
+      };
+      // The settled result, read back from the EntrySettled event (the contract keeps only won/lost).
+      const settled = async (seedBlock: number, settleTx: string | null): Promise<DrawEntryResult> => {
+        const logs = await ticket.queryFilter(ticket.filters.EntrySettled(key, entryId), seedBlock);
+        const log = logs.at(-1) as { args: { seed: string; score: bigint; won: boolean }; transactionHash: string } | undefined;
+        if (!log) throw new ChainError('TX_FAILED', 'entry settled but its EntrySettled event was not found');
+        return { won: log.args.won, seed: log.args.seed, score: Number(log.args.score), seedBlock, openTx, settleTx: settleTx ?? log.transactionHash };
+      };
+      let e = await read();
+      if (e.result !== 0) return settled(e.seedBlock, null);
+      const expired = e.seedBlock !== 0 && (await provider.getBlockNumber()) > e.seedBlock + BLOCKHASH_WINDOW;
+      if (e.seedBlock === 0 || expired) {
+        // A reopen after an expired seed leaves a second EntryOpened event, so a retry is always visible.
+        openTx = await send(() => ticket.openEntry(key, entryId, winBps));
+        e = await read();
+      } else if (e.winBps !== winBps) {
+        throw new ChainError('TX_FAILED', 'entry is open with another win rate');
+      }
+      for (let i = 0; i < 120 && (await provider.getBlockNumber()) <= e.seedBlock; i++) await new Promise((r) => setTimeout(r, 1000));
+      const settleTx = await send(() => ticket.settleEntry(key, entryId));
+      return settled(e.seedBlock, settleTx);
     },
   };
 }

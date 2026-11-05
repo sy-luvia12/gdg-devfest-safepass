@@ -73,6 +73,8 @@ export type Event = {
   reassignMode: ReassignMode;
   /** 취소표 추첨 행사 (서버 reassignMode 'lottery'). 화면의 reassignMode는 random으로 보인다 */
   lottery?: boolean;
+  /** 즉석 추첨 행사: 행사를 열면 응모되고, 체인이 정한 당첨자만 입장권을 받는다 (events.instantDraw) */
+  instantDraw?: boolean;
   /** 테스트용: 취소한 학생도 다시 받을 수 있음. 실제 행사는 false (노션 "요청 처리 방침") */
   allowReissueAfterCancel: boolean;
   dataRetentionDays: number; // 행사 후 개인정보 보관 기간 (기술 설계 2.6)
@@ -131,9 +133,13 @@ export type Reassignment = {
   fromName: string;
   toName?: string; // released면 없음
   mode: ReassignMode;
-  outcome: 'reassigned' | 'released';
+  /** revoked: 운영진 회수 (체인 사유 4). 그 학생은 이 행사 입장권을 다시 받지 못한다 */
+  outcome: 'reassigned' | 'released' | 'revoked';
   createdAt: number;
 };
+
+/** 운영진 회수 결과. used: 이미 입장해 회수 불가 / not_issued: 이미 취소·회수된 입장권 */
+export type RevokeResult = 'revoked' | 'used' | 'not_issued';
 
 /** 대기 명단 한 줄. 행사 담당자가 구글 시트(이름·학번, 대기 순서대로)로 등록한다. 메일은 보여주지 않는다 */
 export type WaitlistEntry = {
@@ -313,6 +319,7 @@ export class ApiError extends Error {
     | 'wrong_password' // 운영진 로그인: 아이디나 비밀번호가 다름
     | 'too_many_attempts' // 운영진 로그인: 잠시 막힘
     | 'chain_unavailable' // 체인(RPC)을 읽지 못함. 다시 시도
+    | 'draw_not_won' // 즉석 추첨 행사: 추첨에 당첨되지 않음 (또는 아직 결과 전)
     | 'unknown';
   constructor(code: ApiError['code'], message?: string) {
     super(message ?? code);
@@ -334,5 +341,27 @@ export type RunDrawResult =
   | { ok: true; round: number; tickets: number; entries: number }
   | { ok: false; reason: 'not_lottery' | 'no_tickets' | 'no_entries' | 'round_open' };
 
-/** 행사 명단 기준으로 받을 수 있는지. open: 명단 행사 아님 / no_roster: 명단이 아직 없음 */
-export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster';
+/**
+ * 행사 명단 기준으로 받을 수 있는지. open: 명단 행사 아님 / no_roster: 명단이 아직 없음.
+ * 즉석 추첨 행사는 draw_open(아직 응모 전) / draw_pending(체인 결과 기다리는 중) / draw_won / draw_lost
+ */
+export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster' | 'draw_open' | 'draw_pending' | 'draw_won' | 'draw_lost';
+
+/**
+ * 즉석 추첨의 내 응모 (서버 enterDraw / getMyEntryDraw). salt는 본인에게만 온다.
+ * 브라우저는 (행사 키, studentRef, salt)로 entryId를 다시 만들고, 체인의 시드로 점수를 다시 계산한다 (lib/chain/entry.ts)
+ */
+export type EntryDraw = {
+  eventId: string;
+  status: 'pending' | 'won' | 'lost';
+  winBps: number; // 당첨 확률 (1/10000). 정원 ÷ 재학생 수
+  studentRef: string;
+  salt: string;
+  entryId: string;
+  seedBlock: number | null;
+  seed: string | null;
+  score: number | null; // 0~9999. winBps보다 작으면 당첨
+  openTx: string | null;
+  settleTx: string | null;
+  createdAt: number;
+};

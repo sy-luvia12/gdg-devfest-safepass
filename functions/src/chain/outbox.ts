@@ -1,6 +1,7 @@
 import { FieldValue, type DocumentData, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import type { Reason } from './ids';
+import { keccak256, toUtf8Bytes } from 'ethers';
+import type { Action, Reason } from './ids';
 
 // Outbox for the chain (docs/api.md 8장). A handler writes the ticket change and the chain work in one
 // Firestore transaction. processChainOp then sends the work to the chain, one op at a time, in order.
@@ -56,4 +57,26 @@ export function enqueueChainOps(
     });
   }
   return { chainSeq: seq };
+}
+
+/**
+ * Queues one operator action record (FestivalTicket.recordAction) inside the caller's transaction. It moves no ticket,
+ * so it is not part of a ticket's op sequence. ref is a hash of the op id: no personal data, and a retry can find
+ * the record it already made.
+ */
+export function enqueueAction(tx: Transaction, eventId: string, action: Action, note: string): void {
+  const ref = db.collection('chainOps').doc();
+  tx.create(ref, {
+    kind: 'recordAction',
+    eventId,
+    action,
+    ref: keccak256(toUtf8Bytes(`action:${ref.id}`)),
+    note,
+    seq: 1,
+    status: 'pending',
+    attempts: 0,
+    txHash: null,
+    error: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
 }

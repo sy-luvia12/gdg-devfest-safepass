@@ -43,10 +43,11 @@ import {
 } from '@/types';
 import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
-import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
-import type { ClaimResult, MyLottery, RosterStatus, RunDrawResult } from '@/types';
+import { checkEntry, entryIdOf, scoreOf, studentRefOf } from './chain/entry';
+import type { ChainDraw, ChainEntry, ChainEventStatus, DrawCheck, EntryVerification, MyDrawEntry } from './chain/types';
+import type { ClaimResult, EntryDraw, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v8';
+const STATE_KEY = 'safepass-mock-v9';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
@@ -214,6 +215,8 @@ function seed(): MockState {
       theme: { source: 'school', colors: [] },
       settings: { requireRoster: false },
       reassignMode: 'queue',
+      // 푸른대 축제는 즉석 추첨 행사 (mock: 브라우저에서 결과를 정한다)
+      instantDraw: school.id === 'pureun',
       allowReissueAfterCancel: false,
       dataRetentionDays: 7,
     });
@@ -945,7 +948,9 @@ export async function issueTicket(eventId: string): Promise<Ticket> {
   // 취소한 학생은 다시 받을 수 없다 (테스트 행사만 예외)
   const cancelledBefore = s.reassignments.some((r) => r.eventId === eventId && r.fromUid === user.uid);
   if (cancelledBefore && !event.allowReissueAfterCancel) throw new ApiError('cancelled_before');
-  if (event.settings.requireRoster) {
+  if (event.instantDraw) {
+    if (mockEntries()[`${eventId}:${user.uid}`]?.status !== 'won') throw new ApiError('draw_not_won');
+  } else if (event.settings.requireRoster) {
     const name = user.name.replace(/\s+/g, '');
     const inRoster = s.rosters[eventId]?.entries.some((r) => r.studentId === user.studentId && r.name.replace(/\s+/g, '') === name);
     if (!inRoster) throw new ApiError('not_in_roster');
@@ -977,6 +982,11 @@ export async function myRosterStatus(eventIds: string[]): Promise<Record<string,
     const event = s.events.find((e) => e.id === id);
     if (!event) continue;
     const roster = s.rosters[id];
+    if (event.instantDraw) {
+      const st = mockEntry(id, user.uid)?.status;
+      out[id] = st === 'won' ? 'draw_won' : st === 'lost' ? 'draw_lost' : st ? 'draw_pending' : 'draw_open';
+      continue;
+    }
     out[id] = !event.settings.requireRoster
       ? 'open'
       : !roster
@@ -1063,6 +1073,33 @@ function candidates(mode: ReassignMode, waiting: MockWaiter[]): MockWaiter[] {
 }
 
 /** 주인이 취소하면 운영진이 정한 방식(순서/무작위)으로 대기자에게 넘긴다. 받을 사람이 없으면 다시 발급 가능 */
+export async function revokeTicket(ticketId: string): Promise<RevokeResult> {
+  await wait();
+  const s = load();
+  const me = requireUser(s);
+  if (me.role !== 'admin') throw new ApiError('wrong_role');
+  const ticket = s.tickets.find((t) => t.id === ticketId);
+  if (!ticket) return 'not_issued';
+  if (ticket.status === 'used') return 'used';
+  const event = findEvent(s, ticket.eventId);
+  const owner = s.users.find((u) => u.uid === ticket.ownerUid);
+  s.reassignments.unshift({
+    id: nextId(s, 'r'),
+    ticketId,
+    eventId: ticket.eventId,
+    nftTokenId: ticket.nftTokenId,
+    fromUid: ticket.ownerUid,
+    fromName: owner?.name ?? '알 수 없음',
+    mode: event.reassignMode,
+    outcome: 'revoked',
+    createdAt: Date.now(),
+  });
+  s.tickets = s.tickets.filter((t) => t.id !== ticketId);
+  event.issuedCount = Math.max(0, event.issuedCount - 1);
+  save(s);
+  return 'revoked';
+}
+
 export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   await wait();
   const s = load();
@@ -1514,6 +1551,8 @@ export async function getChainEventStatus(_eventId: string): Promise<ChainEventS
     reassigned: { queue: 0, lottery: 2 },
     released: { noWaiter: 0, adminRevoke: 1 },
     drawRounds: 1,
+    entries: { settled: 128, won: 51 },
+    actions: { lostReissue: 2, refund: 0, manualEntry: 3 },
     asOfBlock: '54300000',
     contractUrl: 'https://base-sepolia.blockscout.com/address/0x577aDF622034aBE56a4dE0792EDBFCe1d1c6A5fE',
   };
@@ -1528,6 +1567,88 @@ export async function getChainDraw(eventId: string, round: number): Promise<Chai
 
 export async function verifyMyDraw(entry: MyDrawEntry): Promise<DrawCheck> {
   return checkMyDraw(entry, await getChainDraw(entry.eventId, entry.round));
+}
+
+// ---------- 즉석 추첨 (mock: 체인 대신 브라우저가 5초 뒤 결과를 정한다) ----------
+
+const MOCK_ENTRIES = 'safepass-mock-entry-draws';
+const MOCK_DRAW_MS = 5_000;
+// mock 행사는 재학생 수가 정원의 2.5배라고 본다 → 당첨 확률 40%
+const MOCK_POOL_FACTOR = 2.5;
+
+function mockEntries(): Record<string, EntryDraw> {
+  try {
+    return JSON.parse(localStorage.getItem(MOCK_ENTRIES) ?? '{}') as Record<string, EntryDraw>;
+  } catch {
+    return {};
+  }
+}
+
+const hex32 = () => `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('')}`;
+
+/** 결과 시각이 지난 응모는 체인 대신 여기서 결과를 정해 저장한다 (점수 = 실제와 같은 공식) */
+function mockEntry(eventId: string, uid: string): EntryDraw | null {
+  const all = mockEntries();
+  const key = `${eventId}:${uid}`;
+  const e = all[key];
+  if (!e) return null;
+  if (e.status === 'pending' && Date.now() - e.createdAt >= MOCK_DRAW_MS) {
+    const seed = hex32();
+    const score = scoreOf(seed, e.entryId);
+    all[key] = { ...e, status: score < e.winBps ? 'won' : 'lost', seed, score, seedBlock: 54_800_000 + (e.createdAt % 1000), settleTx: hex32() };
+    localStorage.setItem(MOCK_ENTRIES, JSON.stringify(all));
+  }
+  return all[key];
+}
+
+export async function enterDraw(eventId: string): Promise<EntryDraw> {
+  await wait();
+  const s = load();
+  const user = requireUser(s);
+  const event = findEvent(s, eventId);
+  if (user.role !== 'student') throw new ApiError('wrong_role');
+  if (!event.instantDraw) throw new ApiError('invalid_state');
+  const existing = mockEntry(eventId, user.uid);
+  if (existing) return existing;
+  const studentRef = studentRefOf(user.schoolId, user.studentId);
+  const salt = hex32();
+  const entry: EntryDraw = {
+    eventId,
+    status: 'pending',
+    winBps: winBpsOf(event.capacity, Math.round(event.capacity * MOCK_POOL_FACTOR)),
+    studentRef,
+    salt,
+    entryId: entryIdOf(eventId, studentRef, salt),
+    seedBlock: null,
+    seed: null,
+    score: null,
+    openTx: hex32(),
+    settleTx: null,
+    createdAt: Date.now(),
+  };
+  localStorage.setItem(MOCK_ENTRIES, JSON.stringify({ ...mockEntries(), [`${eventId}:${user.uid}`]: entry }));
+  return entry;
+}
+
+export async function getMyEntryDraw(eventId: string): Promise<EntryDraw | null> {
+  await wait();
+  return mockEntry(eventId, requireUser(load()).uid);
+}
+
+/** mock: 저장된 시드가 곧 그 블록의 해시라고 보고 같은 공식으로 다시 계산한다 */
+export async function verifyMyEntry(mine: EntryDraw): Promise<EntryVerification> {
+  await wait();
+  const chain: ChainEntry | null =
+    mine.status === 'pending'
+      ? null
+      : { seedBlock: mine.seedBlock ?? 0, winBps: mine.winBps, result: mine.status === 'won' ? 1 : 2, seed: mine.seed, score: mine.score, openTx: mine.openTx, settleTx: mine.settleTx };
+  return { chain, check: checkEntry(mine, chain, mine.seed), links: { open: null, settle: null, block: null } };
+}
+
+function winBpsOf(capacity: number, pool: number): number {
+  if (!(capacity > 0)) return 0;
+  if (!(pool > capacity)) return 10_000;
+  return Math.max(1, Math.floor((capacity * 10_000) / pool));
 }
 
 // ---------- 취소표 추첨 (mock: 데모 회차의 첫 응모자로 대기 중) ----------

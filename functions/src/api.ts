@@ -41,7 +41,8 @@ export interface IssueTicketResponse {
 // domain (or an unverified mail) cannot join this event. failed-precondition NOT_IN_ROSTER: the event sets
 // requireRoster and the student's email is not on its roster. failed-precondition NOT_REGISTERED: the student's
 // school has a roster and the student has not finished sign-up (roster check and face photo).
-export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'ROLE', 'DOMAIN', 'NOT_IN_ROSTER', 'NOT_REGISTERED'] as const;
+// failed-precondition DRAW_NOT_WON: the event sets instantDraw and the student has not won its draw.
+export const ISSUE_REASONS = ['CANCELLED_BEFORE', 'ROLE', 'DOMAIN', 'NOT_IN_ROSTER', 'NOT_REGISTERED', 'DRAW_NOT_WON'] as const;
 export type IssueReason = (typeof ISSUE_REASONS)[number];
 
 // lottery: a cancelled ticket waits in a pool and goes to a waitlist entry drawn at a fixed announcement time
@@ -154,6 +155,14 @@ export interface ResetDeviceRequest {
 export interface ResetDeviceResponse {
   ok: true;
 }
+
+// revokeTicket: the event's school admin (or the operator) takes back a ticket that was not used (e.g. misuse).
+// The ticket is released on chain with reason 4 (운영진 회수), so the public board counts it, and the student cannot
+// take a ticket for this event again.
+export interface RevokeTicketRequest {
+  ticketId: string;
+}
+export type RevokeTicketResponse = { ok: true } | { ok: false; reason: 'TICKET_USED' | 'NOT_ISSUED' };
 
 export interface SetReassignModeRequest {
   eventId: string;
@@ -278,7 +287,9 @@ export interface ImportWaitlistRequest {
 }
 // myRosterStatus: whether the signed-in student may take a ticket at each event, as far as the event roster goes.
 // open: not a roster event. no_roster: a roster event whose roster is not loaded yet, so nobody may take one.
-export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster';
+// An instantDraw event answers with the student's draw instead: draw_open (not entered yet), draw_pending
+// (waiting for the chain), draw_won, draw_lost.
+export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster' | 'draw_open' | 'draw_pending' | 'draw_won' | 'draw_lost';
 export interface MyRosterStatusRequest {
   eventIds: string[];
 }
@@ -548,4 +559,32 @@ export interface Callables {
   runDrawNow: [RunDrawNowRequest, RunDrawNowResponse];
   getMyLottery: [GetMyLotteryRequest, GetMyLotteryResponse];
   claimTicket: [ClaimTicketRequest, ClaimTicketResponse];
+  revokeTicket: [RevokeTicketRequest, RevokeTicketResponse];
+  enterDraw: [EntryDrawRequest, EntryDrawResponse];
+  getMyEntryDraw: [EntryDrawRequest, EntryDrawResponse];
+}
+
+// Instant entry draw (events.instantDraw): the student's own entry for one event, decided on chain by
+// FestivalTicket.openEntry / settleEntry (formulas in functions/src/domain/entryDraw.ts). The salt is given only to
+// the student, so the browser can rebuild entryId from (eventKey, studentRef, salt) and recompute the score itself.
+export interface EntryDrawRequest {
+  eventId: string;
+}
+export type EntryDrawStatus = 'pending' | 'won' | 'lost';
+export interface EntryDrawView {
+  eventId: string;
+  status: EntryDrawStatus;
+  winBps: number;
+  studentRef: string;
+  salt: string;
+  entryId: string;
+  seedBlock: number | null;
+  seed: string | null;
+  score: number | null;
+  openTx: string | null;
+  settleTx: string | null;
+  createdAt: number;
+}
+export interface EntryDrawResponse {
+  entry: EntryDrawView | null;
 }

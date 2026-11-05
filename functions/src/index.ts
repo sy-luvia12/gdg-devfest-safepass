@@ -30,3 +30,5 @@ export { runDrawNow } from './handlers/runDrawNow';
 export { getMyLottery } from './handlers/getMyLottery';
 export { claimTicket } from './handlers/claimTicket';
 export { lotteryTick } from './handlers/lotteryTick';
+export { enterDraw, getMyEntryDraw } from './handlers/entryDraw';
+export { revokeTicket } from './handlers/revokeTicket';

@@ -13,5 +13,12 @@ export const FESTIVAL_TICKET_ABI = [
   'function seedDraw(bytes32 eventKey, uint32 round) returns (bytes32 seed)',
   'function draws(bytes32 eventKey, uint32 round) view returns (bytes32 commitment, uint64 seedBlock, bytes32 seed)',
   'event DrawCommitted(bytes32 indexed eventKey, uint32 indexed round, bytes32 commitment, uint64 seedBlock)',
+  'function openEntry(bytes32 eventKey, bytes32 entryId, uint16 winBps)',
+  'function settleEntry(bytes32 eventKey, bytes32 entryId) returns (bool won)',
+  'function entries(bytes32 eventKey, bytes32 entryId) view returns (uint64 seedBlock, uint16 winBps, uint8 result)',
+  'function recordAction(bytes32 eventKey, uint8 kind, bytes32 ref)',
+  'function actionCount(bytes32 eventKey, uint8 kind) view returns (uint32)',
+  'event ActionRecorded(bytes32 indexed eventKey, uint8 indexed kind, bytes32 ref)',
+  'event EntrySettled(bytes32 indexed eventKey, bytes32 indexed entryId, bytes32 seed, uint16 score, bool won)',
   'error ERC721NonexistentToken(uint256 tokenId)',
 ] as const;

@@ -195,5 +195,7 @@ export function eventFromSnap(snap: DocumentSnapshot<DocumentData>): FestivalEve
     requireRoster: d.requireRoster === true,
     allowReissueAfterCancel: d.allowReissueAfterCancel === true,
     twoStepCheck: d.twoStepCheck === true,
+    instantDraw: d.instantDraw === true,
+    drawPool: typeof d.drawPool === 'number' ? d.drawPool : 0,
   };
 }
