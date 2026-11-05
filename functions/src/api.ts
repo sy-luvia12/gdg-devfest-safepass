@@ -288,8 +288,10 @@ export interface ImportWaitlistRequest {
 // myRosterStatus: whether the signed-in student may take a ticket at each event, as far as the event roster goes.
 // open: not a roster event. no_roster: a roster event whose roster is not loaded yet, so nobody may take one.
 // An instantDraw event answers with the student's draw instead: draw_open (not entered yet), draw_pending
-// (waiting for the chain), draw_won, draw_lost.
-export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster' | 'draw_open' | 'draw_pending' | 'draw_won' | 'draw_lost';
+// (waiting for the chain), draw_won, draw_lost. cancelled: the student gave a ticket back at this event and the event
+// does not allow taking one again (issueTicket refuses with CANCELLED_BEFORE); it wins over every other answer.
+export type RosterStatus =
+  | 'open' | 'no_roster' | 'on_roster' | 'not_on_roster' | 'draw_open' | 'draw_pending' | 'draw_won' | 'draw_lost' | 'cancelled';
 export interface MyRosterStatusRequest {
   eventIds: string[];
 }

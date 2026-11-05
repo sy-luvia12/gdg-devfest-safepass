@@ -31,6 +31,8 @@ function status({ event, ticket, roster }: Row): { tone: BadgeTone; text: string
   if (ticket?.status === 'used') return { tone: 'muted', text: '입장함' };
   if (ticket) return { tone: 'success', text: '받음' };
   if (event.capacity - event.issuedCount <= 0) return { tone: 'muted', text: '마감' };
+  // 취소한 적이 있으면 이 행사는 다시 받을 수 없다 (테스트 행사만 예외)
+  if (roster === 'cancelled') return { tone: 'muted', text: '취소' };
   // 추첨 행사는 눌러서 들어가면 응모되고, 블록체인이 정한 당첨자만 받는다
   if (roster === 'draw_open') return { tone: 'neutral', text: '추첨 응모' };
   if (roster === 'draw_pending') return { tone: 'neutral', text: '추첨 중' };
