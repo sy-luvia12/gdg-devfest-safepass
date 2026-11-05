@@ -23,7 +23,14 @@ async function main() {
     const r = await call('opsListRoster', { kind: 'school', id });
     console.log(`school ${id} ->`, (r.rows as unknown[]).length, 'rows, roster summary', JSON.stringify((r.summary as { count: number }).count));
   }
-  for (const id of ['demo-festival', 'korea-koyon', 'korea-seoktap', 'yonsei-akaraka', 'yonsei-yonko', 'skku-daedongje', 'kaist-taeul']) {
+  for (const id of [
+    'demo-festival',
+    ...['baseball', 'basketball', 'icehockey', 'football'].flatMap((g) => [`korea-koyon-${g}`, `yonsei-koyon-${g}`]),
+    'korea-seoktap',
+    'yonsei-akaraka',
+    'skku-daedongje',
+    'kaist-taeul',
+  ]) {
     const r = await call('opsListRoster', { kind: 'event', id });
     const edit = await call('opsEditRoster', { kind: 'event', id, upserts: [], deletes: [] }).then(
       () => 'allowed',

@@ -34,8 +34,9 @@ const base = {
   allowReissueAfterCancel: false,
 };
 
-// Each school runs its own events. 고연전 (고려대) and 연고전 (연세대) are the same games, but each school issues
-// and checks its own tickets, so they are two events.
+// Each school runs its own events. 고연전 (고려대) and 연고전 (연세대) are the same five sports on four tickets
+// (야구, 농구, 아이스하키, 축구·럭비 at the main stadium), but each school issues and checks its own tickets, so each
+// school has its own four game events grouped under its series name.
 // Who can take a ticket (requireRoster): 'roster' events issue only to students on the event roster, which the event
 // admin loads from a sheet. 'all' events issue to every student who signed up against the school roster, with no
 // event roster. The event admin can switch it later in 행사 설정.
@@ -47,20 +48,38 @@ const event = (schoolId: string, who: 'roster' | 'all', fields: Record<string, u
   ...fields,
 });
 
+// 고연전/연고전 games. 야구 and the main stadium are open to every student; 농구 and 아이스하키 need a ticket from
+// the event roster. Ids are {school}-koyon-{game}. Places and capacities are demo values to confirm.
+function games(schoolId: 'korea' | 'yonsei', series: string): Record<string, Record<string, unknown>> {
+  const list: [string, string, 'roster' | 'all', string, string, number][] = [
+    ['baseball', '야구', 'all', '잠실야구장', '2026-11-13T11:00:00+09:00', 20_000],
+    ['basketball', '농구', 'roster', '잠실학생체육관', '2026-11-13T13:00:00+09:00', 5_000],
+    ['icehockey', '아이스하키', 'roster', '목동아이스링크', '2026-11-13T15:00:00+09:00', 3_000],
+    ['football', '축구·럭비', 'all', '잠실종합운동장 주경기장', '2026-11-14T13:00:00+09:00', 20_000],
+  ];
+  return Object.fromEntries(
+    list.map(([key, name, who, place, date, capacity]) => [
+      `${schoolId}-koyon-${key}`,
+      event(schoolId, who, { name, seriesName: { [schoolId]: series }, place, date: at(date), capacity }),
+    ]),
+  );
+}
+
 // Dates, places and capacities are demo values.
 const events: Record<string, Record<string, unknown>> = {
   // The first demo event, entered by hand in the console. Its id stays as it is.
   'demo-festival': event('korea', 'roster', { name: '입실렌티', place: '녹지운동장', date: at('2026-11-06T18:00:00+09:00'), capacity: 10_000 }),
-  'korea-koyon': event('korea', 'roster', { name: '고연전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
+  ...games('korea', '고연전'),
   'korea-seoktap': event('korea', 'all', { name: '석탑대동제', place: '민주광장', date: at('2026-11-20T18:00:00+09:00'), capacity: 8_000 }),
   'yonsei-akaraka': event('yonsei', 'roster', { name: '아카라카', place: '노천극장', date: at('2026-11-20T18:00:00+09:00'), capacity: 12_000 }),
-  'yonsei-yonko': event('yonsei', 'roster', { name: '연고전', place: '잠실종합운동장', date: at('2026-11-13T11:00:00+09:00'), capacity: 20_000 }),
+  ...games('yonsei', '연고전'),
   'skku-daedongje': event('skku', 'all', { name: '대동제', place: '금잔디광장', date: at('2026-11-21T18:00:00+09:00'), capacity: 8_000 }),
   'kaist-taeul': event('kaist', 'all', { name: '태울석림제', place: '대운동장', date: at('2026-11-27T18:00:00+09:00'), capacity: 5_000 }),
 };
 
-// Events an earlier seed made. Listed so a run warns about them; SEED_PRUNE=1 deletes them.
-const retiredEvents = ['test-reassign', 'koyon-basketball', 'koyon-icehockey', 'koyon-football'];
+// Events an earlier seed made. Listed so a run warns about them; SEED_PRUNE=1 deletes them with their tickets.
+// koyon-* were 고연전 games shared by both schools; korea-koyon / yonsei-yonko were one event for the whole series.
+const retiredEvents = ['test-reassign', 'koyon-basketball', 'koyon-icehockey', 'koyon-football', 'korea-koyon', 'yonsei-yonko'];
 
 // The operator account (/ops): signs in with an id and password, no Google. OPS_PASSWORD creates or updates it.
 const OPS_ID = process.env.OPS_ID ?? 'ops';
@@ -127,12 +146,31 @@ async function main() {
     const ref = db.doc(`events/${id}`);
     if (!(await ref.get()).exists) continue;
     if (process.env.SEED_PRUNE === '1') {
-      await db.recursiveDelete(ref);
-      console.log(`events/${id}: deleted (retired)`);
+      console.log(`events/${id}: deleted (retired), with ${await pruneEvent(id)} tickets, scans and reassignments`);
     } else {
-      console.log(`events/${id}: retired event still exists (run with SEED_PRUNE=1 to delete it and its rosters)`);
+      console.log(`events/${id}: retired event still exists (run with SEED_PRUNE=1 to delete it, its rosters and its tickets)`);
     }
   }
+}
+
+// Deletes an event with its rosters and waitlist, and the documents that point at it: tickets (and their QR tokens),
+// scan logs and reassignments. Chain records stay on chain; their pending ops are dropped with the ticket.
+async function pruneEvent(id: string): Promise<number> {
+  const linked = await Promise.all(
+    ['tickets', 'scanLogs', 'reassignments', 'chainOps'].map((c) => db.collection(c).where('eventId', '==', id).get()),
+  );
+  const writer = db.bulkWriter();
+  let count = 0;
+  for (const snap of linked) {
+    for (const d of snap.docs) {
+      void writer.delete(d.ref);
+      if (d.ref.parent.id === 'tickets') void writer.delete(db.doc(`qrTokens/${d.id}`));
+      count += 1;
+    }
+  }
+  await writer.close();
+  await db.recursiveDelete(db.doc(`events/${id}`));
+  return count;
 }
 
 main().catch((e) => {
