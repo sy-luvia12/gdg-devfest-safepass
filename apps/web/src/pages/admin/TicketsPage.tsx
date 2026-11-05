@@ -13,7 +13,7 @@ import { SearchField } from '@/components/SearchField';
 import { StatCard } from '@/components/StatCard';
 import { StateView } from '@/components/StateView';
 import { StatusBadge } from '@/components/StatusBadge';
-import { listTickets } from '@/lib/api';
+import { listTickets, revokeTicket } from '@/lib/api';
 import type { TicketRow } from '@/types';
 
 type Filter = 'all' | 'issued' | 'used';
@@ -26,12 +26,53 @@ export function TicketsPage() {
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  // 운영진 회수: 한 번 누르면 확인을 묻고, 한 번 더 눌러야 회수한다. 체인에 사유와 함께 남는다
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
   const load = useCallback(() => {
     setError(false);
     listTickets(eventId).then(setRows).catch(() => setError(true));
   }, [eventId]);
   useEffect(load, [load]);
+
+  const onRevoke = async (row: TicketRow) => {
+    if (confirming !== row.id) {
+      setConfirming(row.id);
+      return;
+    }
+    setRevoking(row.id);
+    setNotice(null);
+    try {
+      const r = await revokeTicket(row.id);
+      setNotice(
+        r === 'revoked'
+          ? { tone: 'ok', text: `${row.ownerName}님의 ${row.nftTokenId} 입장권을 회수했어요. 공개 현황판에 "부정 적발 회수"로 남아요` }
+          : { tone: 'error', text: r === 'used' ? '이미 입장한 입장권은 회수할 수 없어요' : '이미 취소되거나 회수된 입장권이에요' },
+      );
+      load();
+    } catch {
+      setNotice({ tone: 'error', text: '회수하지 못했어요. 다시 시도해 주세요' });
+    } finally {
+      setRevoking(null);
+      setConfirming(null);
+    }
+  };
+
+  const revokeButton = (r: TicketRow) =>
+    r.status === 'issued' ? (
+      <Button
+        variant={confirming === r.id ? 'secondary' : 'ghost'}
+        size="sm"
+        loading={revoking === r.id}
+        disabled={revoking !== null && revoking !== r.id}
+        onClick={() => void onRevoke(r)}
+        className={confirming === r.id ? 'text-danger' : undefined}
+      >
+        {confirming === r.id ? '회수 확정' : '회수'}
+      </Button>
+    ) : null;
 
   const q = query.trim();
   const shown = (rows ?? []).filter(
@@ -65,6 +106,14 @@ export function TicketsPage() {
         <StateView kind="loading" />
       ) : (
         <div className="flex flex-col gap-4">
+          <p className="text-caption text-ink-3">
+            부정 사용이 확인된 입장권만 회수해 주세요. 회수는 사유와 함께 블록체인에 남고 학생 공개 현황판에 집계돼요
+          </p>
+          {notice && (
+            <p role="status" className={notice.tone === 'ok' ? 'rounded-md bg-success-bg p-4 text-label text-success' : 'rounded-md bg-danger-bg p-4 text-label text-danger'}>
+              {notice.text}
+            </p>
+          )}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <FilterChips<Filter>
               value={filter}
@@ -93,12 +142,18 @@ export function TicketsPage() {
                 className: 'text-right',
                 cell: (r) => <span className="text-caption text-ink-3 tabular">{r.usedAt ? formatTime(r.usedAt) : '-'}</span>,
               },
+              { header: '', className: 'text-right', cell: revokeButton },
             ]}
             mobile={(r) => (
               <ListItem
                 title={`${r.ownerName} · ${r.nftTokenId}`}
                 subtitle={`${maskStudentId(r.ownerStudentId)} · ${formatDateTime(r.issuedAt)} 발급`}
-                trailing={<StatusBadge kind={r.status === 'used' ? 'used' : 'available'} />}
+                trailing={
+                  <span className="flex items-center gap-2">
+                    <StatusBadge kind={r.status === 'used' ? 'used' : 'available'} />
+                    {revokeButton(r)}
+                  </span>
+                }
               />
             )}
           />

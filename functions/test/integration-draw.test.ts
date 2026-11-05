@@ -126,3 +126,64 @@ describe('instant entry draw', () => {
     expect(await reasonOf(staff.call('enterDraw', { eventId: EV_DRAW }))).toBe('ROLE');
   });
 });
+
+describe('operator interventions on chain', () => {
+  it('revokes an unused ticket with reason 4, frees the seat and keeps the student from taking another', async () => {
+    await db.doc('seedProfiles/admin@drw.test').set({ name: 'Admin', studentId: '', role: 'admin', adminSchoolId: SCHOOL });
+    await db.doc('seedProfiles/other-admin@drw.test').set({ name: 'Other', studentId: '', role: 'admin', adminSchoolId: 'drw-other' });
+    await seedStudent('dee@drw.test', 'D004');
+    const dee = await login('dee@drw.test');
+    const admin = await login('admin@drw.test');
+    const other = await login('other-admin@drw.test');
+    const { ticketId } = await dee.call('issueTicket', { eventId: EV_OPEN });
+    const issued = (await db.doc(`events/${EV_OPEN}`).get()).get('issuedCount');
+
+    expect(await codeOf(other.call('revokeTicket', { ticketId }))).toBe('functions/permission-denied');
+    expect(await codeOf(dee.call('revokeTicket', { ticketId }))).toBe('functions/permission-denied');
+    expect(await admin.call('revokeTicket', { ticketId })).toEqual({ ok: true });
+
+    const ticket = (await db.doc(`tickets/${ticketId}`).get()).data()!;
+    expect(ticket).toMatchObject({ status: 'cancelled', ownerUid: null, qrToken: null });
+    expect((await db.doc(`events/${EV_OPEN}`).get()).get('issuedCount')).toBe(issued - 1);
+    const ops = await db.collection('chainOps').where('ticketId', '==', ticketId).get();
+    expect(ops.docs.map((d) => d.get('kind')).sort()).toEqual(['mint', 'release']);
+    expect(ops.docs.find((d) => d.get('kind') === 'release')!.get('reason')).toBe(4);
+    const record = await db.collection('reassignments').where('ticketId', '==', ticketId).get();
+    expect(record.docs[0].data()).toMatchObject({ mode: 'revoke', fromUid: dee.uid, toUid: null });
+
+    expect(await reasonOf(dee.call('issueTicket', { eventId: EV_OPEN }))).toBe('CANCELLED_BEFORE');
+    expect(await admin.call('revokeTicket', { ticketId })).toEqual({ ok: false, reason: 'NOT_ISSUED' });
+  });
+
+  it('refuses to revoke a used ticket', async () => {
+    await seedStudent('eve@drw.test', 'D005');
+    const eve = await login('eve@drw.test');
+    const admin = await login('admin@drw.test');
+    const { ticketId } = await eve.call('issueTicket', { eventId: EV_OPEN });
+    await db.doc(`tickets/${ticketId}`).update({ status: 'used' });
+    expect(await admin.call('revokeTicket', { ticketId })).toEqual({ ok: false, reason: 'TICKET_USED' });
+  });
+
+  it('records a lost-phone reissue for each live ticket when a bound device is reset', async () => {
+    await seedStudent('fay@drw.test', 'D006');
+    const fay = await login('fay@drw.test');
+    const admin = await login('admin@drw.test');
+    await db.doc(`users/${fay.uid}`).update({ schoolId: SCHOOL });
+    const { ticketId } = await fay.call('issueTicket', { eventId: EV_OPEN });
+    const actions = () => db.collection('chainOps').where('kind', '==', 'recordAction').where('eventId', '==', EV_OPEN).get();
+    const before = (await actions()).size;
+
+    // No device bound yet: nothing to reissue
+    await admin.call('resetDevice', { uid: fay.uid });
+    expect((await actions()).size).toBe(before);
+
+    await db.doc(`devices/${fay.uid}`).set({ publicKeyJwk: { kty: 'EC' } });
+    await admin.call('resetDevice', { uid: fay.uid });
+    const after = await actions();
+    expect(after.size).toBe(before + 1);
+    const op = after.docs.find((d) => String(d.get('note')).includes(ticketId))!;
+    expect(op.data()).toMatchObject({ action: 1, status: 'pending' });
+    expect(op.get('ref')).toMatch(/^0x[0-9a-f]{64}$/);
+    expect((await db.doc(`devices/${fay.uid}`).get()).exists).toBe(false);
+  });
+});

@@ -239,6 +239,7 @@ getStudentRoster(schoolId) / importStudentRoster(schoolId, sheetUrl) // 재학�
 createEvent(input) / updateEvent(eventId, patch)                     // 행사 등록 (주최 학교 관리자)
 getEventRoster(eventId) / importEventRoster(eventId, sheetUrl)       // 행사 명단
 verifyStudentRoster(schoolId, name, studentId): Promise<User>        // 회원가입: 학번 줄의 이름·메일 대조
+revokeTicket(ticketId): Promise<'revoked' | 'used' | 'not_issued'>   // 운영진 회수. 그 학생은 이 행사에서 다시 못 받음
 listStaff() / addStaff(email) / removeStaff(uid)   // 서버 setStaff. 로그인 전이면 첫 로그인 때 적용
 
 // 운영진 콘솔 (operator 계정만. 서버 opsListRoster / opsEditRoster / opsListStudents)
@@ -314,7 +315,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 
 ## 구현 상태 (실제 연동 vs 화면만)
 - 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia `0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2`, 2026-11-05 재배포)와 아웃박스(`functions/src/chain`)가 있다. 서버 `CHAIN_CONTRACT_ADDRESS`는 배포하는 사람의 `functions/.env.ttv-festival-pass`에서 온다.
-- 운영진 개입 기록(`recordAction`: 분실 재발급·환불·예외 입장)은 컨트랙트와 공개 현황판에만 있다. 서버에서 부르는 화면은 아직 없다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
+- 운영진 개입 기록(공개 현황판): 부정 적발 회수 = 관리자 "발급 현황"의 회수(`revokeTicket`, 체인 `release` 사유 4) / 분실 재발급 = 기기 초기화(`resetDevice`)할 때 학생이 가진 입장권마다 `recordAction(1)`. 환불·예외 입장은 컨트랙트에 자리만 있고 기록하는 기능이 없어 현황판에서 숨겼다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
 - 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).

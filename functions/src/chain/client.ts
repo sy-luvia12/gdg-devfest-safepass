@@ -30,6 +30,8 @@ export interface ChainClient {
   drawRound(p: { eventId: string; round: number; commitment: string }): Promise<DrawRoundResult>;
   /** Opens a student's entry (when not already open), waits for its seed block and settles it. Safe to repeat. */
   drawEntry(p: { eventId: string; entryId: string; winBps: number }): Promise<DrawEntryResult>;
+  /** Records an operator action. Skipped when a recent ActionRecorded event already carries this ref (a retry). */
+  recordAction(p: { eventId: string; action: number; ref: string }): Promise<ChainResult>;
 }
 
 export interface DrawEntryResult {
@@ -140,6 +142,14 @@ export function createChainClient(cfg: ChainConfig): ChainClient {
       seedTx = await send(() => ticket.seedDraw(key, round));
       d = await read();
       return { seed: d.seed, seedBlock: d.seedBlock, commitTx, seedTx };
+    },
+    async recordAction({ eventId, action, ref }) {
+      const key = eventKeyOf(eventId);
+      // Public RPCs cap getLogs ranges; a retry happens within minutes, so the last few thousand blocks are enough.
+      const from = Math.max(0, (await provider.getBlockNumber()) - 5_000);
+      const seen = await ticket.queryFilter(ticket.filters.ActionRecorded(key, action), from);
+      if (seen.some((l) => (l as { args?: { ref?: string } }).args?.ref === ref)) return { txHash: null };
+      return { txHash: await send(() => ticket.recordAction(key, action, ref)) };
     },
     async drawEntry({ eventId, entryId, winBps }) {
       const key = eventKeyOf(eventId);

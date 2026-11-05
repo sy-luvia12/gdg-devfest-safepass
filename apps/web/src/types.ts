@@ -133,9 +133,13 @@ export type Reassignment = {
   fromName: string;
   toName?: string; // released면 없음
   mode: ReassignMode;
-  outcome: 'reassigned' | 'released';
+  /** revoked: 운영진 회수 (체인 사유 4). 그 학생은 이 행사 입장권을 다시 받지 못한다 */
+  outcome: 'reassigned' | 'released' | 'revoked';
   createdAt: number;
 };
+
+/** 운영진 회수 결과. used: 이미 입장해 회수 불가 / not_issued: 이미 취소·회수된 입장권 */
+export type RevokeResult = 'revoked' | 'used' | 'not_issued';
 
 /** 대기 명단 한 줄. 행사 담당자가 구글 시트(이름·학번, 대기 순서대로)로 등록한다. 메일은 보여주지 않는다 */
 export type WaitlistEntry = {

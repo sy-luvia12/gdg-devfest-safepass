@@ -90,6 +90,8 @@ export const getTicketHistory: typeof mock.getTicketHistory = real ? chain.getCh
 
 // 입장권 취소 → 대기 명단 재배정 (양도 대체)
 export const cancelTicket: typeof mock.cancelTicket = real ? fb.cancelTicket : mock.cancelTicket;
+/** 운영진 회수 (관리자). 체인에 사유 4로 남는다 */
+export const revokeTicket: typeof mock.revokeTicket = real ? fb.revokeTicket : mock.revokeTicket;
 
 // 검표
 export const verifyEntry: typeof mock.verifyEntry = real ? fb.verifyEntry : mock.verifyEntry;

@@ -45,7 +45,7 @@ import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
 import { checkEntry, entryIdOf, scoreOf, studentRefOf } from './chain/entry';
 import type { ChainDraw, ChainEntry, ChainEventStatus, DrawCheck, EntryVerification, MyDrawEntry } from './chain/types';
-import type { ClaimResult, EntryDraw, MyLottery, RosterStatus, RunDrawResult } from '@/types';
+import type { ClaimResult, EntryDraw, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
 
 const STATE_KEY = 'safepass-mock-v9';
 const SESSION_KEY = 'safepass-mock-session';
@@ -1073,6 +1073,33 @@ function candidates(mode: ReassignMode, waiting: MockWaiter[]): MockWaiter[] {
 }
 
 /** 주인이 취소하면 운영진이 정한 방식(순서/무작위)으로 대기자에게 넘긴다. 받을 사람이 없으면 다시 발급 가능 */
+export async function revokeTicket(ticketId: string): Promise<RevokeResult> {
+  await wait();
+  const s = load();
+  const me = requireUser(s);
+  if (me.role !== 'admin') throw new ApiError('wrong_role');
+  const ticket = s.tickets.find((t) => t.id === ticketId);
+  if (!ticket) return 'not_issued';
+  if (ticket.status === 'used') return 'used';
+  const event = findEvent(s, ticket.eventId);
+  const owner = s.users.find((u) => u.uid === ticket.ownerUid);
+  s.reassignments.unshift({
+    id: nextId(s, 'r'),
+    ticketId,
+    eventId: ticket.eventId,
+    nftTokenId: ticket.nftTokenId,
+    fromUid: ticket.ownerUid,
+    fromName: owner?.name ?? '알 수 없음',
+    mode: event.reassignMode,
+    outcome: 'revoked',
+    createdAt: Date.now(),
+  });
+  s.tickets = s.tickets.filter((t) => t.id !== ticketId);
+  event.issuedCount = Math.max(0, event.issuedCount - 1);
+  save(s);
+  return 'revoked';
+}
+
 export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   await wait();
   const s = load();

@@ -156,6 +156,14 @@ export interface ResetDeviceResponse {
   ok: true;
 }
 
+// revokeTicket: the event's school admin (or the operator) takes back a ticket that was not used (e.g. misuse).
+// The ticket is released on chain with reason 4 (운영진 회수), so the public board counts it, and the student cannot
+// take a ticket for this event again.
+export interface RevokeTicketRequest {
+  ticketId: string;
+}
+export type RevokeTicketResponse = { ok: true } | { ok: false; reason: 'TICKET_USED' | 'NOT_ISSUED' };
+
 export interface SetReassignModeRequest {
   eventId: string;
   mode: ReassignMode;
@@ -551,6 +559,7 @@ export interface Callables {
   runDrawNow: [RunDrawNowRequest, RunDrawNowResponse];
   getMyLottery: [GetMyLotteryRequest, GetMyLotteryResponse];
   claimTicket: [ClaimTicketRequest, ClaimTicketResponse];
+  revokeTicket: [RevokeTicketRequest, RevokeTicketResponse];
   enterDraw: [EntryDrawRequest, EntryDrawResponse];
   getMyEntryDraw: [EntryDrawRequest, EntryDrawResponse];
 }

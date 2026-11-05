@@ -126,9 +126,8 @@ export function BoardPage() {
           </div>
           <ul className="flex flex-col">
             <Row label="부정 적발 회수" value={`${n(status.released.adminRevoke)}건`} strong />
-            <Row label="분실 재발급" value={`${n(status.actions.lostReissue)}건`} strong />
-            <Row label="환불" value={`${n(status.actions.refund)}건`} strong />
-            <Row label="예외 입장 (대면 확인)" value={`${n(status.actions.manualEntry)}건`} strong />
+            <Row label="분실 재발급 (기기 초기화)" value={`${n(status.actions.lostReissue)}건`} strong />
+            {/* 환불·예외 입장은 컨트랙트에 자리만 있고, 아직 기록하는 운영 기능이 없어 보여 주지 않는다 */}
           </ul>
           <p className="text-caption text-ink-3">운영진이 입장권에 손대면 사유와 함께 체인에 남아요. 지우거나 숨길 수 없어요</p>
         </section>

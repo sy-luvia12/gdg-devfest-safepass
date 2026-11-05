@@ -38,6 +38,7 @@ import {
   type CancelResult,
   type ClaimResult,
   type EntryDraw,
+  type RevokeResult,
   type LotteryState,
   type MyLottery,
   type RunDrawResult,
@@ -690,6 +691,12 @@ export function formatQrPayload(ticketId: string, token: string, signature?: QrS
 }
 
 /** 입장권 취소 → 대기 명단 재배정 (docs/api.md 2.5) */
+/** 운영진 회수: 입장 전 입장권을 거둬들인다. 체인에 사유 4(운영진 회수)로 남고 공개 현황판에 집계된다 */
+export async function revokeTicket(ticketId: string): Promise<RevokeResult> {
+  const { data } = await run(() => call('revokeTicket')({ ticketId }));
+  return data.ok ? 'revoked' : data.reason === 'TICKET_USED' ? 'used' : 'not_issued';
+}
+
 export async function cancelTicket(ticketId: string): Promise<CancelResult> {
   try {
     const { data } = await call('cancelTicket')({ ticketId });
@@ -855,7 +862,7 @@ export async function listReassignments(eventId: string): Promise<Reassignment[]
         fromName: r.fromName || ((await userName(r.fromUid, names)) ?? '알 수 없음'),
         toName: r.toUid ? r.toName || (await userName(r.toUid, names)) : undefined,
         mode: r.mode === 'random' || r.mode === 'lottery' ? 'random' : 'queue',
-        outcome: r.toUid ? 'reassigned' : 'released',
+        outcome: r.mode === 'revoke' ? 'revoked' : r.toUid ? 'reassigned' : 'released',
         createdAt: millis(r.createdAt),
       } satisfies Reassignment;
     }),

@@ -319,3 +319,21 @@ describe('instant entry draw through processChainOp', () => {
     expect(await reader.queryFilter(reader.filters.EntrySettled(eventKeyOf(eventId), entryId))).toHaveLength(1);
   }, 120_000);
 });
+
+describe('operator action through processChainOp', () => {
+  it('records the action once per op, even when the op runs again', async () => {
+    const eventId = id('aev');
+    await db.doc(`events/${eventId}`).set({ capacity: 5, allowedDomains: ['korea.ac.kr'] });
+    const opId = `action-${id('a1')}`;
+    const ref = hashOf(`action:${opId}`);
+    await db.doc(`chainOps/${opId}`).set({ kind: 'recordAction', eventId, action: 1, ref, seq: 1, status: 'pending' });
+
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, opId)).toBe('done');
+    await db.doc(`chainOps/${opId}`).update({ status: 'pending' });
+    expect(await processChainOp({ db, client, mnemonic: MNEMONIC }, opId)).toBe('done');
+
+    expect(Number(await reader.actionCount(eventKeyOf(eventId), 1))).toBe(1);
+    const logs = await reader.queryFilter(reader.filters.ActionRecorded(eventKeyOf(eventId), 1));
+    expect(logs.map((l) => (l as unknown as { args: { ref: string } }).args.ref)).toEqual([ref]);
+  }, 60_000);
+});

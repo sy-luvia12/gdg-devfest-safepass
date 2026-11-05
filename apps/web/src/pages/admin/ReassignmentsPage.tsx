@@ -17,6 +17,7 @@ import type { Reassignment, WaitlistEntry, WaitlistView } from '@/types';
 const MODE_LABEL = { queue: '대기 순서대로', random: '무작위' } as const;
 
 function outcome(r: Reassignment) {
+  if (r.outcome === 'revoked') return { tone: 'danger' as const, text: '운영진 회수' };
   return r.outcome === 'reassigned'
     ? { tone: 'success' as const, text: '대기자에게 배정' }
     : { tone: 'muted' as const, text: '발급 가능으로 복귀' };
