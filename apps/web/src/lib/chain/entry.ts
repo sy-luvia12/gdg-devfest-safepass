@@ -20,11 +20,7 @@ export const entryIdOf = (eventId: string, studentRef: string, salt: string): He
 export const scoreOf = (seed: string, entryId: string): number =>
   Number(BigInt(keccak256(encodeAbiParameters(B32, [seed as Hex, entryId as Hex]))) % BigInt(BPS));
 
-/** 1/10000 → "25%" or "0.3%" */
-export const formatRate = (bps: number): string => {
-  const pct = bps / 100;
-  return `${pct >= 10 || Number.isInteger(pct) ? Math.round(pct) : pct.toFixed(1)}%`;
-};
+export { formatRate } from './rate';
 
 /**
  * Checks the student's entry against the chain with nothing but public data and the student's own salt.

@@ -135,9 +135,9 @@ export type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chai
 export const enterDraw: typeof mock.enterDraw = real ? fb.enterDraw : mock.enterDraw;
 export const getMyEntryDraw: typeof mock.getMyEntryDraw = real ? fb.getMyEntryDraw : mock.getMyEntryDraw;
 /** "다시 검증하기": 체인의 응모·시드를 읽어 폰에서 다시 계산 */
-export const verifyMyEntry: typeof mock.verifyMyEntry = real ? chain.verifyMyEntry : mock.verifyMyEntry;
+export const verifyMyEntry: typeof mock.verifyMyEntry = real ? lazyChain((m) => m.verifyMyEntry) : mock.verifyMyEntry;
 export type { EntryCheck, EntryVerification } from './chain/types';
-export { formatRate } from './chain/entry';
+export { formatRate } from './chain/rate';
 
 export const getMyLottery: typeof mock.getMyLottery = real ? fb.getMyLottery : mock.getMyLottery;
 export const claimTicket: typeof mock.claimTicket = real ? fb.claimTicket : mock.claimTicket;
