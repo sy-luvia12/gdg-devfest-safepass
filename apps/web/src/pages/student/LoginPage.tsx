@@ -53,9 +53,8 @@ export function LoginPage() {
 
   return (
     <>
-      {/* 가운데 폰 폭만 흰 배경, 화면이 더 넓으면 양옆은 옅은 회색. MobileLayout 밖까지 칠하려고 화면 전체에 깐다 */}
-      <div className="fixed inset-0 -z-10 bg-surface-2" aria-hidden />
-      <main className="mx-auto flex min-h-dvh w-full max-w-app flex-col bg-bg px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-4">
+      {/* 폰 영역 한 화면에 다 들어오게: 높이가 모자라면 구가 줄어든다 */}
+      <main className="flex min-h-[560px] flex-1 flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-4">
         <div className="flex items-center justify-between">
           <Link
             to="/about"
@@ -73,8 +72,8 @@ export function LoginPage() {
             <Menu size={20} strokeWidth={1.75} />
           </button>
         </div>
-        <section className="flex flex-1 flex-col items-center justify-center gap-10 py-10 text-center">
-          <Orb size={200} />
+        <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[clamp(16px,4dvh,40px)] py-4 text-center">
+          <Orb size="min(200px, 22dvh)" />
           <div className="flex flex-col gap-2">
             <h1 className="text-display text-ink">Campass</h1>
             <p className="text-body text-ink-2">재학생만을 위한 축제 입장권</p>

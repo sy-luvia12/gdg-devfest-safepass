@@ -28,6 +28,14 @@
   }
 }
 
+/* 폰보다 넓은 화면(481px 이상)은 모두 노트북처럼 가운데 폰 비율 영역으로 (app/layouts.tsx). 폰에서는 화면 전체 */
+@media (min-width: 481px) {
+  .phone-frame {
+    width: min(480px, max(390px, 46dvh));
+    box-shadow: 0 0 0 1px rgb(31 35 40 / 0.04);
+  }
+}
+
 /* 안개 구 (components/Orb.tsx). 색은 테마 변수만 쓴다. multiply로 겹쳐 파스텔을 진하게 만든다 */
 @layer components {
   .orb {

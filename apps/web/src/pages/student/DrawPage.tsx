@@ -94,7 +94,7 @@ export function DrawPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-36 pt-2 md:pb-10">
+      <main className="flex flex-col gap-6 px-5 pb-6 pt-2">
         <Card className="flex flex-col gap-2 bg-surface">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-title text-ink">{s.title}</h2>
@@ -134,14 +134,14 @@ export function DrawPage() {
         )}
         {check && <Result check={check} />}
 
-        {receipt && (
-          <BottomBar>
-            <Button loading={checking} icon={<ShieldCheck size={20} strokeWidth={1.75} />} onClick={() => void onVerify()}>
-              {check ? '다시 검증하기' : '직접 검증하기'}
-            </Button>
-          </BottomBar>
-        )}
       </main>
+      {receipt && (
+        <BottomBar>
+          <Button loading={checking} icon={<ShieldCheck size={20} strokeWidth={1.75} />} onClick={() => void onVerify()}>
+            {check ? '다시 검증하기' : '직접 검증하기'}
+          </Button>
+        </BottomBar>
+      )}
     </>
   );
 }

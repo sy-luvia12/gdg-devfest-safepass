@@ -55,7 +55,7 @@ export function OnboardingPage() {
   return (
     <>
       <AppHeader title="회원가입" right={<Button variant="ghost" size="sm" disabled={busy} onClick={() => void signOut()}>나가기</Button>} />
-      <main className="px-5 pb-36 pt-6 md:pb-10">
+      <main className="px-5 pb-6 pt-6">
         <RegistrationSteps step={stage === 'photo' ? 2 : 3} />
         {stage === 'photo' ? (
           <section key="photo" className="flex animate-rise-in flex-col gap-6">
@@ -83,14 +83,14 @@ export function OnboardingPage() {
             </button>
           </section>
         )}
-        <BottomBar>
-          {stage === 'photo' ? (
-            <Button disabled={!photo || processing} onClick={() => setStage('idCard')}>다음</Button>
-          ) : (
-            <Button loading={busy} disabled={!photo || !idCard || !consented || processing} onClick={() => void finish()}>회원가입 완료하기</Button>
-          )}
-        </BottomBar>
       </main>
+      <BottomBar>
+        {stage === 'photo' ? (
+          <Button disabled={!photo || processing} onClick={() => setStage('idCard')}>다음</Button>
+        ) : (
+          <Button loading={busy} disabled={!photo || !idCard || !consented || processing} onClick={() => void finish()}>회원가입 완료하기</Button>
+        )}
+      </BottomBar>
     </>
   );
 }

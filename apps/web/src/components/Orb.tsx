@@ -1,7 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { cx } from './cx';
 
-type Props = { size?: number; tone?: 'orb' | 'success' | 'warm'; children?: ReactNode; className?: string };
+/** size: px 숫자, 또는 화면 높이에 맞춰 줄어들게 'min(200px, 24dvh)' 같은 CSS 길이 */
+type Props = { size?: number | string; tone?: 'orb' | 'success' | 'warm'; children?: ReactNode; className?: string };
 
 const tones = { success: 'bg-grad-success', warm: 'bg-grad-warm' };
 
@@ -26,7 +27,7 @@ export function Orb({ size = 180, tone = 'orb', children, className }: Props) {
   return (
     <div
       className={cx('orb relative flex shrink-0 items-center justify-center animate-breathe', className)}
-      style={{ width: size, height: size, '--orb-size': `${size}px` } as CSSProperties}
+      style={{ width: size, height: size, '--orb-size': typeof size === 'number' ? `${size}px` : size } as CSSProperties}
     >
       <div className="orb-halo" aria-hidden />
       <div className="orb-body" aria-hidden>

@@ -142,7 +142,7 @@ export function EventPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-36 pt-2 md:pb-10">
+      <main className="flex flex-col gap-6 px-5 pb-6 pt-2">
         <section className="flex aspect-[4/3] flex-col justify-end gap-2 rounded-xl bg-grad-ticket p-6 shadow-float">
           <div className="w-full [container-type:inline-size]">
             <p className="inline-flex max-w-full rounded-full border border-white/[0.22] bg-white/[0.28] px-3 py-1.5 text-[12px] font-medium leading-[1.4] text-ink-2 [overflow-wrap:anywhere] [@container(max-width:240px)]:px-2.5 [@container(max-width:240px)]:py-1 [@container(max-width:240px)]:text-[11px]">
