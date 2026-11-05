@@ -44,7 +44,7 @@ export function RegistrationPage() {
     setErrors(validation);
     if (Object.keys(validation).length) return;
     lock.current = true; setBusy(true); setError('');
-    const input = { name: fields.name.normalize('NFC').trim(), studentId: fields.studentId.trim(), email: fields.email.trim().toLowerCase() };
+    const input = { name: fields.name.normalize('NFC').trim(), studentId: fields.studentId.replace(/[\s\p{Cf}]/gu, ''), email: fields.email.replace(/[\s\p{Cf}]/gu, '').toLowerCase() };
     try {
       const match = await precheckStudent(input);
       if (match.schoolId !== school.id) { setError('선택한 학교와 이메일의 학교가 달라요. 학교 선택을 확인해 주세요.'); return; }

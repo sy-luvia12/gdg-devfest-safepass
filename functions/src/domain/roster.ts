@@ -31,7 +31,11 @@ const HEADERS: Record<keyof RosterRow, RegExp> = {
 const STUDENT_ID = /^[A-Za-z0-9-]{1,32}$/;
 export const isStudentId = (value: string) => STUDENT_ID.test(value);
 
-export const normalizeName = (name: string) => name.replace(/\s+/g, '');
+export const normalizeName = (name: string) => cleanField(name);
+
+// Typed or pasted sign-up fields can carry spaces, zero-width or other invisible characters (copied from a sheet or
+// a chat app, or left by autofill). They are dropped before any comparison, and Hangul is put in one form (NFC).
+export const cleanField = (value: string) => value.normalize('NFC').replace(/[\s\p{Cf}]/gu, '');
 
 // Why a student roster row cannot be stored, or null when it can. Shared by the sheet import and the operator console.
 export function studentRowProblem(row: RosterRow, allowedDomains: readonly string[]): RosterSkipReason | null {
