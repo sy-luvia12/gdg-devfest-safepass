@@ -1136,7 +1136,7 @@ export async function cancelTicket(ticketId: string): Promise<CancelResult> {
     event.issuedCount -= 1;
   }
   save(s);
-  return record.outcome;
+  return record.outcome as CancelResult;
 }
 
 // ---------- 검표 ----------
