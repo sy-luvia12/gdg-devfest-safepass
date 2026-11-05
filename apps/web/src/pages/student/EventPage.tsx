@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
+import { Blocks, ChevronRight, LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import calendarIcon from '@/assets/icons/festival-calendar.svg';
 import locationIcon from '@/assets/icons/festival-location.svg';
@@ -136,6 +136,13 @@ export function EventPage() {
           <Guide icon={ShieldCheck} text="입장권 번호는 블록체인에 기록돼서 위조할 수 없어요" />
           <Guide icon={ListOrdered} text="못 가게 되면 취소해 주세요. 표는 학생회가 정한 방식으로 대기 명단의 재학생에게 넘어가요" />
         </ul>
+
+        <nav className="flex flex-col">
+          <LinkRow icon={Blocks} label="공개 현황판" hint="발행량·재배정·운영진 기록" onClick={() => navigate('/event/board')} />
+          {event.reassignMode === 'lottery' && (
+            <LinkRow icon={ShieldCheck} label="추첨 검증" hint="추첨 결과를 내 폰에서 다시 계산" onClick={() => navigate('/event/draw')} />
+          )}
+        </nav>
       </main>
 
       <BottomBar>
@@ -177,5 +184,22 @@ function Guide({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
       <Icon size={16} strokeWidth={1.75} className="mt-px shrink-0" />
       {text}
     </li>
+  );
+}
+
+function LinkRow({ icon: Icon, label, hint, onClick }: { icon: LucideIcon; label: string; hint: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-3 border-b border-line py-3.5 text-left last:border-0"
+    >
+      <Icon size={20} strokeWidth={1.75} className="shrink-0 text-ink-2" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-body text-ink">{label}</span>
+        <span className="text-caption text-ink-2">{hint}</span>
+      </span>
+      <ChevronRight size={18} strokeWidth={1.75} className="shrink-0 text-ink-3" />
+    </button>
   );
 }
