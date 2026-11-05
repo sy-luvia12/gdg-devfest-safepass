@@ -26,6 +26,9 @@ import { DevicePage } from '@/pages/student/DevicePage';
 import { EventPage } from '@/pages/student/EventPage';
 import { EventsPage } from '@/pages/student/EventsPage';
 import { HistoryPage } from '@/pages/student/HistoryPage';
+import { RegistrationPage } from '@/pages/student/RegistrationPage';
+import { SignInPage } from '@/pages/student/SignInPage';
+import { AuthFinishPage } from '@/pages/student/AuthFinishPage';
 import { LoginPage } from '@/pages/student/LoginPage';
 import { OnboardingPage } from '@/pages/student/OnboardingPage';
 import { PendingPage } from '@/pages/student/PendingPage';
@@ -43,6 +46,10 @@ export const router = createBrowserRouter([
     element: <MobileLayout />,
     children: [
       { path: '/', element: <LoginPage /> },
+      { path: '/signup', element: <RegistrationPage /> },
+      { path: '/register', element: <Navigate to="/signup" replace /> },
+      { path: '/signin', element: <SignInPage /> },
+      { path: '/auth/finish', element: <AuthFinishPage /> },
       { path: '/terms', element: <PolicyPage kind="terms" /> },
       { path: '/privacy', element: <PolicyPage kind="privacy" /> },
       {

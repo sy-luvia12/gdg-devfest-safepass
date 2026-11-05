@@ -148,9 +148,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     const u = await api.getCurrentUser();
-    setUser(u);
+    if (u) apply(u, await resolve(u));
+    else { setUser(null); setScope(null); setSchools([]); }
     return u;
-  }, []);
+  }, [apply]);
 
   const value = useMemo(
     () => ({

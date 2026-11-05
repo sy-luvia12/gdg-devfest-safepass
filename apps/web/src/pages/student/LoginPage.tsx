@@ -69,9 +69,12 @@ export function LoginPage() {
             {error}
           </p>
         )}
-        <Button loading={submitting} onClick={onStart}>
-          학교 계정으로 시작하기
-        </Button>
+        <Button onClick={() => navigate('/signin')}>로그인</Button>
+        <p className="text-center text-label text-ink-2">
+          아직 계정이 없으신가요?{' '}
+          <Link to="/signup" className="text-ink underline underline-offset-4">회원가입 하러가기</Link>
+        </p>
+        <Button variant="ghost" loading={submitting} onClick={onStart}>운영진 로그인 (Google)</Button>
         <p className="text-center text-caption text-ink-3">
           시작하면{' '}
           <Link to="/terms" className="text-link">
@@ -83,7 +86,10 @@ export function LoginPage() {
           </Link>
           에 동의하게 돼요
         </p>
-        {SHOW_DEMO_PANEL && <DemoPanel />}
+        {SHOW_DEMO_PANEL && <>
+          <DemoPanel />
+          <Button variant="secondary" loading={submitting} onClick={onStart}>선택한 데모 계정으로 바로 로그인</Button>
+        </>}
         <Link to="/ops/login" className="self-center text-caption text-ink-3">
           운영진
         </Link>
