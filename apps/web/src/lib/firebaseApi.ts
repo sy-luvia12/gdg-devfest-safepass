@@ -68,7 +68,7 @@ import {
   type TicketRow,
   type User,
   type VerifyResult,
-  type WaitlistEntry,
+  type WaitlistView,
 } from '@/types';
 import { describeThisDevice, getDeviceKeys, publicKeyJwk, setRegistered, signQr, signRefresh } from './device';
 import { auth, db, functions } from './firebase';
@@ -855,20 +855,19 @@ export async function listTickets(eventId: string): Promise<TicketRow[]> {
 }
 
 /** 대기 명단. 문서 id가 이메일이고, 가입한 사람이면 이름을 붙인다 */
-export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
-  const snap = await getDocs(collection(db, 'events', eventId, 'waitlist'));
-  const rows = await Promise.all(
-    snap.docs.map(async (d) => {
-      const account = await getDocs(query(collection(db, 'users'), where('email', '==', d.id), limit(1)));
-      return {
-        email: d.id,
-        name: (account.docs[0]?.get('name') as string | undefined) ?? '가입 전',
-        order: (d.get('order') as number | undefined) ?? 0,
-        status: d.get('status') === 'assigned' ? 'assigned' : 'waiting',
-      } satisfies WaitlistEntry;
-    }),
-  );
-  return rows.sort((a, b) => a.order - b.order);
+/** 대기 명단 (이름·학번, 대기 순서). 메일은 서버가 돌려주지 않는다 */
+export async function getWaitlist(eventId: string): Promise<WaitlistView> {
+  const { data } = await run(() => call('getWaitlist')({ eventId }));
+  return {
+    summary: data.summary && fromApiSummary(data.summary),
+    entries: data.entries,
+    serviceAccountEmail: data.serviceAccountEmail,
+  };
+}
+
+/** 대기 명단 시트 불러오기 (이름·학번, 위에서부터 대기 순서). 재학생 명단과 맞는 학생만 들어간다 */
+export async function importWaitlist(eventId: string, sheetUrl: string): Promise<RosterImport> {
+  return toRosterImport((await run(() => call('importWaitlist')({ eventId, sheetUrl }))).data);
 }
 
 export async function updateReassignMode(eventId: string, mode: ReassignMode): Promise<Event> {

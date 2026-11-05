@@ -39,20 +39,22 @@ import {
   type TicketRow,
   type User,
   type VerifyResult,
-  type WaitlistEntry,
+  type WaitlistView,
 } from '@/types';
 import demoDraw from './chain/demo-draw.json';
 import { checkMyDraw } from './chain/draw';
 import type { ChainDraw, ChainEventStatus, DrawCheck, MyDrawEntry } from './chain/types';
 import type { ClaimResult, MyLottery, RunDrawResult } from '@/types';
 
-const STATE_KEY = 'safepass-mock-v7';
+const STATE_KEY = 'safepass-mock-v8';
 const SESSION_KEY = 'safepass-mock-session';
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
 const LATENCY_MS = 300;
 
 type StudentRow = { email: string; name: string; studentId: string };
+/** 대기 명단 한 줄 (서버처럼 메일을 키로 둔다. 화면에는 메일을 주지 않는다) */
+type MockWaiter = { email: string; name: string; studentId: string; order: number; status: 'waiting' | 'assigned' };
 type EventRow = { name: string; studentId: string };
 type Roster<R = StudentRow | EventRow> = { sheetUrl: string; importedAt: number; entries: R[] };
 
@@ -64,7 +66,9 @@ type MockState = {
   /** 지난 QR 토큰. 캡처한 QR을 "만료"로 판정하기 위해 남겨 둔다. */
   pastTokens: Record<string, string>; // token → ticketId
   reassignments: Reassignment[];
-  waitlists: Record<string, WaitlistEntry[]>; // eventId → 대기 명단
+  waitlists: Record<string, MockWaiter[]>; // eventId → 대기 명단
+  /** 대기 명단 시트 요약 (행사 담당자가 불러온 시트) */
+  waitlistSheets?: Record<string, { sheetUrl: string; importedAt: number }>;
   scanLogs: ScanLog[];
   rosters: Record<string, Roster<EventRow>>; // eventId → 행사 명단 (이름·학번)
   studentRosters: Record<string, Roster<StudentRow>>; // schoolId → 재학생 명단 (이름·학번·메일)
@@ -284,11 +288,11 @@ function seed(): MockState {
     });
     // 대기 명단: 앞의 두 명은 이미 배정받음. 승인 대기 학생도 줄 서 있다
     s.waitlists[eventId] = [
-      { email: `wait1@${school.domain}`, name: FAKE_NAMES[4], order: 1, status: 'assigned' },
-      { email: `wait2@${school.domain}`, name: FAKE_NAMES[5], order: 2, status: 'assigned' },
-      { email: `wait3@${school.domain}`, name: FAKE_NAMES[7], order: 3, status: 'waiting' },
-      { email: `wait4@${school.domain}`, name: FAKE_NAMES[8], order: 4, status: 'waiting' },
-      { email: `wait5@${school.domain}`, name: FAKE_NAMES[9], order: 5, status: 'waiting' },
+      { email: `wait1@${school.domain}`, name: FAKE_NAMES[4], studentId: `20250111`, order: 1, status: 'assigned' },
+      { email: `wait2@${school.domain}`, name: FAKE_NAMES[5], studentId: `20250222`, order: 2, status: 'assigned' },
+      { email: `wait3@${school.domain}`, name: FAKE_NAMES[7], studentId: `20250333`, order: 3, status: 'waiting' },
+      { email: `wait4@${school.domain}`, name: FAKE_NAMES[8], studentId: `20250444`, order: 4, status: 'waiting' },
+      { email: `wait5@${school.domain}`, name: FAKE_NAMES[9], studentId: `20250555`, order: 5, status: 'waiting' },
     ];
     // 재학생 명단: 학교 학생 + 가짜 학생. 스페이스가 이미 세팅된 학교로 시작한다
     s.studentRosters[school.id] = {
@@ -1026,7 +1030,7 @@ export async function getTicketHistory(ticketId: string): Promise<TicketHistoryI
 
 // ---------- 입장권 취소 → 대기 명단 재배정 (양도 대체) ----------
 
-function candidates(mode: ReassignMode, waiting: WaitlistEntry[]): WaitlistEntry[] {
+function candidates(mode: ReassignMode, waiting: MockWaiter[]): MockWaiter[] {
   const list = [...waiting];
   if (mode === 'queue') return list.sort((a, b) => a.order - b.order);
   for (let i = list.length - 1; i > 0; i--) {
@@ -1199,11 +1203,42 @@ export async function updateAllowReissue(eventId: string, allow: boolean): Promi
   return event;
 }
 
-export async function getWaitlist(eventId: string): Promise<WaitlistEntry[]> {
+export async function getWaitlist(eventId: string): Promise<WaitlistView> {
   await wait();
   const s = load();
   requireUser(s, ['admin']);
-  return [...(s.waitlists[eventId] ?? [])].sort((a, b) => a.order - b.order);
+  const r = s.waitlistSheets?.[eventId];
+  return {
+    summary: r ? { sheetUrl: r.sheetUrl, importedAt: r.importedAt, count: (s.waitlists[eventId] ?? []).length } : null,
+    entries: [...(s.waitlists[eventId] ?? [])]
+      .sort((a, b) => a.order - b.order)
+      .map(({ name, studentId, order, status }) => ({ name, studentId, order, status })),
+    serviceAccountEmail: 'ttv-festival-pass@appspot.gserviceaccount.com',
+  };
+}
+
+/** 대기 명단 시트 불러오기. mock은 재학생 명단의 가짜 학생 중 행사 명단에 없는 학생을 순서대로 넣는다. 배정된 줄은 그대로 둔다 */
+export async function importWaitlist(eventId: string, sheetUrl: string): Promise<RosterImport> {
+  await wait();
+  await wait();
+  const s = load();
+  const event = findEvent(s, eventId);
+  requireSchoolAdmin(s, event.schoolId);
+  checkSheetUrl(sheetUrl);
+  const onRoster = new Set((s.rosters[eventId]?.entries ?? []).map((r) => r.studentId));
+  const pool = (s.studentRosters[event.schoolId]?.entries ?? []).filter((r) => r.email.startsWith('member') && !onRoster.has(r.studentId));
+  const settled = (s.waitlists[eventId] ?? []).filter((w) => w.status !== 'waiting');
+  const fresh = pool.filter((r) => !settled.some((w) => w.email === r.email));
+  s.waitlists[eventId] = [
+    ...settled,
+    ...fresh.map((r, i) => ({ email: r.email, name: r.name, studentId: r.studentId, order: settled.length + i + 1, status: 'waiting' as const })),
+  ];
+  s.waitlistSheets = { ...(s.waitlistSheets ?? {}), [eventId]: { sheetUrl: sheetUrl.trim(), importedAt: Date.now() } };
+  save(s);
+  return {
+    summary: { sheetUrl: sheetUrl.trim(), importedAt: Date.now(), count: s.waitlists[eventId].length },
+    skipped: [{ row: fresh.length + 2, reason: 'NOT_IN_STUDENT_ROSTER' }],
+  };
 }
 
 export async function updateReassignMode(eventId: string, mode: ReassignMode): Promise<Event> {

@@ -34,7 +34,7 @@ type Props = {
   /** 불러오기가 끝난 뒤 (명단·요약 다시 읽기) */
   onImported: () => void;
   /** 행사 명단은 이름·학번만 받는다 (메일은 서버가 재학생 명단에서 찾는다) */
-  kind?: 'student' | 'event';
+  kind?: 'student' | 'event' | 'waitlist';
 };
 
 /** 구글 시트 명단 불러오기: 공유할 계정 안내, 시트 주소, 불러오기 결과. 재학생 명단·행사 명단이 같이 쓴다 */
@@ -99,7 +99,9 @@ export function SheetImportCard({ view, onImport, onImported, kind = 'student' }
         <li>
           {kind === 'event'
             ? '2. 첫 줄에 이름, 학번 제목을 두고, 시트 주소를 붙여 넣어요. 재학생 명단과 맞는 학생만 들어가요'
-            : '2. 첫 줄에 이름, 학번, 이메일 제목을 두고, 시트 주소를 붙여 넣어요'}
+            : kind === 'waitlist'
+              ? '2. 첫 줄에 이름, 학번 제목을 두고 대기 순서대로 적은 뒤, 시트 주소를 붙여 넣어요. 재학생 명단과 맞는 학생만 들어가요'
+              : '2. 첫 줄에 이름, 학번, 이메일 제목을 두고, 시트 주소를 붙여 넣어요'}
         </li>
       </ol>
       <form onSubmit={submit} className="flex flex-col gap-3 md:flex-row md:items-end">
@@ -117,7 +119,7 @@ export function SheetImportCard({ view, onImport, onImported, kind = 'student' }
           hint={
             current
               ? '비워 두면 지금 시트를 다시 불러와요'
-              : kind === 'event'
+              : kind !== 'student'
                 ? '재학생 명단과 맞지 않는 줄과 중복된 줄은 건너뛰어요'
                 : '학교 메일이 아닌 줄과 중복된 줄은 건너뛰어요'
           }

@@ -6,13 +6,13 @@ import { formatDateTime } from '@/app/format';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { ListItem } from '@/components/ListItem';
-import { NextStepNote } from '@/components/NextStepNote';
 import { PageTitle } from '@/components/PageTitle';
+import { SheetImportCard } from '@/components/SheetImportCard';
 import { ResponsiveTable } from '@/components/ResponsiveTable';
 import { StatCard } from '@/components/StatCard';
 import { StateView } from '@/components/StateView';
-import { getWaitlist, listReassignments } from '@/lib/api';
-import type { Reassignment, WaitlistEntry } from '@/types';
+import { getWaitlist, importWaitlist, listReassignments } from '@/lib/api';
+import type { Reassignment, WaitlistEntry, WaitlistView } from '@/types';
 
 const MODE_LABEL = { queue: '대기 순서대로', random: '무작위' } as const;
 
@@ -26,13 +26,13 @@ function outcome(r: Reassignment) {
 export function ReassignmentsPage() {
   const eventId = useEventId();
   const { event } = useAdmin();
-  const [data, setData] = useState<{ records: Reassignment[]; waitlist: WaitlistEntry[] } | null>(null);
+  const [data, setData] = useState<{ records: Reassignment[]; waitlist: WaitlistEntry[]; view: WaitlistView } | null>(null);
   const [error, setError] = useState(false);
 
   const load = useCallback(() => {
     setError(false);
     Promise.all([listReassignments(eventId), getWaitlist(eventId)])
-      .then(([records, waitlist]) => setData({ records, waitlist }))
+      .then(([records, view]) => setData({ records, waitlist: view.entries, view }))
       .catch(() => setError(true));
   }, [eventId]);
   useEffect(load, [load]);
@@ -104,35 +104,46 @@ export function ReassignmentsPage() {
 
           <section className="flex flex-col gap-3">
             <h3 className="text-heading text-ink">대기 명단</h3>
+            <p className="text-label text-ink-2">
+              누가 취소하면 대기 명단의 학생이 받아가요. 시트는 위에서부터 대기 순서예요. 이미 배정된 학생은 다시 불러와도 그대로 남아요
+            </p>
+            <SheetImportCard
+              kind="waitlist"
+              view={{ summary: data.view.summary, entries: [], serviceAccountEmail: data.view.serviceAccountEmail }}
+              onImport={(url) => importWaitlist(eventId, url)}
+              onImported={load}
+            />
             <ResponsiveTable
               rows={data.waitlist}
-              rowKey={(w) => w.email}
+              rowKey={(w) => w.studentId || String(w.order)}
               empty="대기 명단이 비어 있어요"
               columns={[
                 { header: '순서', cell: (w) => <span className="tabular">{w.order}</span> },
                 { header: '이름', cell: (w) => w.name },
-                { header: '이메일', cell: (w) => <span className="text-ink-2">{w.email}</span> },
+                { header: '학번', cell: (w) => <span className="text-ink-2 tabular">{w.studentId}</span> },
                 {
                   header: '상태',
                   className: 'text-right',
-                  cell: (w) =>
-                    w.status === 'assigned' ? <Badge tone="success">배정됨</Badge> : <Badge tone="muted">대기 중</Badge>,
+                  cell: (w) => <WaiterBadge status={w.status} />,
                 },
               ]}
               mobile={(w) => (
                 <ListItem
                   title={`${w.order}. ${w.name}`}
-                  subtitle={w.email}
-                  trailing={
-                    w.status === 'assigned' ? <Badge tone="success">배정됨</Badge> : <Badge tone="muted">대기 중</Badge>
-                  }
+                  subtitle={w.studentId}
+                  trailing={<WaiterBadge status={w.status} />}
                 />
               )}
             />
-            <NextStepNote>대기 명단은 학생회가 쓰던 구글 시트에서 불러오는 기능을 다음 단계에 붙여요.</NextStepNote>
           </section>
         </div>
       )}
     </>
   );
+}
+
+function WaiterBadge({ status }: { status: string }) {
+  if (status === 'waiting') return <Badge tone="muted">대기 중</Badge>;
+  if (status === 'assigned') return <Badge tone="success">배정됨</Badge>;
+  return <Badge tone="muted">처리됨</Badge>;
 }

@@ -133,13 +133,17 @@ export type Reassignment = {
   createdAt: number;
 };
 
-/** 대기 명단 (학생회가 구글 시트로 등록, 프로토타입은 시드) */
+/** 대기 명단 한 줄. 행사 담당자가 구글 시트(이름·학번, 대기 순서대로)로 등록한다. 메일은 보여주지 않는다 */
 export type WaitlistEntry = {
-  email: string;
+  studentId: string;
   name: string;
   order: number;
-  status: 'waiting' | 'assigned';
+  /** waiting: 대기 중 / assigned: 배정됨 / 그 밖(추첨 당첨 등)은 처리됨 */
+  status: string;
 };
+
+/** 대기 명단 화면용. summary: 시트 요약 (아직 안 올렸으면 null) */
+export type WaitlistView = { summary: RosterSummary | null; entries: WaitlistEntry[]; serviceAccountEmail: string };
 
 /** mismatch: 2단계 검표에서 스태프가 "달라요"를 눌렀다 */
 export type ScanResult = 'ok' | 'expired' | 'used' | 'invalid' | 'mismatch';

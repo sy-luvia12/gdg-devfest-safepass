@@ -105,6 +105,8 @@ export const subscribeEventStats: typeof mock.subscribeEventStats = real
 export const listEntries: typeof mock.listEntries = real ? fb.listEntries : mock.listEntries;
 export const listReassignments: typeof mock.listReassignments = real ? fb.listReassignments : mock.listReassignments;
 export const getWaitlist: typeof mock.getWaitlist = real ? fb.getWaitlist : mock.getWaitlist;
+/** 대기 명단 시트 불러오기 (행사 담당자) */
+export const importWaitlist: typeof mock.importWaitlist = real ? fb.importWaitlist : mock.importWaitlist;
 export const updateReassignMode: typeof mock.updateReassignMode = real ? fb.updateReassignMode : mock.updateReassignMode;
 export const listTickets: typeof mock.listTickets = real ? fb.listTickets : mock.listTickets;
 export const listStaff: typeof mock.listStaff = real ? fb.listStaff : mock.listStaff;
