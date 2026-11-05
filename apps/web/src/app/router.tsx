@@ -1,29 +1,6 @@
+import type { ComponentType } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { AdminPage } from '@/pages/admin/AdminPage';
-import { ReassignmentsPage } from '@/pages/admin/ReassignmentsPage';
-import { DevicesPage } from '@/pages/admin/DevicesPage';
-import { EntriesPage } from '@/pages/admin/EntriesPage';
-import { EventFormPage } from '@/pages/admin/EventFormPage';
-import { EventListPage } from '@/pages/admin/EventListPage';
-import { RosterPage } from '@/pages/admin/RosterPage';
-import { SettingsPage } from '@/pages/admin/SettingsPage';
-import { SetupPage } from '@/pages/admin/SetupPage';
-import { StaffPage } from '@/pages/admin/StaffPage';
-import { StudentRosterPage } from '@/pages/admin/StudentRosterPage';
-import { TicketsPage } from '@/pages/admin/TicketsPage';
 import { MePage } from '@/pages/common/MePage';
-import { OpsAdminsPage } from '@/pages/ops/OpsAdminsPage';
-import { BoardPage } from '@/pages/student/BoardPage';
-import { DrawPage } from '@/pages/student/DrawPage';
-import { OpsDevicesPage } from '@/pages/ops/OpsDevicesPage';
-import { OpsEventPage } from '@/pages/ops/OpsEventPage';
-import { OpsHomePage } from '@/pages/ops/OpsHomePage';
-import { OpsLoginPage } from '@/pages/ops/OpsLoginPage';
-import { OpsSchoolPage } from '@/pages/ops/OpsSchoolPage';
-import { AboutPage } from '@/pages/public/AboutPage';
-import { PolicyPage } from '@/pages/public/PolicyPage';
-import { ScanHistoryPage } from '@/pages/staff/ScanHistoryPage';
-import { ScanPage } from '@/pages/staff/ScanPage';
 import { DevicePage } from '@/pages/student/DevicePage';
 import { EventPage } from '@/pages/student/EventPage';
 import { EventsPage } from '@/pages/student/EventsPage';
@@ -41,9 +18,14 @@ import { OpsLayout } from './OpsLayout';
 import { RequireEvent } from './RequireEvent';
 import { RequireRole } from './RequireRole';
 
+/** 화면을 처음 열 때 내려받는다. 학생 첫 화면에 관리자·운영진·검표 코드가 딸려오지 않게 한다 */
+function page<M extends Record<string, unknown>>(load: () => Promise<M>, name: keyof M & string) {
+  return async () => ({ Component: (await load())[name] as ComponentType });
+}
+
 export const router = createBrowserRouter([
   // 소개 페이지는 넓은 화면용이라 MobileLayout 밖에 둔다
-  { path: '/about', element: <AboutPage /> },
+  { path: '/about', lazy: page(() => import('@/pages/public/AboutPage'), 'AboutPage') },
   {
     element: <MobileLayout />,
     children: [
@@ -52,8 +34,8 @@ export const router = createBrowserRouter([
       { path: '/register', element: <Navigate to="/signup" replace /> },
       { path: '/signin', element: <SignInPage /> },
       { path: '/auth/finish', element: <AuthFinishPage /> },
-      { path: '/terms', element: <PolicyPage kind="terms" /> },
-      { path: '/privacy', element: <PolicyPage kind="privacy" /> },
+      { path: '/terms', lazy: async () => { const { PolicyPage } = await import('@/pages/public/PolicyPage'); return { Component: () => <PolicyPage kind="terms" /> }; } },
+      { path: '/privacy', lazy: async () => { const { PolicyPage } = await import('@/pages/public/PolicyPage'); return { Component: () => <PolicyPage kind="privacy" /> }; } },
       {
         // 학생: 승인·기기 상태에 따라 온보딩/기기 화면을 먼저 거친다. 학생회는 학생 화면도 볼 수 있다
         element: <RequireRole roles={['student', 'admin']} gate />,
@@ -69,8 +51,8 @@ export const router = createBrowserRouter([
               { path: '/event', element: <EventPage /> },
               { path: '/ticket', element: <TicketPage /> },
               { path: '/ticket/history', element: <HistoryPage /> },
-              { path: '/event/board', element: <BoardPage /> },
-              { path: '/event/draw', element: <DrawPage /> },
+              { path: '/event/board', lazy: page(() => import('@/pages/student/BoardPage'), 'BoardPage') },
+              { path: '/event/draw', lazy: page(() => import('@/pages/student/DrawPage'), 'DrawPage') },
             ],
           },
         ],
@@ -82,8 +64,8 @@ export const router = createBrowserRouter([
       {
         element: <RequireRole roles={['staff', 'admin']} />,
         children: [
-          { element: <RequireEvent who="staff" />, children: [{ path: '/staff/scan', element: <ScanPage /> }] },
-          { path: '/staff/history', element: <ScanHistoryPage /> },
+          { element: <RequireEvent who="staff" />, children: [{ path: '/staff/scan', lazy: page(() => import('@/pages/staff/ScanPage'), 'ScanPage') }] },
+          { path: '/staff/history', lazy: page(() => import('@/pages/staff/ScanHistoryPage'), 'ScanHistoryPage') },
         ],
       },
     ],
@@ -96,22 +78,22 @@ export const router = createBrowserRouter([
         element: <AdminLayout />,
         children: [
           // 학교 메뉴: 행사가 없어도 쓴다
-          { path: '/admin/setup', element: <SetupPage /> },
-          { path: '/admin/students', element: <StudentRosterPage /> },
-          { path: '/admin/events', element: <EventListPage /> },
-          { path: '/admin/events/new', element: <EventFormPage /> },
-          { path: '/admin/devices', element: <DevicesPage /> },
-          { path: '/admin/staff', element: <StaffPage /> },
+          { path: '/admin/setup', lazy: page(() => import('@/pages/admin/SetupPage'), 'SetupPage') },
+          { path: '/admin/students', lazy: page(() => import('@/pages/admin/StudentRosterPage'), 'StudentRosterPage') },
+          { path: '/admin/events', lazy: page(() => import('@/pages/admin/EventListPage'), 'EventListPage') },
+          { path: '/admin/events/new', lazy: page(() => import('@/pages/admin/EventFormPage'), 'EventFormPage') },
+          { path: '/admin/devices', lazy: page(() => import('@/pages/admin/DevicesPage'), 'DevicesPage') },
+          { path: '/admin/staff', lazy: page(() => import('@/pages/admin/StaffPage'), 'StaffPage') },
           {
             // 행사 메뉴: 고른 행사 기준
             element: <RequireEvent who="admin" />,
             children: [
-              { path: '/admin', element: <AdminPage /> },
-              { path: '/admin/entries', element: <EntriesPage /> },
-              { path: '/admin/tickets', element: <TicketsPage /> },
-              { path: '/admin/reassignments', element: <ReassignmentsPage /> },
-              { path: '/admin/roster', element: <RosterPage /> },
-              { path: '/admin/settings', element: <SettingsPage /> },
+              { path: '/admin', lazy: page(() => import('@/pages/admin/AdminPage'), 'AdminPage') },
+              { path: '/admin/entries', lazy: page(() => import('@/pages/admin/EntriesPage'), 'EntriesPage') },
+              { path: '/admin/tickets', lazy: page(() => import('@/pages/admin/TicketsPage'), 'TicketsPage') },
+              { path: '/admin/reassignments', lazy: page(() => import('@/pages/admin/ReassignmentsPage'), 'ReassignmentsPage') },
+              { path: '/admin/roster', lazy: page(() => import('@/pages/admin/RosterPage'), 'RosterPage') },
+              { path: '/admin/settings', lazy: page(() => import('@/pages/admin/SettingsPage'), 'SettingsPage') },
             ],
           },
         ],
@@ -119,15 +101,15 @@ export const router = createBrowserRouter([
     ],
   },
   // 운영진 콘솔 (검정 테마). 아이디·비밀번호로 들어오는 SafePass 운영진만
-  { path: '/ops/login', element: <OpsLoginPage /> },
+  { path: '/ops/login', lazy: page(() => import('@/pages/ops/OpsLoginPage'), 'OpsLoginPage') },
   {
     element: <OpsLayout />,
     children: [
-      { path: '/ops', element: <OpsHomePage /> },
-      { path: '/ops/schools/:schoolId', element: <OpsSchoolPage /> },
-      { path: '/ops/events/:eventId', element: <OpsEventPage /> },
-      { path: '/ops/admins', element: <OpsAdminsPage /> },
-      { path: '/ops/devices', element: <OpsDevicesPage /> },
+      { path: '/ops', lazy: page(() => import('@/pages/ops/OpsHomePage'), 'OpsHomePage') },
+      { path: '/ops/schools/:schoolId', lazy: page(() => import('@/pages/ops/OpsSchoolPage'), 'OpsSchoolPage') },
+      { path: '/ops/events/:eventId', lazy: page(() => import('@/pages/ops/OpsEventPage'), 'OpsEventPage') },
+      { path: '/ops/admins', lazy: page(() => import('@/pages/ops/OpsAdminsPage'), 'OpsAdminsPage') },
+      { path: '/ops/devices', lazy: page(() => import('@/pages/ops/OpsDevicesPage'), 'OpsDevicesPage') },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
