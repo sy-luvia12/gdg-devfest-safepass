@@ -274,7 +274,9 @@ export interface CreateEventResponse {
   eventId: string;
 }
 // schoolIds cannot change after creation. capacity cannot go below issuedCount.
-export type UpdateEventRequest = { eventId: string } & Partial<Omit<EventFields, 'schoolIds'>>;
+// lottery changes only the fields it names; the rest keeps the stored value or the default (docs/api.md 14장).
+export type LotteryPatch = Partial<Omit<LotterySettings, 'finalPhase'>> & { finalPhase?: Partial<LotterySettings['finalPhase']> };
+export type UpdateEventRequest = { eventId: string; lottery?: LotteryPatch } & Partial<Omit<EventFields, 'schoolIds'>>;
 export interface UpdateEventResponse {
   ok: true;
 }
