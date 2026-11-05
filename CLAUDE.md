@@ -108,7 +108,7 @@ firebase.json             #                                    ← 백엔드
 | `/admin` | 실시간 현황 | admin |
 | `/admin/entries` | 입장 기록 (필터·검색·CSV) | admin |
 | `/admin/tickets` | 발급 현황 | admin |
-| `/admin/reassignments` | 취소·재배정 기록, 대기 명단, 재배정 방식 | admin |
+| `/admin/reassignments` | 취소·재배정 기록, 대기 명단(시트 등록, 이름·학번만), 재배정 방식 | admin |
 | `/admin/devices` | 기기 초기화 요청 | 팀 admin (행사 담당자에게는 숨김) |
 | `/admin/staff` | 스태프 관리 | admin |
 | `/admin/setup` | 스페이스 만들기: 학교 정보 → 재학생 시트 | 팀 admin |
@@ -227,7 +227,8 @@ getMyScanHistory(): Promise<ScanLog[]>
 subscribeEventStats(eventId, cb): () => void        // { enteredCount, capacity, rejectedCount, recent }
 listEntries(eventId): Promise<ScanLog[]>
 listReassignments(eventId): Promise<Reassignment[]>   // 취소·재배정 기록
-getWaitlist(eventId): Promise<WaitlistEntry[]>
+getWaitlist(eventId): Promise<WaitlistView>          // 서버 getWaitlist. 이름·학번·순서·상태만 (메일 없음)
+importWaitlist(eventId, sheetUrl): Promise<RosterImport>   // 대기 명단 시트(이름·학번, 대기 순서). 재학생 명단과 맞는 학생만
 updateReassignMode(eventId, mode) / updateAllowReissue(eventId, allow)   // admin
 listTickets(eventId): Promise<TicketRow[]>
 upsertSchool(schoolId, { name, domain, brandColor })                 // 스페이스 만들기 (학교 관리자는 자기 학교만)
@@ -289,6 +290,8 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - 거부된 스캔도 `ScanLog`에 기록한다 (관리자 "거부된 시도")
 
 ### 취소 · 재배정 규칙
+- 대기 명단은 행사 담당자가 구글 시트(이름·학번, 위에서부터 대기 순서)로 등록한다. 서버가 재학생 명단과 대조해 `events/{id}/waitlist/{email}`로 저장한다. 다시 불러오면 대기 중인 줄은 시트대로 바뀌고, 이미 배정·당첨 처리된 줄은 그대로 남는다. 대기 명단은 클라이언트가 직접 읽지 못한다(문서 id가 메일).
+- 행사 명단 행사(`requireRoster`)에서도 대기 명단에 있는 학생은 재배정·추첨으로 입장권을 받을 수 있다.
 - 주인이 취소하면 `reassignMode`에 따라 대기 명단에서 후보를 고른다. `queue`는 `order`가 작은 순서, `random`은 무작위.
 - 후보 조건: 이미 로그인해 `users`에 같은 메일이 있고, 도메인이 `allowedDomains`에 있고, 이 행사 입장권이 없다. 못 맞추면 건너뛴다.
 - 후보가 있으면 `ownerUid`를 바꾸고 QR을 지운다(`reassigned`). 없으면 취소 상태로 두고 수량을 돌려준다(`released`). 받은 사람은 취소한 사람에게 알려주지 않는다.
@@ -306,7 +309,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 - 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).
-- 아직 화면과 mock뿐: 대기 명단 등록, 테마·검표 설정 저장, 개인정보 파기
+- 아직 화면과 mock뿐: 테마·검표 설정 저장, 개인정보 파기
 - 하지 않는 것: reCAPTCHA, App Check, Gemini, 결제, 개인 간 양도
 - 배포 빌드는 Firebase 설정(`.env.local`)이 없으면 실패한다. mock 빌드는 `VITE_BACKEND=mock`을 명시한다.
 
