@@ -40,7 +40,7 @@ export function OpsAdminsPage() {
       if (school) setEmail('');
       load();
     } catch {
-      setNotice({ tone: 'bad', text: '바꾸지 못했어요. 메일을 확인해 주세요 (운영진·팀 관리자 계정은 바꿀 수 없어요)' });
+      setNotice({ tone: 'bad', text: '바꾸지 못했어요. 메일을 확인해 주세요 (운영진 계정은 바꿀 수 없어요)' });
     } finally {
       setBusy(null);
     }
@@ -90,7 +90,8 @@ export function OpsAdminsPage() {
           </OpsButton>
         </form>
         <p className="mt-3 text-caption text-ops-ink-3">
-          이미 다른 학교에 지정된 계정이면 새 학교로 옮겨요. 아직 로그인 전이면 처음 구글 로그인할 때 적용돼요
+          이미 다른 학교에 지정된 계정이면 새 학교로 옮겨요. 아직 로그인 전이면 처음 구글 로그인할 때 적용돼요. "학교 없음"인
+          관리자는 학교를 지정하기 전까지 관리 화면을 쓸 수 없어요
         </p>
       </OpsPanel>
       {notice && (
@@ -120,7 +121,9 @@ export function OpsAdminsPage() {
               <tbody>
                 {admins.map((a) => (
                   <tr key={a.email} className="border-b border-ops-line last:border-0 hover:bg-ops-raised/60">
-                    <td className="whitespace-nowrap px-4 py-2.5 text-ops-ink">{schoolName(a.schoolId)}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-ops-ink">
+                      {a.schoolId ? schoolName(a.schoolId) : <OpsBadge tone="warn">학교 없음</OpsBadge>}
+                    </td>
                     <td className="px-4 py-2.5 text-ops-ink-2">{a.email}</td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-ops-ink-2">{a.pending ? '-' : a.name}</td>
                     <td className="whitespace-nowrap px-4 py-2.5">
