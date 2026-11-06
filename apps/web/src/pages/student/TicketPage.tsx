@@ -198,7 +198,7 @@ export function TicketPage() {
         <BottomBar>
           {cancelError && <p role="alert" className="text-center text-caption text-danger">{cancelError}</p>}
           {askCancel ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
+            <div className="flex flex-col gap-3 rounded-lg border border-line bg-canvas p-4 shadow-lg">
               <p className="text-body text-ink">입장권을 취소할까요?</p>
               <p className="text-caption text-ink-2">
                 취소하면 되돌릴 수 없어요.
