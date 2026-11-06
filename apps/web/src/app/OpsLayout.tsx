@@ -1,4 +1,3 @@
-import { PageAtmosphere } from '@/components/Orb';
 import { useEffect, useState, type ReactNode } from 'react';
 import { LayoutGrid, LogOut, School as SchoolIcon, ShieldHalf, Smartphone, SquareArrowOutUpRight, UserCog } from '@/components/icons';
 import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
@@ -23,7 +22,7 @@ export function OpsLayout() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-ops-bg">
+      <div className="min-h-dvh bg-ops-canvas">
         <OpsState kind="loading" />
       </div>
     );
@@ -48,10 +47,10 @@ export function OpsLayout() {
   );
 
   return (
-    <div className="page-canvas text-ops-ink">
-      <PageAtmosphere />
-      <header className="navigation-surface sticky top-4 z-20 mx-5 mt-5 rounded-[32px]">
-        <div className="mx-auto flex h-14 max-w-admin items-center justify-between gap-3 px-5 md:px-8">
+    <div className="page-canvas bg-ops-canvas text-ops-ink">
+      {/* 상단 바는 아래 내용 영역(메뉴~본문) 폭에만 둔다 (AdminLayout과 같다) */}
+      <header className="navigation-surface border-ops-line bg-ops-panel/95 sticky top-4 z-20 mx-auto mt-5 w-[calc(100%-2.5rem)] max-w-[calc(theme(maxWidth.admin)-5rem)] rounded-[32px]">
+        <div className="flex h-14 items-center justify-between gap-3 px-5 md:px-8">
           <div className="flex items-center gap-2">
             <ShieldHalf size={18} strokeWidth={1.75} className="text-ops-accent" />
             <span className="text-heading text-ops-ink">Campass 운영진</span>
