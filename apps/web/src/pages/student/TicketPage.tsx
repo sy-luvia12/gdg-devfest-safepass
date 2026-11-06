@@ -215,7 +215,7 @@ export function TicketPage() {
               </div>
             </div>
           ) : (
-            <Button variant="ghost" onClick={() => setAskCancel(true)}>
+            <Button variant="ghost" className="underline decoration-ink-3 underline-offset-4" onClick={() => setAskCancel(true)}>
               입장권 취소
             </Button>
           )}
