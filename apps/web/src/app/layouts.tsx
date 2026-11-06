@@ -17,7 +17,7 @@ export function MobileLayout() {
   return (
     // 바깥을 실제 보이는 화면(fixed inset-0)에 맞춘다. 100dvh는 브라우저에 따라 보이는 높이보다 커져 하단 버튼이 잘린다
     <div className="fixed inset-0 bg-surface-2 min-[481px]:p-4">
-      <div className={`phone-frame relative isolate mx-auto h-full w-full max-w-app overflow-hidden bg-canvas [transform:translateZ(0)] min-[481px]:rounded-[32px] ${studentStyle ? 'student-experience' : ''}`}>
+      <div className={`phone-frame relative isolate mx-auto h-full w-full max-w-app overflow-hidden bg-canvas [transform:translateZ(0)] min-[481px]:rounded-[32px] ${studentStyle ? 'student-experience' : 'staff-experience'}`}>
         {studentStyle ? <div className="student-edge-light" aria-hidden="true" /> : <PageAtmosphere />}
         <div className="relative z-[1] h-full overflow-y-auto overscroll-contain">
           <div className="flex min-h-full flex-col">
@@ -35,7 +35,7 @@ function DemoMobileLayout() {
   const studentStyle = !pathname.startsWith('/staff');
   return (
     <div className="fixed inset-0 bg-surface-2 min-[481px]:p-4">
-      <div className={`phone-frame relative isolate mx-auto h-full w-full max-w-app overflow-hidden bg-canvas [transform:translateZ(0)] min-[481px]:rounded-[32px] ${studentStyle ? 'student-experience' : ''}`}>
+      <div className={`phone-frame relative isolate mx-auto h-full w-full max-w-app overflow-hidden bg-canvas [transform:translateZ(0)] min-[481px]:rounded-[32px] ${studentStyle ? 'student-experience' : 'staff-experience'}`}>
         {studentStyle ? <div className="student-edge-light" aria-hidden="true" /> : <PageAtmosphere />}
         <div className="relative z-[1] flex h-full flex-col">
           <DemoBanner />

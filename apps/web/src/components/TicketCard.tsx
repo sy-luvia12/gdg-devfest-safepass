@@ -25,7 +25,7 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
   const payload = formatQrPayload(ticket.id, ticket.qrToken, ticket.qrSignature);
 
   return (
-    <article className="flex flex-col gap-5 rounded-xl bg-grad-ticket p-5 shadow-float">
+    <article className="student-ticket-card flex flex-col gap-5 rounded-xl bg-grad-ticket p-5 shadow-float">
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-heading text-ink">{eventName}</h2>
         <StatusBadge kind={used ? 'used' : leftSec <= 5 ? 'expiring' : 'available'} />

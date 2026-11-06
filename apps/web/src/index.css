@@ -401,3 +401,17 @@ html:has(.campass-landing), body:has(.campass-landing) { scroll-behavior:smooth;
  .council-experience .grid.grid-cols-2>.surface-card .text-title { font-size:22px; }
  .council-experience .grid.grid-cols-2>.surface-card>div { flex-wrap:wrap; }
 }
+
+/* 위쪽 여백의 흰 띠를 막고 QR·검표에는 기존 학교 테마를 옅게 재사용한다. */
+.council-experience { display:flow-root; }
+html:has(.council-experience),body:has(.council-experience) { background:#eeeef2; }
+.student-experience article.student-ticket-card { background:linear-gradient(rgb(255 255 255 / .58),rgb(255 255 255 / .58)),var(--grad-ticket); border-color:rgb(var(--c-p2) / .4); }
+.student-experience article.student-ticket-card>div:last-child { background:rgb(255 255 255 / .8); }
+.staff-experience { background:#eeeef2; color:#1d1d1f; }
+.staff-experience .page-atmosphere { opacity:.38; }
+.staff-experience .navigation-surface { background:rgb(255 255 255 / .94); border-color:rgb(var(--c-p2) / .3); box-shadow:0 4px 20px #1d1d1f03; }
+.staff-experience .qr-scan-frame { background:linear-gradient(rgb(255 255 255 / .5),rgb(255 255 255 / .5)),var(--grad-ticket); border:1px solid rgb(var(--c-p2) / .4); }
+.staff-experience .qr-scan-frame>div:last-child { filter:drop-shadow(0 1px 2px rgb(29 29 31 / .12)); }
+.staff-experience main>.grid { background:linear-gradient(rgb(255 255 255 / .78),rgb(255 255 255 / .78)),var(--grad-ticket); border-color:rgb(var(--c-p2) / .3); }
+.staff-experience button.bg-grad-button:not(:disabled) { background:#1d1d1f; color:white; }
+.staff-experience .surface-card { border-color:#e5e5ea; box-shadow:0 6px 28px #1d1d1f03; }
