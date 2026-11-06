@@ -14,7 +14,7 @@ export function MailLinkNotice({ email, sentAt, busy, onResend }: {
   }, []);
   const remaining = Math.max(0, Math.ceil((sentAt + 60_000 - now) / 1000));
   return (
-    <div className="student-auth-notice flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface text-ink-2"><Mail size={24} strokeWidth={1.75} aria-hidden /></div>
       <h2 className="text-title text-ink">메일함을 확인해 주세요</h2>
       <p className="break-all text-body text-ink">{email}</p>

@@ -33,7 +33,7 @@ export function ImagePicker({ label, hint, value, onChange, shape, disabled, onP
     finally { setProcessing(false); onProcessingChange?.(false); }
   };
   return (
-    <div className="student-photo-picker flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <p className="text-label text-ink-2">{label}</p>
       <label
         htmlFor={id}

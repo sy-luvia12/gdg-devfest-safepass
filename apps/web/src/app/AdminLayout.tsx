@@ -1,3 +1,4 @@
+import { PageAtmosphere } from '@/components/Orb';
 import { useCallback, useEffect, useState } from 'react';
 import type { AppIcon } from '@/components/icons';
 import {
@@ -134,11 +135,11 @@ export function AdminLayout() {
   if (eventAdmin && TEAM_ONLY_PATHS.includes(pathname)) return <Navigate to="/admin" replace />;
 
   return (
-    <div className="page-canvas council-experience">
-      <div className="student-edge-light" aria-hidden="true" />
+    <div className="page-canvas">
+      <PageAtmosphere />
       {/* 상단 바는 아래 내용 영역(메뉴~본문) 폭에만 둔다. 넓은 화면 양옆 빈 곳으로 넘치지 않게 */}
-      <header className="council-header navigation-surface sticky top-4 z-20 mx-auto mt-5 w-[calc(100%-2.5rem)] max-w-[calc(theme(maxWidth.admin)-5rem)] rounded-[32px]">
-        <div className="council-header-row flex h-14 items-center justify-between gap-3 px-4 md:h-16 md:gap-4 md:px-8">
+      <header className="navigation-surface sticky top-4 z-20 mx-auto mt-5 w-[calc(100%-2.5rem)] max-w-[calc(theme(maxWidth.admin)-5rem)] rounded-[32px]">
+        <div className="flex h-14 items-center justify-between gap-3 px-4 md:h-16 md:gap-4 md:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <div className="min-w-0">
               <p className="truncate whitespace-nowrap text-caption text-ink-3 md:text-label">
@@ -153,7 +154,7 @@ export function AdminLayout() {
             <SchoolSwitcher className="hidden shrink-0 flex-nowrap md:flex" />
           </div>
           {/* 폰: 아이콘만 작게 */}
-          <div className="council-header-actions flex shrink-0 items-center gap-1.5 md:gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -197,7 +198,7 @@ export function AdminLayout() {
         </nav>
       </header>
 
-      <div className="council-content page-content mx-auto flex max-w-admin gap-10 px-6 py-8 md:px-10 md:py-10">
+      <div className="page-content mx-auto flex max-w-admin gap-10 px-6 py-8 md:px-10 md:py-10">
         <nav
           aria-label="관리자 메뉴"
           className={cx('sticky top-24 hidden h-fit w-52 shrink-0 flex-col gap-6', !inSetup && 'lg:flex')}
