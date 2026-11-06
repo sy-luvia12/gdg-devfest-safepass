@@ -185,19 +185,19 @@ const DEMO_SEED: SeedSchool[] = [
   {
     school: { id: 'korea', name: '고려대학교', domain: 'korea.ac.kr', brandColor: '#8B0029' },
     // 일반 발급: 입실렌티 / 추첨: 정기 고연전 농구
-    event: { name: '2026 입실렌티', date: '2026-11-20T18:00:00+09:00', place: '화정체육관', capacity: 4000, faceValue: 0, enteredCount: 0, issuedCount: 2900 },
+    event: { name: '2026 입실렌티', date: '2026-11-20T18:00:00+09:00', place: '녹지운동장', capacity: 20000, faceValue: 0, enteredCount: 0, issuedCount: 14500 },
     extraEvents: [
-      { key: 'gokoyon', instantDraw: true, event: { name: '2026 정기 고연전 농구', date: '2026-11-14T15:00:00+09:00', place: '잠실학생체육관', capacity: 6000, faceValue: 0, enteredCount: 0, issuedCount: 4500 } },
+      { key: 'gokoyon', instantDraw: true, event: { name: '2026 정기 고연전 농구', date: '2026-11-14T15:00:00+09:00', place: '잠실학생체육관', capacity: 3500, faceValue: 0, enteredCount: 0, issuedCount: 2450 } },
     ],
     people: [demoPerson('korea')],
   },
   {
     school: { id: 'yonsei', name: '연세대학교', domain: 'yonsei.ac.kr', brandColor: '#003876' },
     // 추첨: 아카라카 / 일반 발급: 정기 연고전 럭비·축구
-    event: { name: '2026 아카라카를 온누리에', date: '2026-11-21T17:00:00+09:00', place: '노천극장', capacity: 2000, faceValue: 0, enteredCount: 0, issuedCount: 1320 },
+    event: { name: '2026 아카라카를 온누리에', date: '2026-11-21T17:00:00+09:00', place: '노천극장', capacity: 11200, faceValue: 0, enteredCount: 0, issuedCount: 8100 },
     instantDraw: true,
     extraEvents: [
-      { key: 'yonko', event: { name: '2026 정기 연고전 럭비·축구', date: '2026-11-15T11:00:00+09:00', place: '목동종합운동장 주경기장', capacity: 5000, faceValue: 0, enteredCount: 0, issuedCount: 3800 } },
+      { key: 'yonko', event: { name: '2026 정기 연고전 럭비·축구', date: '2026-11-15T11:00:00+09:00', place: '목동종합운동장 주경기장', capacity: 30000, faceValue: 0, enteredCount: 0, issuedCount: 21000 } },
     ],
     people: [demoPerson('yonsei')],
   },
