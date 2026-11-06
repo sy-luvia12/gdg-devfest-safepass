@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 /** 카메라 영역 + 네 모서리 흰 꺾쇠 (DESIGN.md 5장) */
 export function ScanFrame({ children }: { children?: ReactNode }) {
   return (
-    <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-grad-ticket">
+    <div className="qr-scan-frame relative aspect-square w-full overflow-hidden rounded-xl bg-grad-ticket">
       <div className="absolute inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover">{children}</div>
       <div className="pointer-events-none absolute inset-6">
         <Corner className="left-0 top-0 rounded-tl-[6px] border-l-[3px] border-t-[3px]" />
