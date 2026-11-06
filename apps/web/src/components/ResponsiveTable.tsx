@@ -16,11 +16,11 @@ type Props<T> = {
 export function ResponsiveTable<T>({ rows, rowKey, columns, mobile, empty = '표시할 항목이 없어요' }: Props<T>) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-line bg-bg px-5 py-12 text-center text-caption text-ink-2">{empty}</div>
+      <div className="responsive-data-list rounded-lg border border-line bg-bg px-5 py-12 text-center text-caption text-ink-2">{empty}</div>
     );
   }
   return (
-    <div className="rounded-lg border border-line bg-bg">
+    <div className="responsive-data-list rounded-lg border border-line bg-bg">
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full">
           <thead>

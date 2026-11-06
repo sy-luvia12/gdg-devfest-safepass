@@ -285,3 +285,119 @@ html:has(.campass-landing), body:has(.campass-landing) { scroll-behavior:smooth;
  .landing-story-section>header { margin-bottom:32px; }
  .landing-demo-steps li { gap:16px; }
 }
+
+/* 학생 화면 전용. /about, 학생회·운영진 보드 및 검표 화면은 기존 스타일을 유지한다. */
+.student-experience { background:#eeeef2; color:#1d1d1f; font-family:'Saans','Poppins','Noto Sans KR',sans-serif; }
+.student-edge-light { position:absolute; inset:0 0 auto; height:190px; pointer-events:none; background:radial-gradient(ellipse at 28% 0%,rgba(169,145,230,.08),transparent 72%),radial-gradient(ellipse at 76% 0%,rgba(235,159,194,.065),transparent 70%); mask-image:linear-gradient(#000,transparent); -webkit-mask-image:linear-gradient(#000,transparent); }
+.student-experience .navigation-surface { background:transparent; border-color:transparent; box-shadow:none; padding-inline:0; margin-inline:24px; height:56px; backdrop-filter:none; }
+.student-experience .navigation-surface h1 { color:#55565c; font-size:15px; font-weight:400; }
+.student-experience .navigation-surface button { width:44px; height:44px; border:1px solid #e5e5ea; box-shadow:0 4px 16px #1d1d1f05; }
+.student-experience main { animation:student-page-enter .35s ease-out both; }
+.student-experience .surface-card { background:#ffffff; border:1px solid #1d1d1f05; box-shadow:0 6px 28px #1d1d1f03; border-radius:24px; }
+.student-experience :is(.text-display,.text-title) { font-weight:400; letter-spacing:-.035em; line-height:1.2; }
+.student-experience .text-title { font-size:26px; }
+.student-experience .text-heading { font-weight:400; }
+.student-experience .text-ink-2 { color:#6e6e73; }
+.student-experience .text-ink-3 { color:#86868b; }
+.student-experience a.text-link { color:#55565c; text-decoration:underline; text-underline-offset:3px; }
+.student-experience button.bg-grad-button:not(:disabled) { background:#1d1d1f; color:#fff; box-shadow:none; }
+.student-experience button.bg-grad-button:not(:disabled):hover { background:#363638; }
+.student-experience button.bg-surface:not(:disabled) { background:#fff; border:1px solid #d1d1d6; }
+.student-experience button { transition:background-color .2s ease,color .2s ease,border-color .2s ease,transform .2s ease; }
+.student-experience button:focus-visible { outline:2px solid #55565c; outline-offset:3px; }
+.student-experience .bg-grad-ticket { background:#fff; border:1px solid #1d1d1f05; box-shadow:0 8px 30px #1d1d1f04; }
+.student-experience article.bg-grad-ticket { padding:24px; gap:28px; }
+.student-experience article.bg-grad-ticket>div:last-child { background:#f6f6f8; border-radius:18px; padding:16px; }
+.student-experience article .bg-white\/70 { background:#e5e5ea; }
+.student-experience label:has(input[type='radio']) { border-color:#e5e5ea; box-shadow:none; border-radius:20px; }
+.student-experience label:has(input[type='radio']:checked) { border-color:#55565c; background:#fff; }
+.student-experience label:has(input[type='radio']):hover { border-color:#a6a6ab; }
+.student-experience div:has(>input:not([type='radio']):not([type='checkbox'])) { border-radius:16px; background:#fff; }
+.student-experience div:has(>input[aria-invalid='false']):focus-within { border-color:#55565c; box-shadow:0 0 0 3px #1d1d1f05; }
+.student-experience .from-canvas { --tw-gradient-from:#eeeef2 var(--tw-gradient-from-position); --tw-gradient-to:rgb(238 238 242 / 0) var(--tw-gradient-to-position); }
+.student-experience .via-canvas { --tw-gradient-stops:var(--tw-gradient-from),#eeeef2 var(--tw-gradient-via-position),var(--tw-gradient-to); }
+.student-experience .to-canvas\/0 { --tw-gradient-to:rgb(238 238 242 / 0) var(--tw-gradient-to-position); }
+.student-login-hub { padding-block:40px; }
+.student-login-heading { padding:20px 0 40px; }
+.student-login-heading h1 { font-size:42px; }
+.student-login-heading p { margin-top:6px; font-size:15px; }
+.student-login-actions { background:#fff; padding:24px; border-radius:28px; box-shadow:0 8px 32px #1d1d1f03; }
+.student-login-actions>div { border-radius:18px; border-color:#e5e5ea; padding:14px; }
+.student-login-actions button.bg-lavender { background:#eeeef2; color:#1d1d1f; border:1px solid #d1d1d6; }
+@keyframes student-page-enter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+@media(max-width:360px) { .student-login-actions { padding:20px; } .student-experience .text-title { font-size:24px; } }
+@media(prefers-reduced-motion:reduce) { .student-experience main { animation:none; } .student-experience button { transition:none; } }
+.student-experience ol[aria-label='회원가입 단계'] .bg-lavender { background:#55565c; }
+.student-experience ol[aria-label='회원가입 단계'] .bg-surface { background:#dcdce1; }
+.student-experience article.bg-grad-ticket h2 { word-break:keep-all; }
+
+
+/* 기존 학생 화면을 랜딩의 중립색·여백에 맞추되 동작과 의미색은 유지한다. */
+.student-experience [data-student-form], .student-experience .student-auth-notice { background:#fff; padding:24px; border:1px solid #1d1d1f05; border-radius:24px; box-shadow:0 6px 28px #1d1d1f03; }
+.student-experience .student-auth-notice>div:first-child { background:#f6f6f8; }
+.student-experience .student-auth-notice>div.border { background:#f6f6f8; border-color:#e5e5ea; border-radius:18px; }
+.student-experience .student-photo-picker { background:#fff; padding:24px 20px; border-radius:24px; border:1px solid #1d1d1f05; gap:14px; }
+.student-experience .student-photo-picker>label { background:#f6f6f8; border-color:#dcdce1; }
+.student-experience .student-photo-picker>label:last-of-type { background:#fff; border:1px solid #d1d1d6; padding:12px 20px; }
+.student-experience .student-photo-picker label:focus-within { outline:2px solid #55565c; outline-offset:3px; --tw-ring-color:transparent; }
+.student-experience [data-student-form] input::placeholder { color:#86868b; }
+.student-experience label:has(input[type='radio']):focus-within { --tw-ring-color:#55565c; }
+.student-experience button:disabled { cursor:not-allowed; }
+@media(max-width:360px) { .student-experience [data-student-form], .student-experience .student-auth-notice { padding:20px; } }
+
+/* 축제 정보 카드만 학교별 옅은 색을 사용한다. QR의 흰 바탕은 유지한다. */
+.student-experience .student-event-card[data-school-tone='pink'] { background:linear-gradient(145deg,#faf0f1 0%,#f5e3e8 55%,#f6eaf0 100%); }
+.student-experience .student-event-card[data-school-tone='blue'] { background:linear-gradient(145deg,#f0f5fb 0%,#e0eaf7 55%,#e9eff8 100%); }
+.student-experience .student-event-card[data-school-tone='green'] { background:linear-gradient(145deg,#f1f7f2 0%,#e0eee5 55%,#eaf3ed 100%); }
+
+/* 학생회 관리 화면: 기존 권한·데이터 처리와 운영진 콘솔(/ops)은 유지한다. */
+.council-experience { background:#eeeef2; color:#1d1d1f; font-family:'Saans','Poppins','Noto Sans KR',sans-serif; }
+.council-experience .council-header { background:rgba(255,255,255,.94); border:1px solid #1d1d1f06; box-shadow:0 6px 28px #1d1d1f03; border-radius:24px; backdrop-filter:blur(12px); max-width:1120px; margin-inline:auto; width:calc(100% - 40px); }
+.council-header-row { height:auto; min-height:76px; padding-block:12px; }
+.council-header-row>div:first-child { flex:1; }
+.council-header-row h1 { white-space:normal; overflow:visible; text-overflow:clip; word-break:keep-all; overflow-wrap:anywhere; line-height:1.5; font-weight:400; }
+.council-header-row p { word-break:keep-all; overflow-wrap:anywhere; }
+.council-header-actions { flex-shrink:0; }
+.council-experience .council-content { width:100%; gap:40px; }
+.council-experience main { min-width:0; }
+.council-experience main :is(p,h2,h3,label) { word-break:keep-all; overflow-wrap:anywhere; }
+.council-experience .council-page-title h2 { font-size:28px; font-weight:400; letter-spacing:-.035em; }
+.council-experience .council-page-title>div:first-child { flex:1 1 240px; }
+.council-experience .council-page-title>div:first-child>p { line-height:1.8; margin-top:10px; max-width:640px; }
+.council-experience .text-ink-2 { color:#6e6e73; }
+.council-experience .text-ink-3 { color:#86868b; }
+.council-experience .surface-card,.council-experience .responsive-data-list { border:1px solid #1d1d1f06; background:white; border-radius:24px; box-shadow:0 6px 28px #1d1d1f03; }
+.council-experience button.bg-grad-button:not(:disabled) { background:#1d1d1f; color:#fff; }
+.council-experience button.bg-grad-button:not(:disabled):hover { background:#363638; }
+.council-experience button.bg-surface:not(:disabled) { background:#fff; border:1px solid #d1d1d6; }
+.council-experience nav a.bg-lavender { background:#fff; border:1px solid #dcdce1; }
+.council-experience nav a { border:1px solid transparent; }
+.council-experience :is(button,a,select):focus-visible { outline:2px solid #55565c; outline-offset:3px; }
+.council-experience main .bg-grad-ticket { background:linear-gradient(145deg,#f9f5f7,#eee9f1); }
+.council-experience main .text-heading { font-weight:400; }
+.council-experience .surface-card input:not([type=checkbox]):not([type=radio]), .council-experience textarea { min-width:0; max-width:100%; }
+.council-experience .responsive-list-item { flex-wrap:wrap; gap:12px; padding-block:18px; }
+.council-experience .responsive-list-item>.min-w-0 { flex:1 1 120px; }
+.council-experience .responsive-list-item>.min-w-0>.truncate { white-space:normal; overflow:visible; text-overflow:clip; word-break:keep-all; overflow-wrap:anywhere; }
+.council-experience .responsive-list-item>button { flex-shrink:0; margin-left:auto; }
+.council-experience .responsive-data-list td { overflow-wrap:anywhere; }
+.council-experience .responsive-data-list th { color:#6e6e73; }
+@media(max-width:767px) {
+ .council-experience .council-header { width:calc(100% - 24px); top:12px; margin-top:12px; border-radius:22px; }
+ .council-header-row { padding-inline:16px; gap:10px; }
+ .council-header-row p { font-size:11px; }
+ .council-header-row h1 { font-size:14px; }
+ .council-header-actions { gap:4px; }
+ .council-header-actions>button { width:36px; min-width:36px; height:36px; padding:0; }
+ .council-experience .council-content { padding:28px 20px 40px; }
+ .council-experience .council-page-title { align-items:flex-start; gap:16px; }
+ .council-experience .council-page-title h2 { font-size:25px; }
+ .council-experience .surface-card { padding:20px; }
+ .council-experience .responsive-data-list>div.md\:hidden { padding-inline:16px; }
+ .council-experience .surface-card form { min-width:0; flex-wrap:wrap; }
+ .council-experience .surface-card form>.flex-1 { min-width:0; flex-basis:auto; }
+ .council-experience .surface-card form:not(.flex-col)>.flex-1 { flex-basis:180px; }
+ .council-experience .grid.grid-cols-2>.surface-card { min-width:0; padding:16px; }
+ .council-experience .grid.grid-cols-2>.surface-card .text-title { font-size:22px; }
+ .council-experience .grid.grid-cols-2>.surface-card>div { flex-wrap:wrap; }
+}
