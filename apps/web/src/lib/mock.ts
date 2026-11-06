@@ -102,6 +102,8 @@ type SeedSchool = {
   people: SeedPerson[];
   /** 즉석 추첨 행사인지 (mock: 브라우저에서 결과를 정한다) */
   instantDraw?: boolean;
+  /** 학교의 다른 행사들 (id는 `{학교}-{key}`). 입장권·검표 기록 같은 부속 데이터는 대표 행사에만 둔다 */
+  extraEvents?: { key: string; event: SeedSchool['event']; instantDraw?: boolean }[];
   /** 사진 묶음 (public/mock/{photos}-{key}.svg). 없으면 학교 id */
   photos?: string;
 };
@@ -182,23 +184,39 @@ const demoPerson = (schoolId: string): SeedPerson => {
 const DEMO_SEED: SeedSchool[] = [
   {
     school: { id: 'korea', name: '고려대학교', domain: 'korea.ac.kr', brandColor: '#8B0029' },
-    event: { name: '2026 석탑대동제', date: '2026-11-20T18:00:00+09:00', place: '민주광장', capacity: 3000, faceValue: 0, enteredCount: 0, issuedCount: 2140 },
+    // 일반 발급: 입실렌티 / 추첨: 정기 고연전 농구
+    event: { name: '2026 입실렌티', date: '2026-11-20T18:00:00+09:00', place: '화정체육관', capacity: 4000, faceValue: 0, enteredCount: 0, issuedCount: 2900 },
+    extraEvents: [
+      { key: 'gokoyon', instantDraw: true, event: { name: '2026 정기 고연전 농구', date: '2026-11-14T15:00:00+09:00', place: '잠실학생체육관', capacity: 6000, faceValue: 0, enteredCount: 0, issuedCount: 4500 } },
+    ],
     people: [demoPerson('korea')],
   },
   {
     school: { id: 'yonsei', name: '연세대학교', domain: 'yonsei.ac.kr', brandColor: '#003876' },
+    // 추첨: 아카라카 / 일반 발급: 정기 연고전 럭비·축구
     event: { name: '2026 아카라카를 온누리에', date: '2026-11-21T17:00:00+09:00', place: '노천극장', capacity: 2000, faceValue: 0, enteredCount: 0, issuedCount: 1320 },
     instantDraw: true,
+    extraEvents: [
+      { key: 'yonko', event: { name: '2026 정기 연고전 럭비·축구', date: '2026-11-15T11:00:00+09:00', place: '목동종합운동장 주경기장', capacity: 5000, faceValue: 0, enteredCount: 0, issuedCount: 3800 } },
+    ],
     people: [demoPerson('yonsei')],
   },
   {
     school: { id: 'skku', name: '성균관대학교', domain: 'skku.edu', brandColor: '#8DC63F' },
-    event: { name: '2026 성균관 대동제', date: '2026-11-22T18:00:00+09:00', place: '금잔디광장', capacity: 1500, faceValue: 0, enteredCount: 0, issuedCount: 1395 },
+    // 일반 발급: ESKARA / 추첨: 문행대동제 대운동장 공연
+    event: { name: '2026 ESKARA', date: '2026-11-22T11:30:00+09:00', place: '인문사회과학캠퍼스 금잔디광장', capacity: 2500, faceValue: 0, enteredCount: 0, issuedCount: 1900 },
+    extraEvents: [
+      { key: 'daedongje', instantDraw: true, event: { name: '2026 문행대동제 대운동장 공연', date: '2026-11-16T17:00:00+09:00', place: '인문사회과학캠퍼스 대운동장', capacity: 3000, faceValue: 0, enteredCount: 0, issuedCount: 2200 } },
+    ],
     people: [demoPerson('skku')],
   },
   {
     school: { id: 'kaist', name: 'KAIST', domain: 'kaist.ac.kr', brandColor: '#004191' },
-    event: { name: '2026 태울석림제', date: '2026-11-27T18:00:00+09:00', place: '대운동장', capacity: 800, faceValue: 0, enteredCount: 0, issuedCount: 410 },
+    // 일반 발급: 카포전 / 추첨: 태울석림제 카이존
+    event: { name: '2026 카포전 (KAIST–POSTECH 학생대제전)', date: '2026-11-27T10:00:00+09:00', place: 'KAIST 본원', capacity: 1200, faceValue: 0, enteredCount: 0, issuedCount: 760 },
+    extraEvents: [
+      { key: 'taeul', instantDraw: true, event: { name: '2026 태울석림제 카이존', date: '2026-11-17T18:00:00+09:00', place: '대운동장', capacity: 1000, faceValue: 0, enteredCount: 0, issuedCount: 640 } },
+    ],
     people: [demoPerson('kaist')],
   },
 ];
@@ -246,23 +264,25 @@ function seed(): MockState {
   };
   const logResults: ScanResult[] = ['ok', 'ok', 'expired', 'ok', 'used', 'ok', 'expired', 'ok', 'invalid', 'ok'];
 
-  for (const { school, event, people: ps, instantDraw, photos = school.id } of SEED) {
+  for (const { school, event, people: ps, instantDraw, extraEvents = [], photos = school.id } of SEED) {
     const eventId = `${school.id}-2026-fall`;
     s.schools.push({ ...school, currentEventId: eventId });
-    s.events.push({
-      ...event,
-      id: eventId,
+    const eventOf = (id: string, e: SeedSchool['event'], draw: boolean): Event => ({
+      ...e,
+      id,
       schoolId: school.id,
       schoolIds: [school.id],
       allowedDomains: [school.domain],
       theme: { source: 'school', colors: [] },
       settings: { requireRoster: false },
       reassignMode: 'queue',
-      instantDraw: instantDraw ?? false,
-      drawPool: Math.round(event.capacity * 2.5),
+      instantDraw: draw,
+      drawPool: Math.round(e.capacity * 2.5),
       allowReissueAfterCancel: false,
       dataRetentionDays: 7,
     });
+    s.events.push(eventOf(eventId, event, instantDraw ?? false));
+    for (const extra of extraEvents) s.events.push(eventOf(`${school.id}-${extra.key}`, extra.event, extra.instantDraw ?? false));
     for (const p of ps) {
       const uid = `${school.id}-${p.key}`;
       const verify = p.verify ?? 'approved';

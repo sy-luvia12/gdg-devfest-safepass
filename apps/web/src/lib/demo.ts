@@ -5,7 +5,7 @@
 
 const DEMO_KEY = 'campass-demo';
 /** 데모 모드에서 mock이 쓰는 상태. 개발용 mock 데이터(safepass-mock-*)와 섞이지 않게 따로 둔다 */
-export const DEMO_STATE_KEY = 'campass-demo-state-v2';
+export const DEMO_STATE_KEY = 'campass-demo-state-v3';
 /** mock.ts의 로그인 세션 키 (탭마다 따로) */
 export const MOCK_SESSION_KEY = 'safepass-mock-session';
 const MOCK_ENTRIES_KEY = 'safepass-mock-entry-draws';
