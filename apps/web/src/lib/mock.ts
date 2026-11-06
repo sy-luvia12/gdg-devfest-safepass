@@ -194,7 +194,7 @@ const DEMO_SEED: SeedSchool[] = [
   {
     school: { id: 'yonsei', name: '연세대학교', domain: 'yonsei.ac.kr', brandColor: '#003876' },
     // 추첨: 아카라카 / 일반 발급: 정기 연고전 럭비·축구
-    event: { name: '2026 아카라카를 온누리에', date: '2026-11-21T17:00:00+09:00', place: '노천극장', capacity: 2000, faceValue: 0, enteredCount: 0, issuedCount: 1320 },
+    event: { name: '2026 아카라카를 온누리에', date: '2026-11-21T17:00:00+09:00', place: '노천극장', capacity: 11200, faceValue: 0, enteredCount: 0, issuedCount: 8100 },
     instantDraw: true,
     extraEvents: [
       { key: 'yonko', event: { name: '2026 정기 연고전 럭비·축구', date: '2026-11-15T11:00:00+09:00', place: '목동종합운동장 주경기장', capacity: 5000, faceValue: 0, enteredCount: 0, issuedCount: 3800 } },
