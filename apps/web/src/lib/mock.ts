@@ -47,9 +47,12 @@ import { checkEntry, entryIdOf, scoreOf, studentRefOf } from './chain/entry';
 import { drawRateOf } from './chain/rate';
 import type { ChainDraw, ChainEntry, ChainEventStatus, DrawCheck, EntryVerification, MyDrawEntry } from './chain/types';
 import type { ClaimResult, EntryDraw, EntryDrawAdmin, MyLottery, RevokeResult, RosterStatus, RunDrawResult } from '@/types';
+import { DEMO_LOGINS, DEMO_STATE_KEY, DEMO_STUDENT_ID, isDemoMode, MOCK_SESSION_KEY } from './demo';
 
-const STATE_KEY = 'safepass-mock-v10';
-const SESSION_KEY = 'safepass-mock-session';
+/** 데모 모드(lib/demo.ts)면 실제 학교 4곳의 가짜 데이터를 따로 둔 저장소에서 쓴다 */
+const DEMO = isDemoMode();
+const STATE_KEY = DEMO ? DEMO_STATE_KEY : 'safepass-mock-v10';
+const SESSION_KEY = MOCK_SESSION_KEY;
 const SELECTED_KEY = 'safepass-mock-selected';
 const QR_TTL_MS = 30_000;
 const LATENCY_MS = 300;
@@ -97,6 +100,10 @@ type SeedSchool = {
   school: Omit<School, 'currentEventId'>;
   event: Pick<Event, 'name' | 'date' | 'place' | 'capacity' | 'faceValue' | 'enteredCount' | 'issuedCount'>;
   people: SeedPerson[];
+  /** 즉석 추첨 행사인지 (mock: 브라우저에서 결과를 정한다) */
+  instantDraw?: boolean;
+  /** 사진 묶음 (public/mock/{photos}-{key}.svg). 없으면 학교 id */
+  photos?: string;
 };
 
 // 학교마다 같은 구성: 학생 2(1명은 입장권 보유), 첫 로그인 학생, 기기 변경 학생, 스태프, 학생회, 승인 대기 2명
@@ -111,7 +118,7 @@ const people = (n: string[], ids: string[], locals: string[]): SeedPerson[] => [
   { key: 'ap2', name: n[7], studentId: ids[7], local: locals[7], role: 'student', verify: 'pending' },
 ];
 
-const SEED: SeedSchool[] = [
+const DEV_SEED: SeedSchool[] = [
   {
     school: { id: 'hanbit', name: '한빛대학교', domain: 'hanbit.ac.kr', brandColor: '#C8102E' },
     event: {
@@ -140,6 +147,7 @@ const SEED: SeedSchool[] = [
       enteredCount: 512,
       issuedCount: 690,
     },
+    instantDraw: true,
     people: people(
       ['박서연', '한지우', '권나은', '서도경', '오세린', '강민호', '류시온', '백예준'],
       ['20240088', '20230745', '20260117', '20221390', '20220156', '20210488', '20250236', '20240561'],
@@ -165,6 +173,38 @@ const SEED: SeedSchool[] = [
   },
 ];
 
+// 데모 모드: 실제 시드와 같은 학교 4곳 (상징색·도메인은 functions/seed.ts). 사람과 숫자는 모두 가짜다.
+// 학교마다 사람은 데모 계정(s1, 학교 마스코트) 하나뿐이다. 학생 화면만 보여주므로 스태프·학생회·운영진은 넣지 않는다.
+const demoPerson = (schoolId: string): SeedPerson => {
+  const d = DEMO_LOGINS.find((l) => l.schoolId === schoolId)!;
+  return { key: 's1', name: d.name, studentId: DEMO_STUDENT_ID, local: d.email.split('@')[0], role: 'student' };
+};
+const DEMO_SEED: SeedSchool[] = [
+  {
+    school: { id: 'korea', name: '고려대학교', domain: 'korea.ac.kr', brandColor: '#8B0029' },
+    event: { name: '2026 석탑대동제', date: '2026-11-20T18:00:00+09:00', place: '민주광장', capacity: 3000, faceValue: 0, enteredCount: 0, issuedCount: 2140 },
+    people: [demoPerson('korea')],
+  },
+  {
+    school: { id: 'yonsei', name: '연세대학교', domain: 'yonsei.ac.kr', brandColor: '#003876' },
+    event: { name: '2026 아카라카를 온누리에', date: '2026-11-21T17:00:00+09:00', place: '노천극장', capacity: 2000, faceValue: 0, enteredCount: 0, issuedCount: 1320 },
+    instantDraw: true,
+    people: [demoPerson('yonsei')],
+  },
+  {
+    school: { id: 'skku', name: '성균관대학교', domain: 'skku.edu', brandColor: '#8DC63F' },
+    event: { name: '2026 성균관 대동제', date: '2026-11-22T18:00:00+09:00', place: '금잔디광장', capacity: 1500, faceValue: 0, enteredCount: 0, issuedCount: 1395 },
+    people: [demoPerson('skku')],
+  },
+  {
+    school: { id: 'kaist', name: 'KAIST', domain: 'kaist.ac.kr', brandColor: '#004191' },
+    event: { name: '2026 태울석림제', date: '2026-11-27T18:00:00+09:00', place: '대운동장', capacity: 800, faceValue: 0, enteredCount: 0, issuedCount: 410 },
+    people: [demoPerson('kaist')],
+  },
+];
+
+const SEED = DEMO ? DEMO_SEED : DEV_SEED;
+
 /** 로그인 화면 데모 패널용 계정 목록 (학교별) */
 export const MOCK_SCHOOL_ACCOUNTS = SEED.map(({ school, people: ps }) => ({
   school: { id: school.id, name: school.name, brandColor: school.brandColor },
@@ -174,14 +214,16 @@ export const MOCK_SCHOOL_ACCOUNTS = SEED.map(({ school, people: ps }) => ({
 }));
 // 스페이스를 아직 만들지 않은 학교의 학생회. 로그인하면 /admin/setup부터 시작한다
 const NEW_SPACE = { id: 'saebit', name: '새빛대학교', domain: 'saebit.ac.kr', brandColor: '#6B4EFF' };
-MOCK_SCHOOL_ACCOUNTS.push({
-  school: { id: NEW_SPACE.id, name: `${NEW_SPACE.name} (스페이스 없음)`, brandColor: NEW_SPACE.brandColor },
-  accounts: [{ uid: `${NEW_SPACE.id}-admin`, label: '학생회 처음 세팅' }],
-});
+if (!DEMO) {
+  MOCK_SCHOOL_ACCOUNTS.push({
+    school: { id: NEW_SPACE.id, name: `${NEW_SPACE.name} (스페이스 없음)`, brandColor: NEW_SPACE.brandColor },
+    accounts: [{ uid: `${NEW_SPACE.id}-admin`, label: '학생회 처음 세팅' }],
+  });
+}
 export const MOCK_OUTSIDER = { uid: 'outsider', label: '개인 Gmail (외부인)' };
 /** mock 운영진 계정. 아이디 ops / 비밀번호 ops (mock 전용, 실제 배포는 시드에서 정한 값) */
 export const MOCK_OPS = { uid: 'ops', id: 'ops', password: 'ops' };
-const DEFAULT_ACCOUNT = 'hanbit-s1';
+const DEFAULT_ACCOUNT = `${SEED[0].school.id}-s1`;
 
 const photo = (uid: string) => `/mock/${uid}.svg`;
 const FAKE_NAMES = ['윤지호', '강예린', '조현우', '한소율', '서지안', '임태윤', '신유나', '오다온', '장민재', '하지민'];
@@ -204,7 +246,7 @@ function seed(): MockState {
   };
   const logResults: ScanResult[] = ['ok', 'ok', 'expired', 'ok', 'used', 'ok', 'expired', 'ok', 'invalid', 'ok'];
 
-  for (const { school, event, people: ps } of SEED) {
+  for (const { school, event, people: ps, instantDraw, photos = school.id } of SEED) {
     const eventId = `${school.id}-2026-fall`;
     s.schools.push({ ...school, currentEventId: eventId });
     s.events.push({
@@ -216,8 +258,7 @@ function seed(): MockState {
       theme: { source: 'school', colors: [] },
       settings: { requireRoster: false },
       reassignMode: 'queue',
-      // 푸른대 축제는 즉석 추첨 행사 (mock: 브라우저에서 결과를 정한다)
-      instantDraw: school.id === 'pureun',
+      instantDraw: instantDraw ?? false,
       drawPool: Math.round(event.capacity * 2.5),
       allowReissueAfterCancel: false,
       dataRetentionDays: 7,
@@ -231,11 +272,12 @@ function seed(): MockState {
         name: p.name,
         studentId: p.studentId,
         email: `${p.local || 'council'}@${school.domain}`,
-        photoUrl: photo(uid),
+        // 데모 계정(s1)은 학교 마스코트 사진
+        photoUrl: (DEMO && DEMO_LOGINS.find((d) => d.uid === uid)?.photoUrl) || photo(`${photos}-${p.key}`),
         role: p.role,
         adminSchoolId: p.role === 'admin' ? school.id : undefined,
         verifyStatus: verify,
-        idCardUrl: verify === 'pending' ? `/mock/idcard-${uid}.svg` : undefined,
+        idCardUrl: verify === 'pending' ? `/mock/idcard-${photos}-${p.key}.svg` : undefined,
         submittedAt: verify === 'pending' ? now - (p.key === 'ap1' ? 3_600_000 : 900_000) : undefined,
         deviceStatus: p.blocked ? 'blocked' : 'registered',
         deviceName: p.blocked ? 'iPhone 13 (이전 기기)' : 'iPhone 15',
@@ -305,7 +347,8 @@ function seed(): MockState {
       importedAt: now - 3 * 86_400_000,
       entries: rosterEntries(s, school.id, school.domain),
     };
-    s.deviceResets.push({
+    // 데모 모드는 학생 화면만 보여주므로 관리자용 데이터(기기 초기화 요청)와 관리 계정을 넣지 않는다
+    if (!DEMO) s.deviceResets.push({
       id: `seed-reset-${school.id}`,
       uid: `${school.id}-fake`,
       userName: FAKE_NAMES[6],
@@ -315,6 +358,7 @@ function seed(): MockState {
       status: 'pending',
     });
   }
+  if (DEMO) return s;
   s.users.push({
     uid: `${NEW_SPACE.id}-admin`,
     schoolId: NEW_SPACE.id,

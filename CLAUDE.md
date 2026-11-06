@@ -276,6 +276,7 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 ### mock 데이터
 - localStorage에 저장하고 탭끼리 동기화한다. 로그인은 탭마다 따로라서 탭 3개(학생/검표/관리자)로 데모할 수 있다. 로그인 화면의 "데모 계정" 패널로 계정을 바꾼다 (`VITE_DEMO_PANEL=off`면 숨김).
 - 가상의 학교 3곳: 한빛대(빨강, 무료), 푸른대(파랑, 정가 5,000원), 초록대(초록, 정원의 93%가 찬 행사).
+- **데모 모드** (`lib/demo.ts`): 배포된 앱에서도 로그인 화면에 학번 `2027000000` + 데모 메일(`demo@korea.ac.kr`, `demo@yonsei.ac.kr`, `demo@skku.edu`, `demo@kaist.ac.kr`)을 넣으면 학교 마스코트 계정(호이·연수리·명륜이율전이·넙죽이, 사진 `public/mock/demo/`)으로 메일 인증 없이 그 브라우저만 mock으로 바뀐다. 학교 4곳의 가짜 데이터(`mock.ts`의 `DEMO_SEED`, 저장 키 `campass-demo-state-v2`)를 보고, 학생 화면만 보여준다(스태프·학생회·운영진 로그인은 막는다). 데모는 그 탭에서만 켜지고, 들어올 때마다 새 데이터로 시작한다. 서버·체인에는 아무것도 가지 않는다. 화면 위 "데모 모드" 띠의 나가기나 로그아웃을 누르면 데모 데이터를 지우고 실제 로그인으로 돌아간다. 이 때문에 배포 번들에도 mock 코드가 들어간다.
 - 학교마다 데모 계정 6개: 학생, 학생(입장권 보유), 첫 로그인 학생, 기기 바꾼 학생, 스태프, 학생회. 그 밖에 승인 대기 학생 2명, 기기 초기화 요청 1건, 재배정 기록과 대기 명단이 들어 있다.
 - 검표는 스태프가 속한 학교 행사의 입장권만 통과시킨다. 다른 학교 QR은 `invalid`.
 
@@ -318,7 +319,8 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 ## 구현 상태 (실제 연동 vs 화면만)
 - 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia `0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2`, 2026-11-05 재배포)와 아웃박스(`functions/src/chain`)가 있다. 서버 `CHAIN_CONTRACT_ADDRESS`는 배포하는 사람의 `functions/.env.ttv-festival-pass`에서 온다.
 - 운영진 개입 기록(공개 현황판): 부정 적발 회수 = 관리자 "발급 현황"의 회수(`revokeTicket`, 체인 `release` 사유 4) / 분실 재발급 = 기기 초기화(`resetDevice`)할 때 학생이 가진 입장권마다 `recordAction(1)`. 환불·예외 입장은 컨트랙트에 자리만 있고 기록하는 기능이 없어 현황판에서 숨겼다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
-- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
+- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 이 차단은 화면에서만 일어나고, 로그인 자체는 서버가 막지 않는다. 또 화면은 IndexedDB의 "등록됨" 표시를 믿고 서버에 다시 묻지 않으므로, 초기화·명단 삭제로 서버 기록이 지워진 뒤에도 예전 기기가 통과할 수 있다(사이트 데이터를 지우면 풀린다). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다. 서버가 실제로 기기를 막는 곳은 이 두 곳뿐이다.
+- `requireDevice` 현황: 운영 서버(`ttv-festival-pass`)의 행사 13개 모두 **켜져 있다**(2026-11-06). 시드는 빠진 필드만 채우므로 되돌리지 않는다. 다만 시드와 `createEvent`의 기본값은 아직 `false`라서 새로 만든 행사는 꺼진 채로 생긴다. 서버 기록과 어긋난 기기는 QR을 받지 못하므로 운영진 콘솔에서 초기화하고 그 기기의 사이트 데이터를 지운 뒤 다시 로그인한다.
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).
 - 아직 화면과 mock뿐: 테마·검표 설정 저장, 개인정보 파기

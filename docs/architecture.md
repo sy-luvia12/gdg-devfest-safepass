@@ -70,7 +70,7 @@ markUsed(tokenId) onlyMinter                 // 입장 후 이전 불가 처리
 1. 첫 로그인 때 WebCrypto로 ECDSA P-256 키쌍을 만든다. `extractable: false`로 만들어 IndexedDB에 저장한다.
 2. `registerDevice`로 공개키를 `devices/{uid}`에 등록한다. 이미 등록된 기기가 있으면 거절한다. 폰 교체 등으로 키를 잃으면 관리자가 `resetDevice`로 초기화해야만 다시 등록할 수 있다.
 3. QR 갱신 요청에 `TTV1-REFRESH:{ticketId}:{signedAt}` 서명을 보내고, 서버가 `events.requireDevice`가 켜진 행사에서만 확인한다.
-4. 폰이 토큰을 받을 때마다 `TTV2:{ticketId}:{token}:{signedAt}`에 서명해 `TTV2` QR을 만든다. `verifyEntry`는 서명과 60초 이내 여부를 확인한다. 서버 토큰이 입장 때 지워지므로 설계의 nonce 저장소(`usedNonces`)는 만들지 않았다. `requireDevice`가 켜진 행사는 서명 없는 QR을 거부한다(구현됨, 기본 꺼짐).
+4. 폰이 토큰을 받을 때마다 `TTV2:{ticketId}:{token}:{signedAt}`에 서명해 `TTV2` QR을 만든다. `verifyEntry`는 서명과 60초 이내 여부를 확인한다. 서버 토큰이 입장 때 지워지므로 설계의 nonce 저장소(`usedNonces`)는 만들지 않았다. `requireDevice`가 켜진 행사는 서명 없는 QR을 거부한다(구현됨. 시드·행사 등록 기본은 꺼짐, 운영 서버 행사는 2026-11-06부터 모두 켜짐).
 5. 검표를 두 단계로 나눈다. `events.twoStepCheck`가 켜진 행사는 `verifyEntry`가 사진을 돌려주고 스태프가 승인하면 `confirmEntry`로 입장 처리한다(구현됨, 기본 꺼짐). 자세한 내용은 `docs/api.md` 12장. 검증을 통과하면 사진을 먼저 보여주고, 스태프가 얼굴을 대조해 승인하면 `confirmEntry`로 사용됨 처리한다.
 
 ### 2.3 학교 메일 인증과 재학생 승인

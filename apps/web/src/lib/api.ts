@@ -1,11 +1,14 @@
 // 데이터 함수 (백엔드 소유). 프론트는 이 파일만 import 한다.
 // .env.local에 Firebase 설정이 있으면 백엔드(firebaseApi.ts)에, 없거나 VITE_BACKEND=mock이면 mock.ts에 연결한다.
 // 백엔드에 아직 없는 기능은 실제 연결에서 빈 결과를 돌려주거나 invalid_state로 거절한다 (화면은 "다음 단계" 표시).
+// 데모 모드(lib/demo.ts)인 브라우저는 배포 빌드에서도 mock에 연결한다. 데모 로그인은 새로고침하므로 여기서 한 번만 고른다.
 import { ApiError } from '@/types';
+import { exitDemo, isDemoMode } from './demo';
 import * as fb from './firebaseApi';
 import * as mock from './mock';
 
-export const USE_MOCK = __USE_MOCK__;
+export const DEMO_MODE = isDemoMode();
+export const USE_MOCK = __USE_MOCK__ || DEMO_MODE;
 const real = !USE_MOCK;
 
 /** 체인 읽기(viem)는 쓰는 화면이 열릴 때 내려받는다. 첫 로딩 번들에 넣지 않는다 */
@@ -24,10 +27,16 @@ const notYet = async (): Promise<never> => {
 };
 
 // 로그인 · 학교 · 행사
+// 데모 모드는 학생 화면만 보여준다: 스태프·학생회·운영진 로그인은 막고, 로그아웃하면 데모를 끝내고 실제 메인으로 간다
+const notInDemo = async (): Promise<never> => {
+  throw new ApiError('wrong_role');
+};
 export const signInWithSchoolAccount: typeof mock.signInWithSchoolAccount = real
   ? fb.signInWithSchoolAccount
-  : mock.signInWithSchoolAccount;
-export const signOut: typeof mock.signOut = real ? fb.signOut : mock.signOut;
+  : DEMO_MODE
+    ? notInDemo
+    : mock.signInWithSchoolAccount;
+export const signOut: typeof mock.signOut = real ? fb.signOut : DEMO_MODE ? async () => exitDemo() : mock.signOut;
 export const getCurrentUser: typeof mock.getCurrentUser = real ? fb.getCurrentUser : mock.getCurrentUser;
 export const getSchool: typeof mock.getSchool = real ? fb.getSchool : mock.getSchool;
 export const listSchools: typeof mock.listSchools = real ? fb.listSchools : mock.listSchools;
@@ -63,7 +72,11 @@ export const completeSignInLink: typeof mock.completeSignInLink = real ? fb.comp
 export const submitProfilePhoto: typeof mock.submitProfilePhoto = real ? fb.submitProfilePhoto : mock.submitProfilePhoto;
 
 // 운영진 콘솔 (/ops). 아이디·비밀번호로 들어오는 Campass 운영진만 쓴다. 명단은 서버에 저장된 것을 바로 고친다
-export const signInAsOperator: typeof mock.signInAsOperator = real ? fb.signInAsOperator : mock.signInAsOperator;
+export const signInAsOperator: typeof mock.signInAsOperator = real
+  ? fb.signInAsOperator
+  : DEMO_MODE
+    ? notInDemo
+    : mock.signInAsOperator;
 export const opsListRoster: typeof mock.opsListRoster = real ? fb.opsListRoster : mock.opsListRoster;
 export const opsEditRoster: typeof mock.opsEditRoster = real ? fb.opsEditRoster : mock.opsEditRoster;
 export const opsListStudents: typeof mock.opsListStudents = real ? fb.opsListStudents : mock.opsListStudents;
