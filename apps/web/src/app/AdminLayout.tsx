@@ -55,6 +55,9 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
 ];
 
+/** 폰에서 상단 바 버튼을 36px 동그란 아이콘으로 (Button 크기보다 우선) */
+const ICON_ONLY_ON_PHONE = 'max-md:!h-9 max-md:!w-9 max-md:!px-0';
+
 const TEAM_ONLY_PATHS = ['/admin/students', '/admin/devices', '/admin/setup'];
 
 export type AdminContext = {
@@ -72,7 +75,9 @@ export function useAdmin(): AdminContext {
 export function AdminLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { user, school, eventId, signOut } = useAuth();
+  const { user, school, events, eventId, signOut } = useAuth();
+  // 행사 고르기가 보이면(SchoolSwitcher와 같은 조건) 폰에서는 그 칸이 행사 제목을 대신한다
+  const eventPicker = !!school && events.length > 1;
   const [event, setEvent] = useState<Event | null>(null);
   const [badges, setBadges] = useState({ devices: 0 });
   // 행사 담당자: 자기 학교 행사만, 학교 담당자 메뉴(재학생 명단·기기 초기화·스페이스)는 운영진만
@@ -134,21 +139,27 @@ export function AdminLayout() {
       <PageAtmosphere />
       {/* 상단 바는 아래 내용 영역(메뉴~본문) 폭에만 둔다. 넓은 화면 양옆 빈 곳으로 넘치지 않게 */}
       <header className="navigation-surface sticky top-4 z-20 mx-auto mt-5 w-[calc(100%-2.5rem)] max-w-[calc(theme(maxWidth.admin)-5rem)] rounded-[32px]">
-        <div className="flex h-16 items-center justify-between gap-4 px-5 md:px-8">
+        <div className="flex h-14 items-center justify-between gap-3 px-4 md:h-16 md:gap-4 md:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <div className="min-w-0">
-              <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · Campass 관리자</p>
-              <h1 className="truncate text-heading text-ink">
+              <p className="truncate whitespace-nowrap text-caption text-ink-3 md:text-label">
+                {school?.name ?? '새 스페이스'}
+                <span className="hidden md:inline"> · Campass</span> 관리자
+              </p>
+              <h1 className={cx('truncate text-heading text-ink', eventPicker && 'hidden md:block')}>
                 {inSetup ? '스페이스 만들기' : event ? eventTitle(event) : eventId ? '' : '행사 없음'}
               </h1>
             </div>
             {/* 학교·행사 고르기: 넓은 화면은 제목 옆 한 줄에 */}
             <SchoolSwitcher className="hidden shrink-0 flex-nowrap md:flex" />
           </div>
-          <div className="flex items-center gap-2">
+          {/* 폰: 아이콘만 작게 */}
+          <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
             <Button
               variant="secondary"
               size="sm"
+              className={ICON_ONLY_ON_PHONE}
+              aria-label="검표 화면"
               icon={<ScanLine size={16} strokeWidth={1.75} />}
               onClick={() => navigate('/staff/scan')}
             >
@@ -157,6 +168,8 @@ export function AdminLayout() {
             <Button
               variant="secondary"
               size="sm"
+              className={ICON_ONLY_ON_PHONE}
+              aria-label="학생 화면"
               icon={<UserRound size={16} strokeWidth={1.75} />}
               onClick={() => navigate('/ticket')}
             >
@@ -165,6 +178,7 @@ export function AdminLayout() {
             <Button
               variant="ghost"
               size="sm"
+              className={ICON_ONLY_ON_PHONE}
               icon={<LogOut size={16} strokeWidth={1.75} />}
               onClick={signOut}
               aria-label="로그아웃"
@@ -172,11 +186,11 @@ export function AdminLayout() {
           </div>
         </div>
         {/* 학교·행사 고르기 (고를 것이 있을 때만). 폰에서는 제목 아래 줄 */}
-        <SchoolSwitcher className="px-5 pb-3 md:hidden" />
+        <SchoolSwitcher className="px-4 pb-3 md:hidden" />
         {/* 폰·태블릿: 가로 스크롤 메뉴 (스페이스 만드는 중에는 숨김) */}
         <nav
           aria-label="관리자 메뉴"
-          className={cx('gap-1 overflow-x-auto px-5 pb-3 [scrollbar-width:none] lg:hidden', inSetup ? 'hidden' : 'flex')}
+          className={cx('gap-1 overflow-x-auto px-4 pb-3 [scrollbar-width:none] md:px-5 lg:hidden', inSetup ? 'hidden' : 'flex')}
         >
           {nav.flatMap((g) => g.items).map((item) => (
             <NavItemLink key={item.to} item={item} count={item.badge ? badges[item.badge] : 0} compact />
