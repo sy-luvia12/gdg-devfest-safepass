@@ -318,7 +318,8 @@ runDrawNow(eventId): Promise<RunDrawResult>               // admin "지금 추�
 ## 구현 상태 (실제 연동 vs 화면만)
 - 블록체인/NFT: 컨트랙트(`contracts/`, Base Sepolia `0x8e33Ce8418156895Cd73e9Aa0aB7C59E0234cEc2`, 2026-11-05 재배포)와 아웃박스(`functions/src/chain`)가 있다. 서버 `CHAIN_CONTRACT_ADDRESS`는 배포하는 사람의 `functions/.env.ttv-festival-pass`에서 온다.
 - 운영진 개입 기록(공개 현황판): 부정 적발 회수 = 관리자 "발급 현황"의 회수(`revokeTicket`, 체인 `release` 사유 4) / 분실 재발급 = 기기 초기화(`resetDevice`)할 때 학생이 가진 입장권마다 `recordAction(1)`. 환불·예외 입장은 컨트랙트에 자리만 있고 기록하는 기능이 없어 현황판에서 숨겼다. 체인이 꺼져 있어도 발급·검표·취소는 동작하고 `chain.status`가 `pending`으로 남는다.
-- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다(시드 기본 꺼짐).
+- 기기 묶기: 학생은 로그인 때 `registerDevice`로 기기 키를 등록하고, 이미 다른 기기가 등록돼 있으면 `/device`로 막힌다(`requireDevice`와 무관하게 항상). 이 차단은 화면에서만 일어나고, 로그인 자체는 서버가 막지 않는다. 또 화면은 IndexedDB의 "등록됨" 표시를 믿고 서버에 다시 묻지 않으므로, 초기화·명단 삭제로 서버 기록이 지워진 뒤에도 예전 기기가 통과할 수 있다(사이트 데이터를 지우면 풀린다). 시크릿 창이나 다른 브라우저도 새 기기로 본다. 초기화는 관리자 `resetDevice`(또는 `devices/{uid}` 삭제). QR 갱신 요청의 서명 확인과 검표의 서명 QR(TTV2) 강제는 `events.requireDevice`가 켜진 행사에서만 일어난다. 서버가 실제로 기기를 막는 곳은 이 두 곳뿐이다.
+- `requireDevice` 현황: 운영 서버(`ttv-festival-pass`)의 행사 13개 모두 **켜져 있다**(2026-11-06). 시드는 빠진 필드만 채우므로 되돌리지 않는다. 다만 시드와 `createEvent`의 기본값은 아직 `false`라서 새로 만든 행사는 꺼진 채로 생긴다. 서버 기록과 어긋난 기기는 QR을 받지 못하므로 운영진 콘솔에서 초기화하고 그 기기의 사이트 데이터를 지운 뒤 다시 로그인한다.
 - 2단계 검표와 App Check: 구현되어 있지만 둘 다 꺼져 있다(`events.twoStepCheck`, `ENFORCE_APP_CHECK`와 `VITE_APPCHECK_SITE_KEY`). 켜는 순서는 `docs/api.md` 12장.
 - 관리자 권한: 스페이스·명단·행사 등록 함수는 학교 단위(`adminSchoolId`)로 막는다. 그 밖의 관리자·스태프 함수와 보안 규칙은 아직 전역 `role`이다(이후 과제).
 - 아직 화면과 mock뿐: 테마·검표 설정 저장, 개인정보 파기

@@ -49,7 +49,7 @@
 | allowedDomains | string[] | 발급 가능한 학교 도메인 |
 | issuedCount | number | 발급 수 (남은 수량 = `capacity - issuedCount`). 취소로 줄어든다 |
 | nftSeq | number | NFT 번호 생성용 증가 카운터. 줄지 않아 번호가 겹치지 않는다. 없으면 `issuedCount`를 쓴다 |
-| requireDevice | boolean | `true`면 `refreshQrToken`이 기기 서명을 확인한다 (9장). 시드 기본값은 `false` |
+| requireDevice | boolean | `true`면 `refreshQrToken`이 기기 서명을 확인한다 (9장). 시드·`createEvent` 기본값은 `false`. 운영 서버 행사는 모두 `true`(2026-11-06) |
 | allowReissueAfterCancel | boolean | `true`면 취소한 사람도 다시 받을 수 있다 (10장). 시드에서는 `test-reassign`만 켠다 |
 | enteredCount | number | 입장 수 (관리자 화면 실시간 표시) |
 | reassignMode | `'queue' \| 'random'` | 취소표 재배정 방식. 운영측이 행사별로 한 번 정한다 (프로토타입은 시드 데이터). `queue`는 대기 순서대로, `random`은 대기 명단에서 무작위 |
@@ -329,7 +329,7 @@ markUsed(tokenId: string): Promise<{ txHash: string }>
 | `setStaff` | admin | `{ email, staff: boolean }` → `{ ok: true, status: 'UPDATED' \| 'PENDING_SIGNUP' }`. 메일의 계정에 `staff`/`student` 역할을 준다. 아직 로그인하지 않았으면 `seedProfiles`에 넣어 첫 로그인 때 적용한다(`PENDING_SIGNUP`). admin 계정은 바꾸지 못한다(`failed-precondition`) |
 
 ### 기기 확인 (`refreshQrToken`)
-- `events.requireDevice`가 `true`인 행사만 확인한다. 기본은 꺼져 있어서 기기 등록이 없는 프론트도 동작한다.
+- `events.requireDevice`가 `true`인 행사만 확인한다. 시드·`createEvent` 기본값은 꺼짐이지만, 운영 서버의 행사는 모두 켜 두었다(2026-11-06). 꺼진 행사에서는 기기 등록이 없는 프론트도 동작한다.
 - 요청에 `deviceProof: { signedAt, signature }`를 넣는다. 기기 키 생성이나 서명이 실패하면(WebCrypto가 없는 http 주소 등) 프론트는 이 필드를 빼고 보내고, 서버는 `undefined`와 `null`을 모두 "증명 없음"으로 본다. 서명 대상은 `TTV1-REFRESH:{ticketId}:{signedAt}`, ECDSA P-256 SHA-256, IEEE P1363, base64url이다. `signedAt`은 서버 시각과 60초 안이어야 한다.
 - 실패하면 `failed-precondition`이고 `details.reason`이 `DEVICE_NOT_REGISTERED` 또는 `DEVICE_PROOF_INVALID`다.
 
