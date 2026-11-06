@@ -7,6 +7,7 @@ import { MailLinkNotice } from '@/components/MailLinkNotice';
 import { StateView } from '@/components/StateView';
 import { TextField } from '@/components/TextField';
 import { precheckStudent, sendSignInLink } from '@/lib/api';
+import { enterDemo, findDemoLogin } from '@/lib/demo';
 import { studentAuthMessage, validateStudentFields, type StudentFieldErrors } from '@/lib/studentAuthForm';
 
 export function SignInPage() {
@@ -22,6 +23,9 @@ export function SignInPage() {
     const validation = validateStudentFields(fields, false);
     setErrors(validation);
     if (Object.keys(validation).length) return;
+    // 데모 계정이면 메일 인증 없이 이 브라우저만 데모 모드로 들어간다 (lib/demo.ts)
+    const demo = findDemoLogin(fields.studentId, fields.email);
+    if (demo) { lock.current = true; setBusy(true); enterDemo(demo.uid); return; }
     lock.current = true; setBusy(true); setError('');
     try {
       const email = fields.email.trim().toLowerCase();
