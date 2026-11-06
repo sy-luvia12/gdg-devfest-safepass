@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowRight, CalendarPlus, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CalendarPlus, CheckCircle2 } from '@/components/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { Button } from '@/components/Button';

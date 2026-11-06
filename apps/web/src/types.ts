@@ -349,7 +349,7 @@ export type RunDrawResult =
  * 행사 명단 기준으로 받을 수 있는지. open: 명단 행사 아님 / no_roster: 명단이 아직 없음.
  * 즉석 추첨 행사는 draw_open(아직 응모 전) / draw_pending(체인 결과 기다리는 중) / draw_won / draw_lost
  */
-export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster' | 'draw_open' | 'draw_pending' | 'draw_won' | 'draw_lost';
+export type RosterStatus = 'open' | 'no_roster' | 'on_roster' | 'not_on_roster' | 'draw_open' | 'draw_pending' | 'draw_won' | 'draw_lost' | 'cancelled';
 
 /**
  * 즉석 추첨의 내 응모 (서버 enterDraw / getMyEntryDraw). salt는 본인에게만 온다.

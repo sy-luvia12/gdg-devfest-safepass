@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Clock, XCircle } from 'lucide-react';
+import { ArrowRight, Clock, XCircle } from '@/components/icons';
 import { Link } from 'react-router-dom';
 import { useAdmin } from '@/app/AdminLayout';
 import { useEventId } from '@/app/AuthProvider';

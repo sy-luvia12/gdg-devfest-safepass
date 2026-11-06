@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, GraduationCap } from 'lucide-react';
+import { Check, GraduationCap } from '@/components/icons';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { AppHeader } from '@/components/AppHeader';
@@ -61,7 +61,7 @@ export function RegistrationPage() {
   return (
     <>
       <AppHeader title="회원가입" back={busy ? undefined : '/'} />
-      <main className="px-5 pb-6 pt-6">
+      <main className="px-6 pb-6 pt-6">
         <RegistrationSteps step={phase === 'email' ? 1 : 0} />
         <section key={phase} className="animate-rise-in">
           {phase === 'school' && (
@@ -72,7 +72,7 @@ export function RegistrationPage() {
                 <fieldset className="flex flex-col gap-3">
                   <legend className="sr-only">대학교 선택</legend>
                   {schools.map((item) => (
-                    <label key={item.id} className={cx('flex min-h-24 cursor-pointer items-center gap-4 rounded-lg border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-lavender', schoolId === item.id ? 'border-lavender bg-lavender/10' : 'border-line')}>
+                    <label key={item.id} className={cx('flex min-h-24 cursor-pointer items-center gap-4 rounded-lg border bg-bg p-5 shadow-soft transition duration-200 focus-within:ring-2 focus-within:ring-lavender', schoolId === item.id ? 'border-lavender bg-lavender/10' : 'border-line')}>
                       <input type="radio" name="school" className="sr-only" checked={schoolId === item.id} onChange={() => setSchoolId(item.id)} />
                       <GraduationCap size={24} strokeWidth={1.75} aria-hidden className="text-ink-2" />
                       <span className="flex-1 text-body text-ink">{item.name}</span>

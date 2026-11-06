@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { UserMinus, UserPlus } from 'lucide-react';
+import { UserMinus, UserPlus } from '@/components/icons';
 import { OpsBadge, OpsButton, OpsInput, OpsNotice, OpsPanel, OpsState, OpsTitle } from '@/components/ops/ui';
 import { listSchools, opsListEventAdmins, opsSetEventAdmin } from '@/lib/api';
 import type { OpsEventAdmin, School } from '@/types';

@@ -1,4 +1,4 @@
-import { CalendarPlus } from 'lucide-react';
+import { CalendarPlus } from '@/components/icons';
 import { Navigate, Outlet, useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { StateView } from '@/components/StateView';

@@ -1,6 +1,6 @@
 import { ChainRecord } from '@/components/ChainRecord';
 import { useCallback, useEffect, useState } from 'react';
-import { Ticket as TicketIcon, Users, UserCheck, Package } from 'lucide-react';
+import { Ticket as TicketIcon, Users, UserCheck, Package } from '@/components/icons';
 import { useAdmin } from '@/app/AdminLayout';
 import { useEventId } from '@/app/AuthProvider';
 import { formatDateTime, formatTime, maskStudentId } from '@/app/format';

@@ -1,5 +1,6 @@
+import { PageAtmosphere } from '@/components/Orb';
 import { useEffect, useState, type ReactNode } from 'react';
-import { LayoutGrid, LogOut, School as SchoolIcon, ShieldHalf, Smartphone, SquareArrowOutUpRight, UserCog } from 'lucide-react';
+import { LayoutGrid, LogOut, School as SchoolIcon, ShieldHalf, Smartphone, SquareArrowOutUpRight, UserCog } from '@/components/icons';
 import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { cx } from '@/components/cx';
 import { OpsState } from '@/components/ops/ui';
@@ -7,7 +8,7 @@ import { listSchools } from '@/lib/api';
 import type { School } from '@/types';
 import { useAuth } from './AuthProvider';
 
-/** 운영진 콘솔 공통 틀 (검정 테마). 운영진 계정이 아니면 운영진 로그인으로 보낸다 */
+/** 운영진 콘솔 공통 틀 (밝은 테마). 운영진 계정이 아니면 운영진 로그인으로 보낸다 */
 export function OpsLayout() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -47,8 +48,9 @@ export function OpsLayout() {
   );
 
   return (
-    <div className="min-h-dvh bg-ops-bg text-ops-ink">
-      <header className="sticky top-0 z-20 border-b border-ops-line bg-ops-bg/90 backdrop-blur">
+    <div className="page-canvas text-ops-ink">
+      <PageAtmosphere />
+      <header className="navigation-surface sticky top-4 z-20 mx-5 mt-5 rounded-[32px]">
         <div className="mx-auto flex h-14 max-w-admin items-center justify-between gap-3 px-5 md:px-8">
           <div className="flex items-center gap-2">
             <ShieldHalf size={18} strokeWidth={1.75} className="text-ops-accent" />
@@ -78,7 +80,7 @@ export function OpsLayout() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-admin flex-col gap-6 px-5 py-6 md:flex-row md:px-8">
+      <div className="page-content mx-auto flex max-w-admin flex-col gap-8 px-6 py-8 md:flex-row md:px-10 md:py-10">
         <nav className="flex gap-1 overflow-x-auto md:w-52 md:shrink-0 md:flex-col md:overflow-visible">
           {item('/ops', '개요', <LayoutGrid size={16} strokeWidth={1.75} />, true)}
           <p className="hidden px-3 pb-1 pt-4 text-caption text-ops-ink-3 md:block">학교 명단</p>

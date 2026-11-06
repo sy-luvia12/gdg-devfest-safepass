@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CircleCheck, CircleX, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
+import { CircleCheck, CircleX, ExternalLink, Loader2, ShieldCheck } from '@/components/icons';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';

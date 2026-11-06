@@ -1,4 +1,4 @@
-import { CalendarPlus, ChevronRight, MapPin, School as SchoolIcon } from 'lucide-react';
+import { CalendarPlus, ChevronRight, MapPin, School as SchoolIcon } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { eventTitle, formatEventDate } from '@/app/format';

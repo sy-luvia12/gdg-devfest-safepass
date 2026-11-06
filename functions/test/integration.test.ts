@@ -277,6 +277,8 @@ describe('prototype demo scenario', () => {
     expect(log.docs.map((d) => d.get('toUid')).sort()).toEqual([null, await uidOf(CAROL)].sort());
 
     expect(await reasonOf(carol.issueTicket({ eventId: EVENT }))).toBe('CANCELLED_BEFORE');
+    // the event list shows the same refusal up front instead of offering a ticket
+    expect((await carol.myRosterStatus({ eventIds: [EVENT] })).status[EVENT]).toBe('cancelled');
     expect(await codeOf(bob.issueTicket({ eventId: EVENT }))).toBe('functions/failed-precondition');
   });
 

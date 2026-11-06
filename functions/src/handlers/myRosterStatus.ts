@@ -33,9 +33,15 @@ export const myRosterStatus = onCall<unknown, Promise<MyRosterStatusResponse>>(c
   const drawEvents = events.filter((e) => e.exists && e.get('instantDraw') === true);
   const entries = studentId && drawEvents.length ? await db.getAll(...drawEvents.map((e) => entryDrawRef(e.id, studentId))) : [];
   const entryOf = new Map(entries.map((d, i) => [drawEvents[i].id, d]));
+  // Who gave a ticket back here: issueTicket refuses them again unless the event allows it. One single-field query,
+  // so no composite index; a student cancels a handful of tickets at most.
+  const cancelledAt = new Set(
+    (await db.collection('reassignments').where('fromUid', '==', caller.uid).get()).docs.map((d) => d.get('eventId') as string),
+  );
   for (const e of events) {
     if (!e.exists) continue;
-    if (e.get('instantDraw') === true) {
+    if (cancelledAt.has(e.id) && e.get('allowReissueAfterCancel') !== true) status[e.id] = 'cancelled';
+    else if (e.get('instantDraw') === true) {
       const entry = entryOf.get(e.id);
       const s = entry?.exists && entry.get('uid') === caller.uid ? entry.get('status') : null;
       status[e.id] = s === 'won' ? 'draw_won' : s === 'lost' ? 'draw_lost' : s ? 'draw_pending' : 'draw_open';

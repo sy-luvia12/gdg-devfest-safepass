@@ -20,7 +20,7 @@ export function TextField({ label, hint, error, suffix, className, ...rest }: Pr
           'flex h-[52px] items-center rounded-md border-[1.5px] px-4 transition duration-200 ease-out',
           error
             ? 'border-danger bg-bg'
-            : 'border-transparent bg-surface focus-within:border-lavender focus-within:bg-bg',
+            : 'border-line bg-bg focus-within:border-ink-2 focus-within:bg-bg',
         )}
       >
         <input

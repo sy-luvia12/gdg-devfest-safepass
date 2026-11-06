@@ -6,8 +6,9 @@ export default {
     extend: {
       colors: {
         bg: '#FFFFFF',
-        surface: { DEFAULT: '#F6F7F9', 2: '#EFF1F4' },
-        line: '#ECEEF2',
+        canvas: '#F7F7F9',
+        surface: { DEFAULT: '#F2F2F5', 2: '#EFEFF2' },
+        line: '#E8E8ED',
         ink: { DEFAULT: '#1F2328', 2: '#6B7280', 3: '#A3A9B4' },
         // 파스텔 4색은 테마(학교 상징색·행사 디자인)에 따라 바뀐다 → src/index.css, src/app/theme.ts
         sky: 'rgb(var(--c-p1) / <alpha-value>)',
@@ -19,40 +20,41 @@ export default {
         danger: { DEFAULT: '#E5484D', bg: '#FDECEC' },
         warning: { DEFAULT: '#E59A1A', bg: '#FFF5E5' },
         link: '#3B82F6',
-        // 운영진 콘솔 (/ops) 전용 검정 테마. 내부 데모·테스트 화면이라 DESIGN.md 흰 배경 규칙의 예외
+        // 운영진 콘솔도 밝은 캔버스와 흰색 패널을 사용한다.
         ops: {
-          bg: '#0B0C10',
-          panel: '#14161C',
-          raised: '#1C1F27',
-          line: '#2A2E38',
-          ink: { DEFAULT: '#ECEEF2', 2: '#9AA1AD', 3: '#5F6672' },
+          bg: '#F7F7F9',
+          panel: '#FFFFFF',
+          raised: '#F0F0F3',
+          line: '#E8E8ED',
+          ink: { DEFAULT: '#1F2328', 2: '#6B7280', 3: '#86868B' },
           accent: '#A99BFF',
-          ok: '#3DD68C',
-          bad: '#FF6B6B',
-          warn: '#F5B94A',
+          ok: '#18794E',
+          bad: '#C62A31',
+          warn: '#966000',
         },
       },
-      fontFamily: { sans: ['Pretendard', 'system-ui', 'sans-serif'] },
+      fontFamily: { sans: ['Poppins', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Nanum Gothic', 'Noto Sans', 'sans-serif'] },
+      fontWeight: { semibold: '500', bold: '500', extrabold: '500', black: '500' },
       fontSize: {
-        display: ['28px', { lineHeight: '36px', fontWeight: '600' }],
-        title: ['22px', { lineHeight: '30px', fontWeight: '600' }],
+        display: ['28px', { lineHeight: '36px', fontWeight: '500' }],
+        title: ['22px', { lineHeight: '30px', fontWeight: '500' }],
         heading: ['17px', { lineHeight: '24px', fontWeight: '500' }],
         body: ['15px', { lineHeight: '22px', fontWeight: '400' }],
         label: ['13px', { lineHeight: '18px', fontWeight: '500' }],
         caption: ['12px', { lineHeight: '16px', fontWeight: '400' }],
-        number: ['44px', { lineHeight: '48px', fontWeight: '600' }],
-        'number-lg': ['64px', { lineHeight: '72px', fontWeight: '600' }],
+        number: ['44px', { lineHeight: '48px', fontWeight: '500' }],
+        'number-lg': ['64px', { lineHeight: '72px', fontWeight: '500' }],
       },
       maxWidth: { app: '480px', admin: '1200px' },
-      borderRadius: { md: '14px', lg: '20px', xl: '28px' },
+      borderRadius: { md: '14px', lg: '28px', xl: '32px' },
       boxShadow: {
-        soft: '0 8px 24px rgba(31,35,40,0.06)',
-        float: '0 12px 32px rgba(120,110,200,0.12)',
+        soft: '0 8px 24px rgba(31,35,40,0.025)',
+        float: '0 12px 32px rgba(31,35,40,0.035)',
       },
       backgroundImage: {
-        // 테마에 따라 바뀌는 것
-        'grad-ticket': 'var(--grad-ticket)',
-        'grad-button': 'var(--grad-button)',
+        // 카드는 학교 테마, 주 버튼은 학교와 독립된 공통 동작 색
+        'grad-ticket': 'linear-gradient(rgba(255,255,255,.22),rgba(255,255,255,.22)),var(--grad-ticket)',
+        'grad-button': 'var(--grad-action)',
         'grad-orb': 'var(--grad-orb)',
         // 상태 의미가 있는 것은 고정
         'grad-success': 'linear-gradient(160deg,#D3F1E2 0%,#CFE4FF 100%)',

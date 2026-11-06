@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { IconButton } from './IconButton';
 
@@ -15,9 +15,9 @@ export function AppHeader({ title, back, right }: Props) {
   const navigate = useNavigate();
   const onBack = () => (typeof back === 'string' ? navigate(back) : navigate(-1));
   return (
-    <header className="sticky top-0 z-10 grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-bg/90 px-5 backdrop-blur">
+    <header className="navigation-surface sticky top-3 z-10 mx-5 mt-4 grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center rounded-full px-4">
       <div className="flex">{back && <IconButton icon={ChevronLeft} label="뒤로" onClick={onBack} />}</div>
-      <h1 className="text-center text-heading text-ink-3">{title}</h1>
+      <h1 className="text-center text-heading text-ink-2">{title}</h1>
       <div className="flex justify-end gap-2">{right}</div>
     </header>
   );

@@ -1,4 +1,4 @@
-import { ExternalLink, Link2, Loader2, CirclePause } from 'lucide-react';
+import { ExternalLink, Link2, Loader2, CirclePause } from '@/components/icons';
 import { CHAIN_CONTRACT, CHAIN_EXPLORER } from '@/app/config';
 import type { TicketChain } from '@/types';
 import { Badge } from './Badge';

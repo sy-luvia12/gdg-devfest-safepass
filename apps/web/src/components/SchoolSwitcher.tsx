@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@/components/icons';
 import { useAuth } from '@/app/AuthProvider';
 import { eventTitle } from '@/app/format';
 import { cx } from './cx';

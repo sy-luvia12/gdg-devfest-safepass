@@ -1,5 +1,5 @@
 import { useId, useState, type ChangeEvent } from 'react';
-import { Camera, RefreshCw } from 'lucide-react';
+import { Camera, RefreshCw } from '@/components/icons';
 import { cx } from './cx';
 
 type Props = {

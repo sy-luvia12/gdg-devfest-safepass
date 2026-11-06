@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { UserPlus } from 'lucide-react';
+import { UserPlus } from '@/components/icons';
 import { useAuth } from '@/app/AuthProvider';
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';

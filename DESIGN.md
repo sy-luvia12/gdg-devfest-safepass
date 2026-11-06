@@ -1,3 +1,20 @@
+# CamPass — 밝은 카드 레이아웃 보완 (2026-11-06)
+
+이 절은 아래 기존 가이드의 배경·간격·카드 규칙보다 우선한다.
+
+- 배경 #F7F7F9, 카드 #FFFFFF. 모서리 28–32px, 옅은 중립색 테두리와 약한 그림자로 구분한다.
+- 상단 분위기는 기존 Orb 레이어를 재사용하는 PageAtmosphere로 만든다. 색은 #EEE9FA / #F2EEFC / #F7F4FD. 원형 테두리 없이 상단에서 배경으로 사라진다. 기존 느린 모션과 모션 감소 동작을 유지한다.
+- 학생 화면의 fixed 영역, 내부 스크롤, transform에 의한 시트 기준점은 유지한다. 데스크톱에서는 가장자리 여백과 둥근 프레임만 추가한다.
+- 관리자는 넓은 작업 영역, 16–24px 카드 간격, 32px 이상 바깥 여백. 운영진도 밝은 배경·흰 패널로 표시하고 상태색은 읽기 쉬운 대비를 유지한다.
+- 탐색은 기존 메뉴만 흰 둥근 컨트롤로 정돈한다. 새 메뉴·검색·알림·프로젝트 기능은 추가하지 않는다.
+- 기존 Poppins / Noto Sans KR 글꼴 스택·400/500 굵기·중립 텍스트색은 유지한다.
+- Nucleo Glass 원본·공통 어댑터·매핑·SVG ID·크기·접근성 속성은 변경하지 않는다.
+- 주 버튼의 --grad-action 및 기기 초기화 전후의 같은 primary 상태를 유지한다.
+- 행사 카드는 학교별 기존 테마를 유지하며 흰 레이어 22%로만 살짝 부드럽게 한다. QR·사진은 불투명 흰 영역에서 보이게 한다.
+- 원래 문구·경로·인증·등록·권한·기기·API·백엔드·계약은 변경하지 않는다. 모든 작업은 현재 로컬 원본 폴더에서만 수행한다.
+
+---
+
 # DESIGN.md — Campass 디자인 가이드
 
 > 흰 배경 위에 파스텔 그라데이션이 은은하게 번지는, 깔끔하고 가벼운 UI.
@@ -10,13 +27,13 @@
 - **화이트 + 공기감**: 배경은 순백. 요소 사이 여백을 넉넉하게 둔다.
 - **포인트는 그라데이션 하나**: 화면마다 시선을 끄는 요소(입장권 카드, 스캔 프레임, 메인 버튼) 하나에만 파스텔 그라데이션을 쓴다. 나머지는 흰색·연회색.
 - **부드러운 곡선**: 모서리는 크게 둥글게. 각진 요소는 쓰지 않는다.
-- **얇고 조용한 텍스트**: 진한 검정 대신 짙은 회색. 굵기는 Regular / Medium / SemiBold만 쓴다.
+- **얇고 조용한 텍스트**: 진한 검정 대신 짙은 회색. 굵기는 Regular 400 / Medium 500을 사용한다. 큰 제목도 과하게 굵게 하지 않는다.
 - **그림자는 거의 없게**: 경계는 연한 테두리나 아주 옅은 그림자로만 구분한다.
 
 ### 하지 말 것
 - 진한 원색, 네온, 다크 모드 배경
 - 진한 그림자, 두꺼운 테두리
-- 이모지 아이콘 (라인 아이콘만 사용)
+- 이모지 아이콘 (Nucleo Glass SVG만 사용)
 - 한 화면에 그라데이션 요소 2개 이상
 - 버튼 여러 개를 같은 강조도로 나란히 배치 (주 버튼은 화면당 1개)
 
@@ -93,18 +110,18 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 
 ## 3. 타이포그래피
 
-- 폰트: **Pretendard** (CDN: `https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css`)
+- 폰트: **Poppins, Noto Sans KR, Apple SD Gothic Neo, Malgun Gothic, Nanum Gothic, Noto Sans, sans-serif**. Google Fonts로 Poppins·Noto Sans KR·Noto Sans의 400/500을 로드한다. Noto Sans Korean의 CSS 이름은 Noto Sans KR이다.
 - 기본 letter-spacing: `-0.01em`
 
 | 스타일 | 크기 / 줄간격 | 굵기 | 용도 |
 |---|---|---|---|
-| `display` | 28 / 36 | SemiBold 600 | 화면 대표 문구 ("입장 완료") |
-| `title` | 22 / 30 | SemiBold 600 | 화면 제목 |
+| `display` | 28 / 36 | Medium 500 | 화면 대표 문구 ("입장 완료") |
+| `title` | 22 / 30 | Medium 500 | 화면 제목 |
 | `heading` | 17 / 24 | Medium 500 | 카드 제목, 섹션 제목 |
 | `body` | 15 / 22 | Regular 400 | 본문 |
 | `label` | 13 / 18 | Medium 500 | 칩, 버튼 보조, 라벨 |
 | `caption` | 12 / 16 | Regular 400 | 안내문, 시간, 약관 |
-| `number` | 44 / 48 (`lg` 이상 64 / 72) | SemiBold 600, tabular-nums | 관리자 입장 인원 큰 숫자 |
+| `number` | 44 / 48 (`lg` 이상 64 / 72) | Medium 500, tabular-nums | 관리자 입장 인원 큰 숫자 |
 
 - 상단 헤더의 화면 제목은 **가운데 정렬, `text-muted`, heading 크기**로 은은하게.
 
@@ -168,7 +185,8 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 
 ### 버튼 (`Button`)
 - 높이 52px, `radius-full`, 텍스트 `label`~`body` Medium, 색 `text-primary`
-- **primary**: 배경 `--grad-button`, 테두리 없음
+- **primary**: 배경 `--grad-action`, 테두리 없음. 학교 테마와 독립된 기본 라벤더·핑크 색으로 통일한다. 기기 초기화 요청 전후의 주 동작도 같은 primary를 사용한다.
+- 기기 초기화 화면의 요청·상태 확인 버튼은 동일한 primary. mock에서 요청 전후 computed gradient가 같은지 확인했고 320px에서도 가로 넘침 없음.
 - **secondary**: 배경 `surface`
 - **ghost**: 배경 없음, 텍스트 `text-secondary`
 - **disabled**: 배경 `surface`, 텍스트 `text-muted`
@@ -202,7 +220,7 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 - 카메라 준비 전 배경: `--grad-ticket` (또는 `--grad-success`)
 - 네 모서리에 **흰색 꺾쇠(ㄱ자 브래킷)**: 길이 28px, 두께 3px, 둥근 끝
 - 상단 안내: 체크 아이콘(`success`) + "QR을 프레임 안에 맞춰주세요" (`body`)
-- 아래 안내 리스트: 라인 아이콘 + `caption` `text-secondary` 3줄
+- 아래 안내 리스트: Glass 아이콘 + `caption` `text-secondary` 3줄
 
 ### 결과 시트 (`ResultSheet`) — 검표 결과
 - 화면 하단에서 올라오는 바텀시트, 상단 `radius-xl`, 흰 배경
@@ -217,8 +235,11 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 - 에러: 테두리 `danger` + 아래 `caption` 에러 문구(`danger`)
 
 ### 블롭 (`Orb`)
-- 원형, `--grad-orb`, 크기 160~200px. 로그인·완료 화면의 주 비주얼
-- 선택: 6s 주기로 아주 느리게 `scale(1 ↔ 1.03)` (prefers-reduced-motion이면 정지)
+- 기본 `orb`는 원형 테두리 없는 비대칭 안개. 기존 학교 테마색(`--c-p1~p4`)은 유지한다.
+- 여러 흐린 레이어가 28–38초 주기로 조금씩 이동한다. 회전·빛나는 링·원형 마스크는 사용하지 않는다.
+- blur는 고정하고 transform·opacity만 애니메이션한다. 모션 감소 설정에서는 정지한다.
+- `success`·`warm` 상태 표시와 내부 아이콘·콘텐츠는 기존 동작을 유지한다.
+- 기본 크기와 배치 API는 유지한다. `success`·`warm` 상태 원형만 기존 6s 호흡 효과를 사용한다.
 
 ### 리스트 아이템 (`ListItem`)
 - 높이 64px, 좌 아바타 40px, 가운데 제목/부제, 우 시간(caption muted) 또는 배지
@@ -275,7 +296,11 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 
 ## 6. 아이콘
 
-- **lucide-react** 라인 아이콘, stroke 1.75, 크기 20px(기본) / 16px(칩·배지)
+- **Nucleo Glass** (`nucleo-glass` 공식 패키지) SVG만 사용한다. 기존 라인 아이콘은 사용하지 않는다.
+- 공통 진입점: `components/icons.tsx`. 아이콘별 원본 기하 구조를 유지하고 색은 중립색·상태색을 상속한다.
+- 크기 20px(기본) / 16px(칩·배지) / 행사 정보 24px. 버튼의 기존 터치 영역과 레이블은 보존한다.
+- 각 SVG 인스턴스에 React useId를 부여해 gradient·filter·mask ID 충돌을 방지한다.
+- 정확한 모티프가 없는 경우 같은 Glass 시리즈의 의미상 가까운 모티프를 사용한다. 전체 대응표와 출처는 `docs/icon-system.md` 참조.
 - 자주 쓰는 것: `ChevronLeft`, `Menu`, `X`, `CheckCircle2`, `XCircle`, `ScanLine`, `QrCode`, `Ticket`, `Users`, `ArrowLeftRight`, `ShieldCheck`, `Clock`, `RefreshCw`, `Sun`(밝기 안내)
 
 ---
@@ -351,7 +376,7 @@ export default {
         danger: { DEFAULT: '#E5484D', bg: '#FDECEC' },
         warning: { DEFAULT: '#E59A1A', bg: '#FFF5E5' },
       },
-      fontFamily: { sans: ['Pretendard', 'system-ui', 'sans-serif'] },
+      fontFamily: { sans: ['Poppins', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Nanum Gothic', 'Noto Sans', 'sans-serif'] },
       maxWidth: { app: '480px', admin: '1200px' },
       borderRadius: { md: '14px', lg: '20px', xl: '28px' },
       boxShadow: {

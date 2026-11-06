@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ListOrdered, RotateCcw, Shuffle, Users } from 'lucide-react';
+import { ListOrdered, RotateCcw, Shuffle, Users } from '@/components/icons';
 import { useAdmin } from '@/app/AdminLayout';
 import { useEventId } from '@/app/AuthProvider';
 import { formatDateTime } from '@/app/format';

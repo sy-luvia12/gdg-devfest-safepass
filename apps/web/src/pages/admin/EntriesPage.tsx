@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download } from '@/components/icons';
 import { useEventId } from '@/app/AuthProvider';
 import { downloadCsv } from '@/app/csv';
 import { formatDateTime, formatTimeSec, maskStudentId } from '@/app/format';

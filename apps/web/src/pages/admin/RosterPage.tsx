@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight } from '@/components/icons';
 import { Link } from 'react-router-dom';
 import { useAdmin } from '@/app/AdminLayout';
 import { useEventId } from '@/app/AuthProvider';

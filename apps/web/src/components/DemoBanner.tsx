@@ -1,4 +1,4 @@
-import { LogOut } from 'lucide-react';
+import { LogOut } from '@/components/icons';
 import { DEMO_MODE } from '@/lib/api';
 import { exitDemo } from '@/lib/demo';
 

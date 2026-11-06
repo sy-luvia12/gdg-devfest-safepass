@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CircleCheck, ExternalLink, TriangleAlert } from 'lucide-react';
+import { CircleCheck, ExternalLink, TriangleAlert } from '@/components/icons';
 import { useEventId } from '@/app/AuthProvider';
 import { AppHeader } from '@/components/AppHeader';
 import { Badge } from '@/components/Badge';
@@ -60,7 +60,7 @@ export function BoardPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-6 px-6 pb-12 pt-8">
         <p className="text-body text-ink-2">
           입장권 발행과 재배정은 블록체인에 기록돼요. 학생회도 이 숫자를 고칠 수 없어요
         </p>

@@ -7,8 +7,8 @@ type Props = { size?: number | string; tone?: 'orb' | 'success' | 'warm'; childr
 const tones = { success: 'bg-grad-success', warm: 'bg-grad-warm' };
 
 /**
- * 원형 블롭 (DESIGN.md 5장).
- * 기본(orb)은 테마 색(--c-p1~p4)으로 만든 안개 같은 구: 바깥 번짐 + 천천히 도는 핑크·보라 소용돌이 + 흐린 가장자리.
+ * 테마 색(--c-p1~p4)을 유지하는 비대칭 안개 (DESIGN.md 5장).
+ * 기본(orb)은 원형 경계 없이 여러 레이어가 천천히 흐른다.
  * 상태 표시(success·warm)는 예전처럼 단순한 그라데이션 원.
  */
 export function Orb({ size = 180, tone = 'orb', children, className }: Props) {
@@ -26,7 +26,7 @@ export function Orb({ size = 180, tone = 'orb', children, className }: Props) {
 
   return (
     <div
-      className={cx('orb relative flex shrink-0 items-center justify-center animate-breathe', className)}
+      className={cx('orb relative flex shrink-0 items-center justify-center', className)}
       style={{ width: size, height: size, '--orb-size': typeof size === 'number' ? `${size}px` : size } as CSSProperties}
     >
       <div className="orb-halo" aria-hidden />
@@ -35,8 +35,16 @@ export function Orb({ size = 180, tone = 'orb', children, className }: Props) {
         <div className="orb-band" />
         <div className="orb-glow" />
       </div>
-      <div className="orb-rim" aria-hidden />
       <div className="relative">{children}</div>
+    </div>
+  );
+}
+
+/** 기존 Orb 안개를 넓고 옅은 상단 배경으로 재사용한다. */
+export function PageAtmosphere() {
+  return (
+    <div aria-hidden="true" className="page-atmosphere">
+      <Orb size={680} className="page-atmosphere-cloud" />
     </div>
   );
 }

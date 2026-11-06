@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CircleCheck, Dices, Percent, Users } from 'lucide-react';
+import { CircleCheck, Dices, Percent, Users } from '@/components/icons';
 import { formatDateTime, maskStudentId } from '@/app/format';
 import { Badge } from '@/components/Badge';
 import { ListItem } from '@/components/ListItem';

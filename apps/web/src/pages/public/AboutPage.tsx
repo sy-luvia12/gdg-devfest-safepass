@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { ListOrdered, Lock, QrCode, ScanFace, ShieldCheck, Smartphone, UserRound, Users } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
+import { ListOrdered, Lock, QrCode, ScanFace, ShieldCheck, Smartphone, UserRound, Users } from '@/components/icons';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/Card';
-import { Orb } from '@/components/Orb';
+import { PageAtmosphere } from '@/components/Orb';
 
 /** 랜딩 위쪽 메뉴. 같은 화면 안의 구역으로 스크롤한다 */
 const NAV = [
@@ -22,7 +22,7 @@ const PROBLEMS = [
 ];
 
 /** 쓰는 사람별로 무엇을 하는지 */
-const ROLES: { icon: LucideIcon; who: string; steps: string[] }[] = [
+const ROLES: { icon: AppIcon; who: string; steps: string[] }[] = [
   {
     icon: UserRound,
     who: '학생',
@@ -40,7 +40,7 @@ const ROLES: { icon: LucideIcon; who: string; steps: string[] }[] = [
   },
 ];
 
-const STRENGTHS: { icon: LucideIcon; title: string; text: string }[] = [
+const STRENGTHS: { icon: AppIcon; title: string; text: string }[] = [
   {
     icon: Smartphone,
     title: '빌려줄 수 없는 입장권',
@@ -74,13 +74,14 @@ const DEMO = [
 /** Campass 소개(랜딩). 서비스 설명과 강점을 보여주고, 상단 "Campass 사용해보기"로 로그인 화면에 간다 */
 export function AboutPage() {
   return (
-    <div className="min-h-dvh bg-bg">
-      <header className="sticky top-0 z-20 bg-bg/80 backdrop-blur">
+    <div className="page-canvas">
+      <PageAtmosphere />
+      <header className="navigation-surface sticky top-4 z-20 mx-5 mt-5 rounded-[32px] md:mx-8">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 md:px-6">
           <Link to="/about" className="text-title text-ink">
             Campass
           </Link>
-          <nav className="flex items-center gap-1 rounded-full border border-line bg-bg/80 p-1 text-label">
+          <nav className="flex items-center gap-1 rounded-full bg-bg p-1 text-label">
             {NAV.map((n) => (
               <a key={n.id} href={`#${n.id}`} className="hidden rounded-full px-4 py-2 text-ink-2 hover:bg-surface lg:block">
                 {n.label}
@@ -93,10 +94,10 @@ export function AboutPage() {
         </div>
       </header>
 
-      <main>
-        {/* 히어로: 그라데이션 포인트는 오른쪽 구 하나 */}
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-8 md:min-h-[78vh] md:grid-cols-[1.1fr_1fr] md:px-6 md:py-12">
-          <div className="order-2 flex flex-col gap-6 md:order-1">
+      <main className="page-content">
+        {/* 장식은 상단 배경으로 두고 기존 소개 콘텐츠를 유지한다. */}
+        <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 pb-16 pt-16 md:min-h-[58vh] md:px-10 md:py-20">
+          <div className="flex max-w-2xl flex-col gap-6">
             <p className="text-label text-ink-2">대학 축제 재학생 인증 입장권</p>
             <h1 className="break-keep text-[28px] font-semibold leading-[38px] text-ink md:text-[44px] md:leading-[58px]">
               학생증은 빌려줄 수 있어도,
@@ -115,14 +116,10 @@ export function AboutPage() {
               ))}
             </ul>
           </div>
-          <div className="order-1 flex justify-center md:order-2">
-            <Orb size={220} className="md:hidden" />
-            <Orb size={380} className="hidden md:flex" />
-          </div>
         </section>
 
         <Section id="problem" title="왜 필요한가" lead="대학 축제 입장권은 재학생에게만 가야 하지만, 지금 방식으로는 지키기 어려워요.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             {PROBLEMS.map((p) => (
               <Card key={p.value} className="flex flex-col gap-2 p-6">
                 <p className="text-heading text-ink">{p.value}</p>
@@ -133,7 +130,7 @@ export function AboutPage() {
         </Section>
 
         <Section id="how" title="작동 방식" lead="학생은 폰 하나로, 스태프는 카메라 하나로, 학생회는 노트북 하나로 끝나요.">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             {ROLES.map(({ icon: Icon, who, steps }) => (
               <div key={who} className="flex flex-col gap-4 rounded-lg bg-surface p-6">
                 <p className="flex items-center gap-2 text-heading text-ink">
@@ -158,7 +155,7 @@ export function AboutPage() {
           title="Campass의 강점"
           lead="거래를 완벽히 막는 것보다, 학생들이 운영을 믿을 수 있게 과정을 보여주는 데 집중했어요."
         >
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             {STRENGTHS.map(({ icon: Icon, title, text }) => (
               <Card key={title} className="flex flex-col gap-3 p-6">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink">
@@ -193,7 +190,7 @@ export function AboutPage() {
       </main>
 
       <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-5 py-8 text-caption text-ink-3 md:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 py-8 text-caption text-ink-3 md:px-10">
           <span>Campass · 2026 DevFest 프로토타입</span>
           <span className="flex gap-4">
             <Link to="/terms">이용약관</Link>
@@ -207,7 +204,7 @@ export function AboutPage() {
 
 function Section({ id, title, lead, children }: { id: string; title: string; lead: string; children: ReactNode }) {
   return (
-    <section id={id} className="mx-auto flex max-w-6xl scroll-mt-20 flex-col gap-6 px-5 py-14 md:px-6 md:py-20">
+    <section id={id} className="mx-auto flex max-w-6xl scroll-mt-24 flex-col gap-6 px-6 py-10 md:px-10 md:py-14">
       <div className="flex flex-col gap-2">
         <h2 className="text-[24px] font-semibold leading-[32px] text-ink">{title}</h2>
         <p className="text-body text-ink-2">{lead}</p>

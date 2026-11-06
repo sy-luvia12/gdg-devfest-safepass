@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AlertCircle, Check, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, Inbox, Loader2 } from '@/components/icons';
 import { cx } from './cx';
 
 type Props = {

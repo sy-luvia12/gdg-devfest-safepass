@@ -45,7 +45,7 @@ export function AuthFinishPage() {
   return (
     <>
       <AppHeader title="메일 인증" back="/" />
-      <main className="flex flex-col gap-6 px-5 py-8">
+      <main className="flex flex-col gap-6 px-6 py-8">
         <h2 className="text-title text-ink">인증 메일을 받은 주소를 확인해 주세요</h2>
         <p className="text-body text-ink-2">다른 브라우저에서 링크를 열었다면 메일 주소를 다시 입력해 주세요. 인증을 마친 이 브라우저가 입장권을 보여 줄 기기로 등록돼요.</p>
         <form onSubmit={(event) => {

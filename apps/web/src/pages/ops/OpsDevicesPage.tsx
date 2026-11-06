@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RotateCcw, Search } from 'lucide-react';
+import { RotateCcw, Search } from '@/components/icons';
 import { cx } from '@/components/cx';
 import { OpsBadge, OpsButton, OpsInput, OpsNotice, OpsPanel, OpsState, OpsTitle } from '@/components/ops/ui';
 import { listSchools, opsListStudents, opsResetDevice } from '@/lib/api';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw } from '@/components/icons';
 import { useAdmin } from '@/app/AdminLayout';
 import { useAuth } from '@/app/AuthProvider';
 import { formatAgo } from '@/app/format';

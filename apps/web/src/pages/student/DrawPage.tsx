@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CircleCheck, CircleX, ExternalLink, ShieldCheck } from 'lucide-react';
+import { CircleCheck, CircleX, ExternalLink, ShieldCheck } from '@/components/icons';
 import { useEventId } from '@/app/AuthProvider';
 import { CHAIN_EXPLORER } from '@/app/config';
 import { formatDateTime } from '@/app/format';
@@ -94,7 +94,7 @@ export function DrawPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-6 pt-2">
+      <main className="flex flex-col gap-6 px-6 pb-6 pt-8">
         <Card className="flex flex-col gap-2 bg-surface">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-title text-ink">{s.title}</h2>

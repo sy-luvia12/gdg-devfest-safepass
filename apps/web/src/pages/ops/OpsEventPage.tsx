@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from '@/components/icons';
 import { Link, useParams } from 'react-router-dom';
 import { eventTitle, formatEventDate } from '@/app/format';
 import { RosterEditor } from '@/components/ops/RosterEditor';

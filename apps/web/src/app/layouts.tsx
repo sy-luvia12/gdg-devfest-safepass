@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { DemoBanner } from '@/components/DemoBanner';
+import { PageAtmosphere } from '@/components/Orb';
 import { DEMO_MODE } from '@/lib/api';
 
 /**
@@ -13,9 +14,10 @@ export function MobileLayout() {
   if (DEMO_MODE) return <DemoMobileLayout />;
   return (
     // 바깥을 실제 보이는 화면(fixed inset-0)에 맞춘다. 100dvh는 브라우저에 따라 보이는 높이보다 커져 하단 버튼이 잘린다
-    <div className="fixed inset-0 bg-surface-2">
-      <div className="phone-frame mx-auto h-full w-full max-w-app overflow-hidden bg-bg [transform:translateZ(0)]">
-        <div className="h-full overflow-y-auto overscroll-contain">
+    <div className="fixed inset-0 bg-surface-2 min-[481px]:p-4">
+      <div className="phone-frame relative isolate mx-auto h-full w-full max-w-app overflow-hidden bg-canvas [transform:translateZ(0)] min-[481px]:rounded-[32px]">
+        <PageAtmosphere />
+        <div className="relative z-[1] h-full overflow-y-auto overscroll-contain">
           <div className="flex min-h-full flex-col">
             <Outlet />
           </div>
@@ -25,14 +27,18 @@ export function MobileLayout() {
   );
 }
 
+/** 위와 같은 틀에 데모 띠만 맨 위에 붙인다 */
 function DemoMobileLayout() {
   return (
-    <div className="fixed inset-0 bg-surface-2">
-      <div className="phone-frame mx-auto flex h-full w-full max-w-app flex-col overflow-hidden bg-bg [transform:translateZ(0)]">
-        <DemoBanner />
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="flex min-h-full flex-col">
-            <Outlet />
+    <div className="fixed inset-0 bg-surface-2 min-[481px]:p-4">
+      <div className="phone-frame relative isolate mx-auto h-full w-full max-w-app overflow-hidden bg-canvas [transform:translateZ(0)] min-[481px]:rounded-[32px]">
+        <PageAtmosphere />
+        <div className="relative z-[1] flex h-full flex-col">
+          <DemoBanner />
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="flex min-h-full flex-col">
+              <Outlet />
+            </div>
           </div>
         </div>
       </div>

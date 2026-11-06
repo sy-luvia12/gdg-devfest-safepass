@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Calendar, ChevronRight, MapPin, UserRound } from 'lucide-react';
+import { Calendar, ChevronRight, MapPin, UserRound } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { formatEventDate } from '@/app/format';
@@ -31,6 +31,8 @@ function status({ event, ticket, roster }: Row): { tone: BadgeTone; text: string
   if (ticket?.status === 'used') return { tone: 'muted', text: '입장함' };
   if (ticket) return { tone: 'success', text: '받음' };
   if (event.capacity - event.issuedCount <= 0) return { tone: 'muted', text: '마감' };
+  // 취소한 적이 있으면 이 행사는 다시 받을 수 없다 (테스트 행사만 예외)
+  if (roster === 'cancelled') return { tone: 'muted', text: '취소' };
   // 추첨 행사는 눌러서 들어가면 응모되고, 블록체인이 정한 당첨자만 받는다
   if (roster === 'draw_open') return { tone: 'neutral', text: '추첨 응모' };
   if (roster === 'draw_pending') return { tone: 'neutral', text: '추첨 중' };
@@ -99,7 +101,7 @@ export function EventsPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-8 px-6 pb-12 pt-8">
         <p className="text-body text-ink-2">{school?.name} 재학생이 받을 수 있는 입장권이에요. 행사마다 1매씩 받을 수 있어요</p>
         {groupRows(rows).map((g, i) => (
           <section key={g.title ?? `single-${i}`} className="flex flex-col gap-3">
@@ -111,7 +113,7 @@ export function EventsPage() {
                   key={row.event.id}
                   type="button"
                   onClick={() => open(row)}
-                  className="flex items-center gap-3 rounded-lg border border-line bg-bg p-4 text-left transition duration-200 hover:bg-surface"
+                  className="flex items-center gap-3 surface-card rounded-lg p-5 text-left transition duration-200 hover:bg-surface"
                 >
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="truncate text-heading text-ink">{row.event.name}</p>

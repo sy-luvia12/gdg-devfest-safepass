@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Smartphone } from 'lucide-react';
+import { Smartphone } from '@/components/icons';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { studentGatePath } from '@/app/config';
@@ -57,7 +57,7 @@ export function DevicePage() {
           </Button>
         }
       />
-      <main className="flex flex-col items-center gap-6 px-5 pb-6 pt-8 text-center">
+      <main className="flex flex-col items-center gap-6 px-6 pb-6 pt-8 text-center">
         <Orb size={140} tone="warm">
           <Smartphone size={36} strokeWidth={1.75} className="text-ink" />
         </Orb>
@@ -68,7 +68,7 @@ export function DevicePage() {
           </p>
         </div>
         {USE_MOCK ? (
-          <div className="w-full rounded-lg border border-line p-4 text-left">
+          <div className="w-full rounded-lg border border-line bg-bg p-5 text-left shadow-soft">
             <p className="text-caption text-ink-2">등록된 기기</p>
             <p className="text-body text-ink">{user.deviceName ?? '알 수 없는 기기'}</p>
           </div>
@@ -88,7 +88,7 @@ export function DevicePage() {
       <BottomBar>
         {error && <p role="alert" className="text-center text-caption text-danger">요청하지 못했어요. 다시 시도해 주세요</p>}
         {request ? (
-          <Button variant="secondary" loading={busy} onClick={onCheck}>
+          <Button loading={busy} onClick={onCheck}>
             초기화됐는지 확인하기
           </Button>
         ) : (

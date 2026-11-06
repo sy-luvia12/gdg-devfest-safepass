@@ -34,7 +34,7 @@ export function ScanHistoryPage() {
   return (
     <>
       <AppHeader title="내 검표 기록" back="/staff/scan" />
-      <main className="flex flex-col gap-4 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-4 px-6 pb-12 pt-8">
         {error ? (
           <StateView
             kind="error"

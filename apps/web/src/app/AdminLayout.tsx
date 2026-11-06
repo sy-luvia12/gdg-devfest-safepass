@@ -1,5 +1,6 @@
+import { PageAtmosphere } from '@/components/Orb';
 import { useCallback, useEffect, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
 import {
   CalendarDays,
   ClipboardList,
@@ -15,7 +16,7 @@ import {
   Ticket,
   UserRound,
   Users,
-} from 'lucide-react';
+} from '@/components/icons';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
@@ -28,7 +29,7 @@ import { useAuth } from './AuthProvider';
 import { isUnassignedAdmin } from './config';
 
 /** teamOnly: 학교 담당자 일이라 운영진에게만 보인다. 행사 담당자에게는 숨긴다 */
-type NavItem = { to: string; label: string; icon: LucideIcon; badge?: 'devices'; teamOnly?: boolean };
+type NavItem = { to: string; label: string; icon: AppIcon; badge?: 'devices'; teamOnly?: boolean };
 
 // 학교 메뉴는 행사를 바꿔도 그대로, 행사 메뉴는 지금 고른 행사 기준
 const NAV: { group: string; items: NavItem[] }[] = [
@@ -129,8 +130,9 @@ export function AdminLayout() {
   if (eventAdmin && TEAM_ONLY_PATHS.includes(pathname)) return <Navigate to="/admin" replace />;
 
   return (
-    <div className="min-h-dvh bg-bg">
-      <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
+    <div className="page-canvas">
+      <PageAtmosphere />
+      <header className="navigation-surface sticky top-4 z-20 mx-5 mt-5 rounded-[32px]">
         <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
           <div className="min-w-0">
             <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · Campass 관리자</p>
@@ -177,7 +179,7 @@ export function AdminLayout() {
         </nav>
       </header>
 
-      <div className="mx-auto flex max-w-admin gap-8 px-5 py-6 md:px-8 md:py-8">
+      <div className="page-content mx-auto flex max-w-admin gap-10 px-6 py-8 md:px-10 md:py-10">
         <nav
           aria-label="관리자 메뉴"
           className={cx('sticky top-24 hidden h-fit w-52 shrink-0 flex-col gap-6', !inSetup && 'lg:flex')}

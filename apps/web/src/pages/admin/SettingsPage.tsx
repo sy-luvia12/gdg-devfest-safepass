@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ListOrdered, Shuffle } from 'lucide-react';
+import { ListOrdered, Shuffle } from '@/components/icons';
 import { useAdmin } from '@/app/AdminLayout';
 import { useAuth } from '@/app/AuthProvider';
 import { formatEventDate } from '@/app/format';
@@ -237,7 +237,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-0.5 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-body text-ink-2">{label}</span>
       <span className="text-body text-ink">{value}</span>
     </div>

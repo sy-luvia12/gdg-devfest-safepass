@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { BarChart3, CameraOff, CheckCircle2, ClipboardList, ImageOff, Keyboard, Sun, UserCheck, UserRound } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
+import { BarChart3, CameraOff, CheckCircle2, ClipboardList, ImageOff, Keyboard, Sun, UserCheck, UserRound } from '@/components/icons';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useEventId } from '@/app/AuthProvider';
@@ -126,7 +126,7 @@ export function ScanPage() {
   return (
     <>
       <AppHeader title="검표" right={right} />
-      <main className="flex flex-col gap-5 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-5 px-6 pb-12 pt-8">
         <SchoolSwitcher className="self-center" />
         <div className="grid grid-cols-2 divide-x divide-line rounded-lg border border-line">
           <div className="flex flex-col items-center gap-0.5 py-3">
@@ -230,7 +230,7 @@ function resumeScanner(s: Html5Qrcode | null) {
   }
 }
 
-function Guide({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
+function Guide({ icon: Icon, text }: { icon: AppIcon; text: string }) {
   return (
     <li className="flex items-start gap-3 text-caption text-ink-2">
       <Icon size={16} strokeWidth={1.75} className="mt-px shrink-0" />
