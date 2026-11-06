@@ -52,9 +52,9 @@ export default {
         float: '0 12px 32px rgba(31,35,40,0.035)',
       },
       backgroundImage: {
-        // 카드는 학교 테마, 주 버튼은 학교와 독립된 공통 동작 색
+        // 카드와 주 버튼 모두 학교·행사 테마를 따른다 (기본 테마는 거의 무채색)
         'grad-ticket': 'linear-gradient(rgba(255,255,255,.22),rgba(255,255,255,.22)),var(--grad-ticket)',
-        'grad-button': 'var(--grad-action)',
+        'grad-button': 'var(--grad-button)',
         'grad-orb': 'var(--grad-orb)',
         // 상태 의미가 있는 것은 고정
         'grad-success': 'linear-gradient(160deg,#D3F1E2 0%,#CFE4FF 100%)',
@@ -67,7 +67,7 @@ export default {
           to: { transform: 'translateY(0)', opacity: '1' },
         },
         breathe: { '0%,100%': { transform: 'scale(1)' }, '50%': { transform: 'scale(1.03)' } },
-        'row-flash': { from: { backgroundColor: 'rgba(220,215,255,0.2)' }, to: { backgroundColor: 'transparent' } },
+        'row-flash': { from: { backgroundColor: 'rgb(var(--c-p2) / 0.2)' }, to: { backgroundColor: 'transparent' } },
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
       },
       animation: {

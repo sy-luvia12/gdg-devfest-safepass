@@ -9,7 +9,7 @@
 - 탐색은 기존 메뉴만 흰 둥근 컨트롤로 정돈한다. 새 메뉴·검색·알림·프로젝트 기능은 추가하지 않는다.
 - 기존 Poppins / Noto Sans KR 글꼴 스택·400/500 굵기·중립 텍스트색은 유지한다.
 - Nucleo Glass 원본·공통 어댑터·매핑·SVG ID·크기·접근성 속성은 변경하지 않는다.
-- 주 버튼의 --grad-action 및 기기 초기화 전후의 같은 primary 상태를 유지한다.
+- 주 버튼은 `--grad-button`. 기본 테마는 거의 무채색이고, 학교·행사 테마면 그 색을 따른다. 기기 초기화 전후에도 같은 primary를 쓴다.
 - 행사 카드는 학교별 기존 테마를 유지하며 흰 레이어 22%로만 살짝 부드럽게 한다. QR·사진은 불투명 흰 영역에서 보이게 한다.
 - 원래 문구·경로·인증·등록·권한·기기·API·백엔드·계약은 변경하지 않는다. 모든 작업은 현재 로컬 원본 폴더에서만 수행한다.
 
@@ -83,8 +83,8 @@
 /* 주의/만료: 피치 → 핑크 */
 --grad-warm: linear-gradient(160deg, #FFE2C9 0%, #FAD3E4 100%);
 
-/* 주 버튼: 라벤더 → 핑크 (아주 연하게) */
---grad-button: linear-gradient(90deg, #E6E1FF 0%, #FBDCEA 100%);
+/* 주 버튼: 기본 테마는 거의 무채색 (학교·행사 테마면 그 색) */
+--grad-button: linear-gradient(90deg, #E9E7F1 0%, #EFECF2 100%);
 
 /* 몽환적 원형 블롭 (로그인 등 비주얼) */
 --grad-orb: radial-gradient(circle at 35% 35%, #FFE2C9 0%, #FAD3E4 30%, #DCD7FF 60%, #CFE4FF 100%);
@@ -95,7 +95,7 @@
 ### 2.1 학교·행사 테마
 Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 디자인에 맞춰 포인트 색을 바꾼다. 위의 값은 **기본 테마**다.
 
-- **바뀌는 것**: 파스텔 4색(`sky` `lavender` `pink` `peach`)과 `--grad-ticket`, `--grad-button`, `--grad-orb`
+- **바뀌는 것**: 파스텔 4색(`sky` `lavender` `pink` `peach`)과 `--grad-ticket`, `--grad-button`(주 버튼), `--grad-orb`, 화면 상단 안개(테마가 걸리면 그 색을 옅게)
 - **고정**: 기본색(흰색·회색·글자색), 상태색(`success` `danger` `warning`), `--grad-success`, `--grad-warm`. 성공·거부의 의미가 학교마다 달라지면 안 되기 때문
 - **우선순위**: 행사 디자인 색 > 학교 상징색 > 기본 테마
 - **로그인 화면은 항상 기본 테마(보라)**: 로그인 전에는 어느 학교인지 모르므로 Campass 자체 색을 쓴다. 로그인한 뒤부터 학교·행사 테마를 적용하고, 로그아웃하면 다시 기본 테마로 돌아온다
@@ -185,7 +185,7 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 
 ### 버튼 (`Button`)
 - 높이 52px, `radius-full`, 텍스트 `label`~`body` Medium, 색 `text-primary`
-- **primary**: 배경 `--grad-action`, 테두리 없음. 학교 테마와 독립된 기본 라벤더·핑크 색으로 통일한다. 기기 초기화 요청 전후의 주 동작도 같은 primary를 사용한다.
+- **primary**: 배경 `--grad-button`, 테두리 없음. 기본 테마는 거의 무채색이고, 학교·행사 테마면 그 색을 따른다. 기기 초기화 요청 전후의 주 동작도 같은 primary를 사용한다.
 - 기기 초기화 화면의 요청·상태 확인 버튼은 동일한 primary. mock에서 요청 전후 computed gradient가 같은지 확인했고 320px에서도 가로 넘침 없음.
 - **secondary**: 배경 `surface`
 - **ghost**: 배경 없음, 텍스트 `text-secondary`
@@ -387,7 +387,7 @@ export default {
         'grad-ticket': 'linear-gradient(160deg,#CFE4FF 0%,#DCD7FF 45%,#FAD3E4 100%)',
         'grad-success': 'linear-gradient(160deg,#D3F1E2 0%,#CFE4FF 100%)',
         'grad-warm': 'linear-gradient(160deg,#FFE2C9 0%,#FAD3E4 100%)',
-        'grad-button': 'linear-gradient(90deg,#E6E1FF 0%,#FBDCEA 100%)',
+        'grad-button': 'var(--grad-button)',
         'grad-orb': 'radial-gradient(circle at 35% 35%,#FFE2C9 0%,#FAD3E4 30%,#DCD7FF 60%,#CFE4FF 100%)',
       },
     },

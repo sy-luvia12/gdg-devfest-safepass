@@ -10,8 +10,8 @@
     --c-p3: 250 211 228;
     --c-p4: 255 226 201;
     --grad-ticket: linear-gradient(160deg, #cfe4ff 0%, #dcd7ff 45%, #fad3e4 100%);
-    --grad-action: linear-gradient(90deg, #e6e1ff 0%, #fbdcea 100%);
-    --grad-button: linear-gradient(90deg, #e6e1ff 0%, #fbdcea 100%);
+    /* 주 버튼: 기본 테마는 거의 무채색. 학교·행사 테마면 theme.ts가 그 색으로 덮어쓴다 */
+    --grad-button: linear-gradient(90deg, #e9e7f1 0%, #efecf2 100%);
     --grad-orb: radial-gradient(circle at 35% 35%, #ffe2c9 0%, #fad3e4 30%, #dcd7ff 60%, #cfe4ff 100%);
   }
   html,
@@ -118,11 +118,27 @@
     transform: translateX(-50%) scaleX(1.65);
     opacity: .95;
   }
+  /* 학교·행사 테마가 걸리면(theme.ts가 html에 data-themed) 안개도 그 색을 옅게 따른다 */
+  :root[data-themed] .page-atmosphere .page-atmosphere-cloud {
+    --c-p1: inherit;
+    --c-p2: inherit;
+    --c-p3: inherit;
+    --c-p4: inherit;
+    opacity: .5;
+  }
   .phone-frame > .page-atmosphere { height: 300px; }
   .phone-frame .page-atmosphere .page-atmosphere-cloud { top: -450px; transform: translateX(-50%) scaleX(.9); }
   .page-content { position: relative; z-index: 1; }
   .surface-card { background: #fff; border: 1px solid rgba(255,255,255,.85); box-shadow: 0 8px 30px rgba(31,35,40,.025); }
   .navigation-surface { background: rgba(255,255,255,.94); border: 1px solid rgba(31,35,40,.035); box-shadow: 0 5px 24px rgba(31,35,40,.025); }
+  /* 스크롤했을 때 머리(AppHeader) 둘레 덮개: 뒤로 지나가는 카드를 흐린 캔버스로 가리고 아래 끝은 부드럽게 사라진다 */
+  .header-scrim {
+    background: rgb(247 247 249 / .78);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+  }
   .login-surface { padding: 20px; border-radius: 28px; background: #fff; box-shadow: 0 8px 30px rgba(31,35,40,.025); }
 }
 @media (max-width:480px) {
