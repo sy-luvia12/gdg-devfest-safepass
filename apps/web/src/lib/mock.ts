@@ -185,7 +185,7 @@ const DEMO_SEED: SeedSchool[] = [
   {
     school: { id: 'korea', name: '고려대학교', domain: 'korea.ac.kr', brandColor: '#8B0029' },
     // 일반 발급: 입실렌티 / 추첨: 정기 고연전 농구
-    event: { name: '2026 입실렌티', date: '2026-11-20T18:00:00+09:00', place: '화정체육관', capacity: 4000, faceValue: 0, enteredCount: 0, issuedCount: 2900 },
+    event: { name: '2026 입실렌티', date: '2026-11-20T18:00:00+09:00', place: '화정체육관', capacity: 20000, faceValue: 0, enteredCount: 0, issuedCount: 14500 },
     extraEvents: [
       { key: 'gokoyon', instantDraw: true, event: { name: '2026 정기 고연전 농구', date: '2026-11-14T15:00:00+09:00', place: '잠실학생체육관', capacity: 6000, faceValue: 0, enteredCount: 0, issuedCount: 4500 } },
     ],
