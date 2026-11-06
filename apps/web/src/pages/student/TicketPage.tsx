@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, History, LayoutDashboard, LayoutList, ShieldCheck, Smartphone, UserRound } from 'lucide-react';
+import { Copy, History, LayoutDashboard, LayoutList, ShieldCheck, Smartphone, UserRound } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useEventId } from '@/app/AuthProvider';
 import { eventTitle } from '@/app/format';
@@ -163,7 +163,7 @@ export function TicketPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-4 px-5 pb-6 pt-2">
+      <main className="flex flex-col gap-4 px-6 pb-6 pt-8">
         <TicketCard eventName={eventTitle(event)} ticket={ticket} owner={user} />
         <div className="flex flex-col items-center gap-1.5 text-caption text-ink-2">
           <p className="flex items-center gap-1.5">

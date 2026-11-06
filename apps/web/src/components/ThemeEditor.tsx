@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
-import { Check, ImageUp, Palette, School as SchoolIcon } from 'lucide-react';
+import { Check, ImageUp, Palette, School as SchoolIcon } from '@/components/icons';
 import { extractColors } from '@/app/extractColors';
 import { buildTheme } from '@/app/theme';
 import { updateEventTheme } from '@/lib/api';

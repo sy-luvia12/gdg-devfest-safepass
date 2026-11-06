@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { Blocks, ChevronRight, Dices, LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
+import { Calendar, MapPin, Blocks, ChevronRight, Dices, LayoutList, ListOrdered, ShieldCheck, Smartphone, UserCheck, UserRound } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
-import calendarIcon from '@/assets/icons/festival-calendar.svg';
-import locationIcon from '@/assets/icons/festival-location.svg';
 import { useAuth, useEventId } from '@/app/AuthProvider';
 import { eventTitle, formatEventDate } from '@/app/format';
 import { AppHeader } from '@/components/AppHeader';
@@ -142,7 +140,7 @@ export function EventPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-6 pt-2">
+      <main className="flex flex-col gap-6 px-6 pb-6 pt-8">
         <section className="flex aspect-[4/3] flex-col justify-end gap-2 rounded-xl bg-grad-ticket p-6 shadow-float">
           <div className="w-full [container-type:inline-size]">
             <p className="inline-flex max-w-full rounded-full border border-white/[0.22] bg-white/[0.28] px-3 py-1.5 text-[12px] font-medium leading-[1.4] text-ink-2 [overflow-wrap:anywhere] [@container(max-width:240px)]:px-2.5 [@container(max-width:240px)]:py-1 [@container(max-width:240px)]:text-[11px]">
@@ -154,13 +152,13 @@ export function EventPage() {
             <div className="mt-5 flex flex-col gap-2 text-[14px] font-medium leading-[1.4] text-ink-2 [@container(240px<width<=280px)]:mt-3 [@container(240px<width<=280px)]:gap-1.5 [@container(max-width:240px)]:mt-2 [@container(max-width:240px)]:gap-1 [@container(max-width:240px)]:text-[12px]">
               <span className="flex items-center gap-3">
                 <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/25 [@container(240px<width<=280px)]:h-7 [@container(240px<width<=280px)]:w-7 [@container(max-width:240px)]:h-6 [@container(max-width:240px)]:w-6">
-                  <img src={calendarIcon} alt="" className="h-6 w-6 shrink-0 [@container(max-width:240px)]:h-5 [@container(max-width:240px)]:w-5" />
+                  <Calendar size={24} aria-hidden className="h-6 w-6 shrink-0 [@container(max-width:240px)]:h-5 [@container(max-width:240px)]:w-5" />
                 </span>
                 <span className="min-w-0 [overflow-wrap:anywhere]">{formatEventDate(event.date)}</span>
               </span>
               <span className="flex items-center gap-3">
                 <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/25 [@container(240px<width<=280px)]:h-7 [@container(240px<width<=280px)]:w-7 [@container(max-width:240px)]:h-6 [@container(max-width:240px)]:w-6">
-                  <img src={locationIcon} alt="" className="h-6 w-6 shrink-0 [@container(max-width:240px)]:h-5 [@container(max-width:240px)]:w-5" />
+                  <MapPin size={24} aria-hidden className="h-6 w-6 shrink-0 [@container(max-width:240px)]:h-5 [@container(max-width:240px)]:w-5" />
                 </span>
                 <span className="min-w-0 [overflow-wrap:anywhere]">{event.place}</span>
               </span>
@@ -236,7 +234,7 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Guide({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
+function Guide({ icon: Icon, text }: { icon: AppIcon; text: string }) {
   return (
     <li className="flex items-start gap-3 text-caption text-ink-2">
       <Icon size={16} strokeWidth={1.75} className="mt-px shrink-0" />
@@ -245,7 +243,7 @@ function Guide({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
   );
 }
 
-function LinkRow({ icon: Icon, label, hint, onClick }: { icon: LucideIcon; label: string; hint: string; onClick: () => void }) {
+function LinkRow({ icon: Icon, label, hint, onClick }: { icon: AppIcon; label: string; hint: string; onClick: () => void }) {
   return (
     <button
       type="button"

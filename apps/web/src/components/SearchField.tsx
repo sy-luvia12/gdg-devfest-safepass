@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react';
+import { Search } from '@/components/icons';
 
 /** 관리자 목록 검색창 */
 export function SearchField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {

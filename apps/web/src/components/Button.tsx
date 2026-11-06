@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from '@/components/icons';
 import { cx } from './cx';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
@@ -31,7 +31,7 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, disabl
       type="button"
       disabled={off}
       className={cx(
-        'flex shrink-0 items-center justify-center gap-2 rounded-full font-medium outline-none transition duration-200 ease-out focus-visible:ring-2 focus-visible:ring-lavender',
+        'flex shrink-0 items-center justify-center gap-2 rounded-full font-medium outline-none transition duration-200 ease-out focus-visible:ring-2 focus-visible:ring-ink-2 focus-visible:ring-offset-2',
         sizes[size],
         off ? 'bg-surface text-ink-3' : cx(variants[variant], 'active:scale-[0.98] active:brightness-95'),
         className,
@@ -50,7 +50,7 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, disabl
  */
 export function BottomBar({ children }: { children: ReactNode }) {
   return (
-    <div className="sticky bottom-0 z-20 mt-auto w-full bg-gradient-to-t from-bg via-bg to-bg/0 px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-6">
+    <div className="sticky bottom-0 z-20 mt-auto w-full bg-gradient-to-t from-canvas via-canvas to-canvas/0 px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-6">
       <div className="flex flex-col gap-2">{children}</div>
     </div>
   );

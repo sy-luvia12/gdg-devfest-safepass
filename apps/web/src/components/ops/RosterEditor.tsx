@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardPaste, Download, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ClipboardPaste, Download, Pencil, Plus, Search, Trash2, X } from '@/components/icons';
 import { formatDateTime } from '@/app/format';
 import { opsEditRoster, opsListRoster } from '@/lib/api';
 import type { OpsEditResult, OpsRoster, OpsRosterKind, OpsRosterRow, RosterSkipReason } from '@/types';

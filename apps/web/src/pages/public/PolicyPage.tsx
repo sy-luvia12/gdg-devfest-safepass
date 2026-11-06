@@ -70,7 +70,7 @@ export function PolicyPage({ kind }: { kind: 'terms' | 'privacy' }) {
   return (
     <>
       <AppHeader title={kind === 'terms' ? '이용약관' : '개인정보 처리방침'} back />
-      <main className="flex flex-col gap-6 px-5 pb-12 pt-2">
+      <main className="flex flex-col gap-6 px-6 pb-12 pt-2">
         <p className="rounded-md bg-surface px-4 py-3 text-caption text-ink-2">
           해커톤 프로토타입용 초안이에요. 실제 서비스 전에 학교·학생회와 함께 다듬어야 해요.
         </p>

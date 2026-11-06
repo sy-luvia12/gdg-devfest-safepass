@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Check, Copy, FileSpreadsheet } from 'lucide-react';
+import { Check, Copy, FileSpreadsheet } from '@/components/icons';
 import { formatDateTime } from '@/app/format';
 import { ApiError, type RosterEntry, type RosterImport, type RosterSkipReason, type RosterView } from '@/types';
 import { Button } from './Button';

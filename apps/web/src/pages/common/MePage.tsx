@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { ChevronRight, ClipboardList, FileText, Info, LogOut, Shield, Smartphone, UserCheck } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
+import { ChevronRight, ClipboardList, FileText, Info, LogOut, Shield, Smartphone, UserCheck } from '@/components/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { homePathFor } from '@/app/config';
@@ -33,7 +33,7 @@ export function MePage() {
   return (
     <>
       <AppHeader title="내 정보" back={homePathFor(user.role)} />
-      <main className="flex flex-col gap-6 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-6 px-6 pb-12 pt-8">
         <section className="flex items-center gap-4">
           <Avatar src={user.photoUrl} alt={`${user.name} 사진`} size={72} />
           <div className="min-w-0">
@@ -94,9 +94,9 @@ export function MePage() {
   );
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: ReactNode }) {
+function InfoRow({ icon: Icon, label, value }: { icon: AppIcon; label: string; value: ReactNode }) {
   return (
-    <div className="flex h-14 items-center gap-3 px-5">
+    <div className="flex h-14 items-center gap-3 px-6">
       <Icon size={18} strokeWidth={1.75} className="text-ink-2" />
       <span className="flex-1 text-body text-ink-2">{label}</span>
       {value}
@@ -104,9 +104,9 @@ function InfoRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string
   );
 }
 
-function LinkRow({ to, icon: Icon, label }: { to: string; icon: LucideIcon; label: string }) {
+function LinkRow({ to, icon: Icon, label }: { to: string; icon: AppIcon; label: string }) {
   return (
-    <Link to={to} className="flex h-14 items-center gap-3 px-5 transition duration-200 active:bg-surface">
+    <Link to={to} className="flex h-14 items-center gap-3 px-6 transition duration-200 active:bg-surface">
       <Icon size={18} strokeWidth={1.75} className="text-ink-2" />
       <span className="flex-1 text-body text-ink">{label}</span>
       <ChevronRight size={18} strokeWidth={1.75} className="text-ink-3" />

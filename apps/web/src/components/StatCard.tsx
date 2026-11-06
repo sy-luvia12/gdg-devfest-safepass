@@ -1,7 +1,7 @@
-import type { LucideIcon } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
 import { Card } from './Card';
 
-type Props = { icon: LucideIcon; label: string; value: string };
+type Props = { icon: AppIcon; label: string; value: string };
 
 export function StatCard({ icon: Icon, label, value }: Props) {
   return (

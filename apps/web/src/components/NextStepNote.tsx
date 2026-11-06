@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Info } from 'lucide-react';
+import { Info } from '@/components/icons';
 
 /** 프로토타입에서 실제 연동 전인 기능 안내 (발표에서 "다음 단계" 설명용) */
 export function NextStepNote({ children }: { children: ReactNode }) {

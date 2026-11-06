@@ -1,12 +1,12 @@
-// 운영진 콘솔 (/ops) 전용 검정 테마 기본 부품. 색은 tailwind의 ops 토큰만 쓴다
+// 운영진 콘솔 (/ops) 전용 밝은 테마 기본 부품. 색은 tailwind의 ops 토큰만 쓴다
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, Inbox, Loader2 } from '@/components/icons';
 import { cx } from '../cx';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-ops-accent text-ops-bg hover:brightness-110',
+  primary: 'bg-ops-accent text-ops-ink hover:brightness-110',
   secondary: 'bg-ops-raised text-ops-ink hover:bg-ops-line',
   ghost: 'bg-transparent text-ops-ink-2 hover:text-ops-ink',
   danger: 'bg-transparent text-ops-bad hover:bg-ops-bad/10',
@@ -52,7 +52,7 @@ export function OpsInput({ className, ...rest }: InputHTMLAttributes<HTMLInputEl
 }
 
 export function OpsPanel({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cx('rounded-lg border border-ops-line bg-ops-panel', className)} {...rest} />;
+  return <div className={cx('surface-card rounded-lg bg-ops-panel', className)} {...rest} />;
 }
 
 export function OpsTitle({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
@@ -77,7 +77,7 @@ const tones: Record<Tone, string> = {
 };
 
 export function OpsBadge({ tone = 'muted', children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={cx('inline-flex h-6 items-center rounded-full px-2.5 text-caption', tones[tone])}>{children}</span>;
+  return <span className={cx('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-caption', tones[tone])}>{children}</span>;
 }
 
 /** 로딩 / 빈 상태 / 에러 상태 */

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock } from 'lucide-react';
+import { Clock } from '@/components/icons';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { studentGatePath } from '@/app/config';
@@ -36,7 +36,7 @@ export function PendingPage() {
           </Button>
         }
       />
-      <main className="flex flex-1 flex-col items-center justify-center gap-6 px-5 pb-6 text-center">
+      <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 pb-6 text-center">
         <Orb size={160}>
           <Clock size={36} strokeWidth={1.75} className="text-ink" />
         </Orb>

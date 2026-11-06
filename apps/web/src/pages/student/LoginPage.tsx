@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { ChevronLeft, Menu, RotateCcw, X } from 'lucide-react';
+import { ChevronLeft, Menu, RotateCcw, X } from '@/components/icons';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { homePathFor, studentGatePath } from '@/app/config';
 import { Button } from '@/components/Button';
 import { cx } from '@/components/cx';
-import { Orb } from '@/components/Orb';
 import { StateView } from '@/components/StateView';
 import { MOCK_OUTSIDER, MOCK_SCHOOL_ACCOUNTS, mockReset, mockSelectAccount, mockSelectedAccount } from '@/lib/mock';
 import { ApiError, type User } from '@/types';
@@ -53,12 +52,12 @@ export function LoginPage() {
 
   return (
     <>
-      {/* 폰 영역 한 화면에 다 들어오게: 높이가 모자라면 구가 줄어든다 */}
-      <main className="flex min-h-[560px] flex-1 flex-col px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-4">
+      {/* 기존 동작을 유지하고 로그인 정보를 흰 카드 하나로 묶는다. */}
+      <main className="flex min-h-[560px] flex-1 flex-col px-6 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-4">
         <div className="flex items-center justify-between">
           <Link
             to="/about"
-            className="inline-flex items-center gap-1 rounded-full bg-surface px-3 py-2 text-caption text-ink-2 hover:bg-surface-2"
+            className="inline-flex items-center gap-1 rounded-full bg-bg px-3 py-2 shadow-soft text-caption text-ink-2 hover:bg-surface-2"
           >
             <ChevronLeft size={14} strokeWidth={2} />
             Campass 소개 보러가기
@@ -67,13 +66,13 @@ export function LoginPage() {
             type="button"
             aria-label="메뉴"
             onClick={() => setMenuOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-2 hover:bg-surface-2"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-ink-2 shadow-soft hover:bg-surface-2"
           >
             <Menu size={20} strokeWidth={1.75} />
           </button>
         </div>
-        <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[clamp(16px,4dvh,40px)] py-4 text-center">
-          <Orb size="min(200px, 22dvh)" />
+        <div className="login-surface my-auto">
+        <section className="flex flex-col items-center justify-center gap-4 py-6 text-center">
           <div className="flex flex-col gap-2">
             <h1 className="text-display text-ink">Campass</h1>
             <p className="text-body text-ink-2">재학생만을 위한 축제 입장권</p>
@@ -87,7 +86,7 @@ export function LoginPage() {
             </p>
           )}
           <Button onClick={() => navigate('/signin')}>로그인</Button>
-          <p className="text-center text-label text-ink-2">
+          <p className="break-keep text-center text-label text-ink-2">
             아직 계정이 없으신가요?{' '}
             <Link to="/signup" className="text-ink underline underline-offset-4">회원가입 하러가기</Link>
           </p>
@@ -107,6 +106,7 @@ export function LoginPage() {
             <Button variant="secondary" loading={submitting} onClick={onStart}>선택한 데모 계정으로 바로 로그인</Button>
           </>}
         </section>
+        </div>
       </main>
         {menuOpen && <LoginMenu onClose={() => setMenuOpen(false)} onAdminLogin={onStart} />}
     </>
@@ -177,7 +177,7 @@ function DemoPanel() {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-2 text-label text-ink-2"
       >
-        <span>데모 계정</span>
+        <span className="shrink-0">데모 계정</span>
         <span className="flex min-w-0 items-center gap-2 text-ink">
           {current && <SchoolDot color={current.school.brandColor} />}
           <span className="truncate">

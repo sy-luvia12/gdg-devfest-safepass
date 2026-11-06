@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Calendar, ChevronRight, MapPin, UserRound } from 'lucide-react';
+import { Calendar, ChevronRight, MapPin, UserRound } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthProvider';
 import { formatEventDate } from '@/app/format';
@@ -99,7 +99,7 @@ export function EventsPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-8 px-6 pb-12 pt-8">
         <p className="text-body text-ink-2">{school?.name} 재학생이 받을 수 있는 입장권이에요. 행사마다 1매씩 받을 수 있어요</p>
         {groupRows(rows).map((g, i) => (
           <section key={g.title ?? `single-${i}`} className="flex flex-col gap-3">
@@ -111,7 +111,7 @@ export function EventsPage() {
                   key={row.event.id}
                   type="button"
                   onClick={() => open(row)}
-                  className="flex items-center gap-3 rounded-lg border border-line bg-bg p-4 text-left transition duration-200 hover:bg-surface"
+                  className="flex items-center gap-3 surface-card rounded-lg p-5 text-left transition duration-200 hover:bg-surface"
                 >
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="truncate text-heading text-ink">{row.event.name}</p>

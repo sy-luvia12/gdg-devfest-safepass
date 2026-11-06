@@ -55,7 +55,7 @@ export function OnboardingPage() {
   return (
     <>
       <AppHeader title="회원가입" right={<Button variant="ghost" size="sm" disabled={busy} onClick={() => void signOut()}>나가기</Button>} />
-      <main className="px-5 pb-6 pt-6">
+      <main className="px-6 pb-6 pt-6">
         <RegistrationSteps step={stage === 'photo' ? 2 : 3} />
         {stage === 'photo' ? (
           <section key="photo" className="flex animate-rise-in flex-col gap-6">

@@ -36,9 +36,9 @@ export function SignInPage() {
   return (
     <>
       <AppHeader title="로그인" back={busy ? undefined : '/'} />
-      <main className="px-5 pb-6 pt-8">
+      <main className="px-6 pb-6 pt-8">
         {sentAt ? <MailLinkNotice email={fields.email} sentAt={sentAt} busy={busy} onResend={() => void send()} /> : (
-          <section className="animate-rise-in">
+          <section className="surface-card animate-rise-in rounded-lg p-5">
             <h2 className="mb-2 text-title text-ink">학교 메일로 로그인해요</h2>
             <p className="mb-8 text-body text-ink-2">가입한 학번과 이메일로 인증 링크를 받아 주세요.</p>
             <form id="student-signin" noValidate onSubmit={(event) => { event.preventDefault(); void send(); }} className="flex flex-col gap-6">

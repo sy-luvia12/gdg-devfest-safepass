@@ -1,4 +1,4 @@
-import { Check, X } from 'lucide-react';
+import { Check, X } from '@/components/icons';
 import { formatTime } from '@/app/format';
 import type { User, VerifyOutcome } from '@/types';
 import { Avatar } from './Avatar';

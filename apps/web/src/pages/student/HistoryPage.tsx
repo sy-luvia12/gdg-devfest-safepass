@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { CheckCircle2, ListOrdered, Sparkles } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
+import { CheckCircle2, ListOrdered, Sparkles } from '@/components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useEventId } from '@/app/AuthProvider';
 import { formatDateTime } from '@/app/format';
@@ -11,7 +11,7 @@ import { StateView } from '@/components/StateView';
 import { getEvent, getMyTicket, getTicketHistory } from '@/lib/api';
 import type { Event, Ticket, TicketHistoryItem } from '@/types';
 
-const kinds: Record<TicketHistoryItem['type'], { icon: LucideIcon; title: string; cls: string }> = {
+const kinds: Record<TicketHistoryItem['type'], { icon: AppIcon; title: string; cls: string }> = {
   issued: { icon: Sparkles, title: '입장권 발급', cls: 'bg-lavender text-ink' },
   reassigned: { icon: ListOrdered, title: '취소표 배정', cls: 'bg-sky text-ink' },
   used: { icon: CheckCircle2, title: '입장 완료', cls: 'bg-success-bg text-success' },
@@ -72,7 +72,7 @@ export function HistoryPage() {
   return (
     <>
       {header}
-      <main className="flex flex-col gap-6 px-5 pb-10 pt-2">
+      <main className="flex flex-col gap-6 px-6 pb-12 pt-8">
         <section className="flex items-center justify-between rounded-lg bg-grad-ticket p-5">
           <div className="min-w-0">
             <p className="text-caption text-ink-2">NFT 입장권</p>

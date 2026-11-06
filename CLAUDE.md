@@ -31,7 +31,7 @@
 - Tailwind CSS (토큰은 `DESIGN.md` 9장 설정 사용)
 - React Router
 - QR 생성: `qrcode.react` / QR 스캔: `html5-qrcode`
-- 아이콘: `lucide-react` / 폰트: Pretendard
+- 아이콘: `nucleo-glass` (공통 진입점 `components/icons.tsx`) / 폰트: Poppins / Noto Sans KR 및 시스템 한국어 대체 글꼴
 
 ### 백엔드 (노션 기술 설계 기준, 백엔드 담당이 진행)
 - Firebase: Auth(구글 로그인), Firestore, Cloud Functions, Hosting
@@ -43,7 +43,7 @@
 ## 디자인
 - 모든 UI는 **`DESIGN.md`를 따른다.** 색상·간격·모서리·컴포넌트 규칙을 임의로 바꾸지 않는다.
 - 흰 배경, 화면당 그라데이션 포인트 1개, 주 버튼 1개.
-- 텍스트는 한국어. 이모지 금지, 아이콘은 lucide 라인 아이콘.
+- 텍스트는 한국어. 이모지 금지, 아이콘은 Nucleo Glass SVG.
 - 무료 행사가 기본이므로 화면 문구는 "구매"가 아니라 "받기·발급"을 쓴다.
 
 ## 폴더 구조와 담당 (충돌 방지 규칙)
@@ -129,7 +129,7 @@ firebase.json             #                                    ← 백엔드
 - **학생 관문** (`studentGatePath`): 승인 전(`none`·`rejected`) → `/onboarding`, 승인 대기 → `/onboarding/pending`, 기기 막힘 → `/device`. 통과 전에는 다른 학생 화면에 들어갈 수 없다.
 - 권한이 없는 경로에 들어오면 자기 역할의 첫 화면으로 보낸다.
 - 관리자 화면은 노트북에서 왼쪽 세로 메뉴, 폰에서는 위쪽 가로 스크롤 메뉴 (`app/AdminLayout.tsx`).
-- 운영진 콘솔은 검정 테마의 별도 틀(`app/OpsLayout.tsx`, `components/ops/`). 운영진이 아니면 `/ops/login`으로 보낸다. 로그인 화면 아래 "운영진" 링크로 들어간다.
+- 운영진 콘솔은 밝은 카드 레이아웃의 별도 틀(`app/OpsLayout.tsx`, `components/ops/`). 운영진이 아니면 `/ops/login`으로 보낸다. 로그인 화면 아래 "운영진" 링크로 들어간다.
 
 ## 역할 (담당자)
 | 역할 | 하는 일 | 구현 |

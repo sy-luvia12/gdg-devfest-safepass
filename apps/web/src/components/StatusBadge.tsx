@@ -1,11 +1,11 @@
-import type { LucideIcon } from 'lucide-react';
-import { CheckCircle2, Circle, Clock, CopyX, HelpCircle, UserX } from 'lucide-react';
+import type { AppIcon } from '@/components/icons';
+import { CheckCircle2, Circle, Clock, CopyX, HelpCircle, UserX } from '@/components/icons';
 import type { ScanResult } from '@/types';
 import { cx } from './cx';
 
 export type BadgeKind = 'issued' | 'available' | 'used' | 'expiring' | ScanResult;
 
-const styles: Record<BadgeKind, { cls: string; icon: LucideIcon; text: string }> = {
+const styles: Record<BadgeKind, { cls: string; icon: AppIcon; text: string }> = {
   issued: { cls: 'bg-surface text-ink-2', icon: Circle, text: '발급됨' },
   available: { cls: 'bg-success-bg text-success', icon: CheckCircle2, text: '사용 가능' },
   used: { cls: 'bg-surface-2 text-ink-3', icon: CheckCircle2, text: '사용됨' },

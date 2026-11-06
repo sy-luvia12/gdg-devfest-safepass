@@ -32,14 +32,14 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
       </div>
 
       <div className="flex flex-col items-center gap-3">
-        <div className={cx('rounded-lg bg-bg p-4 transition duration-200', used && 'opacity-30 grayscale')}>
+        <div className={cx('max-w-full rounded-lg bg-bg p-4 transition duration-200', used && 'opacity-30 grayscale')}>
           {used || ticket.qrToken ? (
             <div key={payload} className="animate-fade-in">
-              <QRCodeSVG value={payload} size={208} fgColor="#1F2328" bgColor="#FFFFFF" level="M" />
+              <QRCodeSVG value={payload} size={208} className="block h-auto max-w-full" fgColor="#1F2328" bgColor="#FFFFFF" level="M" />
             </div>
           ) : (
             // 서버에서 QR을 받기 전 (기기 확인 중)
-            <div className="h-[208px] w-[208px] animate-pulse rounded-md bg-surface" aria-label="QR을 받는 중" />
+            <div className="aspect-square w-[208px] max-w-full animate-pulse rounded-md bg-surface" aria-label="QR을 받는 중" />
           )}
         </div>
         {used ? (
@@ -47,10 +47,10 @@ export function TicketCard({ eventName, ticket, owner }: Props) {
             {ticket.usedAt ? `${formatTime(ticket.usedAt)}에 입장했어요` : '사용된 입장권이에요'}
           </p>
         ) : (
-          <div className="flex w-[240px] flex-col items-center gap-2">
-            <div className="h-1 w-full overflow-hidden rounded-full bg-white/50">
+          <div className="flex w-[240px] max-w-full flex-col items-center gap-2">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-white/70">
               <div
-                className="h-full rounded-full bg-white transition-[width] duration-200 ease-linear"
+                className="h-full rounded-full bg-ink transition-[width] duration-200 ease-linear"
                 style={{ width: `${(leftMs / QR_TTL_MS) * 100}%` }}
               />
             </div>
