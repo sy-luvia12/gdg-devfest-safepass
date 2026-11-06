@@ -155,3 +155,133 @@
     transition: none !important;
   }
 }
+
+/* /about 전용 공개 랜딩. 앱 내부의 폰 레이아웃과 인증 스타일에 영향을 주지 않는다. */
+.campass-landing { background:#eeeef2; color:#1d1d1f; font-family:'Saans','Poppins','Noto Sans KR',sans-serif; overflow-x:clip; }
+.landing-first-screen { position:relative; min-height:820px; height:100svh; display:flex; flex-direction:column; isolation:isolate; }
+.landing-header { position:relative; z-index:5; display:flex; align-items:center; justify-content:space-between; padding:24px clamp(20px,4vw,64px); gap:16px; }
+.landing-wordmark { font-size:28px; font-weight:500; letter-spacing:-.04em; white-space:nowrap; }
+.landing-wordmark span:last-child { color:#48484a; }
+.landing-menu { position:relative; display:flex; align-items:center; }
+.landing-menu-toggle { display:grid; place-items:center; width:48px; height:48px; border-radius:50%; background:white; border:1px solid #e5e5ea; box-shadow:0 5px 20px #1d1d1f0a; }
+.landing-toolbar { position:absolute; right:60px; display:flex; align-items:center; gap:2px; padding:4px; height:48px; border:1px solid #e5e5ea; border-radius:999px; background:white; box-shadow:0 5px 20px #1d1d1f0a; opacity:0; visibility:hidden; transform:translateX(10px); transition:opacity .28s ease,transform .28s ease,visibility .28s; }
+.landing-toolbar.is-open { opacity:1; visibility:visible; transform:translateX(0); }
+.landing-tool { position:relative; width:36px; height:36px; display:grid; place-items:center; flex-shrink:0; border-radius:50%; opacity:0; transform:translateX(6px); transition:opacity .25s ease,transform .25s ease,background .2s; }
+.is-open .landing-tool { opacity:1; transform:none; transition-delay:var(--tool-delay,0ms); }
+.landing-tool:hover,.landing-tool:focus-visible { background:#eeeef2; }
+.landing-tooltip { position:absolute; top:calc(100% + 14px); left:50%; transform:translateX(-50%); padding:6px 9px; border-radius:7px; background:#1d1d1f; color:white; font-size:12px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .15s; }
+.landing-tool:hover .landing-tooltip,.landing-tool:focus-visible .landing-tooltip { opacity:1; }
+.campass-landing :is(a,button):focus-visible { outline:2px solid #55565c; outline-offset:4px; }
+.landing-hero { position:relative; z-index:2; text-align:center; padding:clamp(42px,6vh,72px) 20px 30px; }
+.landing-hero h1 { font-size:clamp(34px,4.4vw,64px); line-height:1.12; letter-spacing:-.035em; font-weight:400; }
+.landing-hero h1 span { color:#55565c; }
+.landing-hero>p { margin:24px auto 0; color:#86868b; font-size:clamp(16px,1.6vw,22px); font-weight:400; }
+.landing-actions { display:flex; justify-content:center; gap:16px; margin-top:32px; }
+.landing-primary,.landing-secondary { display:inline-flex; justify-content:center; align-items:center; gap:12px; min-height:56px; padding:0 32px; border-radius:999px; font-size:16px; font-weight:500; transition:background .2s; }
+.landing-primary { background:#1d1d1f; color:white; }
+.landing-primary:hover { background:#363638; }
+.landing-primary svg { transition:transform .2s; }
+.landing-primary:hover svg { transform:translateX(3px); }
+.landing-secondary { border:1px solid #d1d1d6; }
+.landing-secondary:hover { background:#ffffff80; }
+.landing-crowd { position:relative; flex:1; min-height:350px; overflow:hidden; pointer-events:none; }
+.landing-details { text-align:center; padding:clamp(90px,12vw,170px) 24px; scroll-margin-top:40px; }
+.landing-details h2 { font-size:clamp(30px,3vw,44px); font-weight:400; letter-spacing:-.03em; }
+.landing-details p { font-size:18px; line-height:1.7; color:#86868b; margin-top:20px; }
+.landing-footer { padding:28px clamp(20px,4vw,64px); display:flex; flex-wrap:wrap; justify-content:space-between; gap:20px; border-top:1px solid #e5e5ea; font-size:12px; color:#86868b; }
+.landing-footer>div { display:flex; gap:20px; }
+.landing-credits { width:100%; font-size:11px; }
+.landing-credits a { text-decoration:underline; text-underline-offset:3px; }
+@media(max-width:600px) {
+ .landing-first-screen { min-height:720px; }
+ .landing-header { padding:20px; }
+ .landing-wordmark { font-size:26px; }
+ .landing-hero { padding-top:60px; }
+ .landing-hero h1 { font-size:clamp(30px,7.8vw,44px); }
+ .landing-actions { gap:10px; }
+ .landing-primary,.landing-secondary { min-height:50px; padding:0 22px; font-size:14px; }
+ .landing-crowd { min-height:290px; }
+ .landing-toolbar { right:56px; }
+ .landing-menu:has(.is-open)::before { content:''; position:absolute; right:-4px; top:-4px; height:56px; width:calc(100vw - 32px); background:#eeeef2; border-radius:999px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .campass-landing *, .campass-landing *::before { scroll-behavior:auto!important; transition:none!important; }
+}
+/* 원본 스프라이트가 위에서 잘리지 않도록 캔버스 무대는 첫 화면 전체 높이를 사용한다. */
+.landing-first-screen { min-height:900px; }
+.landing-crowd { position:absolute; inset:0; min-height:0; z-index:1; }
+@media(max-width:600px) { .landing-first-screen { min-height:840px; } }
+.landing-menu-toggle, .landing-toolbar { z-index:2; }
+.landing-menu-toggle { position:relative; }
+html:has(.campass-landing), body:has(.campass-landing) { scroll-behavior:smooth; }
+@media(prefers-reduced-motion:reduce) { html:has(.campass-landing), body:has(.campass-landing) { scroll-behavior:auto; } }
+
+/* 랜딩 상단에만 얇고 정적인 라벤더·핑크 빛을 더한다. */
+.landing-first-screen::before {
+  content:'';
+  position:absolute;
+  inset:0 0 auto;
+  height:190px;
+  pointer-events:none;
+  z-index:0;
+  background:
+    radial-gradient(ellipse at 28% 0%,rgba(169,145,230,.08),transparent 72%),
+    radial-gradient(ellipse at 76% 0%,rgba(235,159,194,.065),transparent 70%);
+  mask-image:linear-gradient(to bottom,#000,transparent);
+  -webkit-mask-image:linear-gradient(to bottom,#000,transparent);
+}
+
+/* 소개 문구는 짧게 나누고 기존 히어로와 군중 구성은 유지한다. */
+.landing-hero h1 { word-break:keep-all; }
+.landing-explanation { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:48px; max-width:1040px; margin:72px auto 0; text-align:left; }
+.landing-explanation h3 { font-size:19px; font-weight:500; letter-spacing:-.025em; }
+.landing-explanation p { font-size:15px; line-height:1.8; color:#6e6e73; margin-top:16px; word-break:keep-all; }
+.landing-details .landing-privacy-note { margin:64px auto 0; max-width:620px; font-size:14px; line-height:1.8; color:#86868b; word-break:keep-all; }
+@media(max-width:700px) { .landing-explanation { grid-template-columns:1fr; gap:36px; max-width:360px; margin-top:48px; } .landing-details .landing-privacy-note { margin-top:44px; } }
+@media(max-width:360px) { .landing-actions a { padding-inline:14px; font-size:12px; gap:8px; white-space:nowrap; } }
+.landing-details h2, .landing-details>p { word-break:keep-all; }
+
+/* 원문 소개 콘텐츠: 장식 카드를 늘리지 않고 여백과 얇은 구분선으로 구성한다. */
+.landing-hero .landing-kicker { font-size:13px; margin:0 0 16px; letter-spacing:.015em; }
+.landing-story { max-width:1160px; margin:auto; padding:0 clamp(24px,5vw,64px) 70px; scroll-margin-top:40px; }
+.landing-story-intro { text-align:center; padding:100px 0 64px; }
+.landing-story-intro h2 { font-size:clamp(24px,2.7vw,38px); line-height:1.45; letter-spacing:-.035em; font-weight:400; word-break:keep-all; }
+.landing-story-intro>p { max-width:610px; margin:24px auto 0; color:#6e6e73; line-height:1.9; font-size:16px; word-break:keep-all; }
+.landing-highlights { display:flex; justify-content:center; flex-wrap:wrap; gap:16px 28px; margin-top:32px; }
+.landing-highlights li { display:flex; align-items:center; gap:8px; font-size:13px; color:#55565c; }
+.landing-section-nav { display:flex; justify-content:center; flex-wrap:wrap; gap:16px 32px; padding:24px 0; border-block:1px solid #1d1d1f10; }
+.landing-section-nav a { color:#6e6e73; font-size:14px; transition:color .2s; }
+.landing-section-nav a:hover { color:#1d1d1f; text-decoration:underline; text-underline-offset:5px; }
+.landing-story-section { padding:80px 0; scroll-margin-top:30px; }
+.landing-story-section+.landing-story-section { border-top:1px solid #1d1d1f10; }
+.landing-story-section>header { max-width:650px; margin-bottom:44px; }
+.landing-story-section h2 { font-size:clamp(26px,2.6vw,36px); font-weight:400; letter-spacing:-.03em; }
+.landing-story-section>header>p { margin-top:16px; color:#6e6e73; font-size:16px; line-height:1.9; word-break:keep-all; }
+.landing-story-grid { display:grid; gap:48px; }
+.landing-story-grid.three-columns { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.landing-story-grid.two-columns { grid-template-columns:repeat(2,minmax(0,1fr)); gap:48px 64px; }
+.landing-story-item>svg { margin-bottom:20px; }
+.landing-story-item h3 { font-size:19px; font-weight:500; letter-spacing:-.025em; }
+.landing-story-item>p,.landing-role-steps p { color:#6e6e73; font-size:15px; line-height:1.9; word-break:keep-all; }
+.landing-story-item>p { margin-top:14px; }
+.landing-role-steps { display:flex; flex-direction:column; gap:18px; margin-top:20px; }
+.landing-role-steps li { display:flex; align-items:baseline; gap:12px; }
+.landing-role-steps li>span { color:#86868b; font-size:12px; flex-shrink:0; }
+.landing-privacy { display:flex; align-items:flex-start; gap:16px; margin-top:56px; padding:28px 0 0; border-top:1px solid #1d1d1f10; }
+.landing-privacy>svg { flex-shrink:0; margin-top:3px; }
+.landing-privacy p { color:#6e6e73; font-size:14px; line-height:1.9; word-break:keep-all; }
+.landing-privacy p span { color:#1d1d1f; }
+.landing-demo-steps { display:flex; flex-direction:column; }
+.landing-demo-steps li { display:flex; align-items:baseline; gap:24px; padding:22px 0; border-bottom:1px solid #1d1d1f10; }
+.landing-demo-steps li>span { color:#86868b; font-size:13px; flex-shrink:0; }
+.landing-demo-steps p { font-size:16px; line-height:1.8; color:#55565c; word-break:keep-all; }
+.landing-demo-action { margin-top:36px; }
+@media(max-width:700px) {
+ .landing-story-grid.three-columns,.landing-story-grid.two-columns { grid-template-columns:1fr; gap:40px; }
+ .landing-story-intro { padding-top:72px; }
+ .landing-story-section { padding:56px 0; }
+ .landing-section-nav { gap:16px 24px; }
+ .landing-section-nav a { font-size:13px; }
+ .landing-story-section>header { margin-bottom:32px; }
+ .landing-demo-steps li { gap:16px; }
+}
