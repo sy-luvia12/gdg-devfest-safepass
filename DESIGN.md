@@ -191,7 +191,7 @@ Campass는 학교(학생회)에 파는 서비스라 학교 상징색과 행사 �
 - **ghost**: 배경 없음, 텍스트 `text-secondary`
 - **disabled**: 배경 `surface`, 텍스트 `text-muted`
 - 눌림: `scale(0.98)` + 밝기 살짝 낮춤
-- 화면 하단 고정 버튼은 좌우 20px, 하단 safe-area + 16px
+- 화면 하단 고정 버튼은 좌우 20px, 하단은 safe-area와 16px 중 큰 값 (둘을 더하지 않는다. iPhone Safari 하단 툴바 위로 떠 보임)
 
 ### 칩 (`Chip`)
 - 높이 32px, 좌우 패딩 12px, `surface` 배경, `label`, `text-secondary`

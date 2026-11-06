@@ -45,12 +45,13 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, disabl
 }
 
 /**
- * 폰 영역 맨 아래에 붙는 버튼 묶음 (DESIGN.md 4.1). 내용과 같은 좌우 여백, 아래는 홈 인디케이터 + 20px 띄운다.
+ * 폰 영역 맨 아래에 붙는 버튼 묶음 (DESIGN.md 4.1). 내용과 같은 좌우 여백.
+ * 아래 여백은 홈 인디케이터(safe-area)만큼, 없으면 16px. 둘을 더하면 iPhone Safari에서 하단 툴바 위로 버튼이 너무 떠 보인다.
  * 페이지의 main 바깥(MobileLayout 바로 아래)에 둔다. 내용이 짧으면 맨 아래로 내려가고, 길면 스크롤해도 아래에 남는다
  */
 export function BottomBar({ children }: { children: ReactNode }) {
   return (
-    <div className="sticky bottom-0 z-20 mt-auto w-full bg-gradient-to-t from-canvas via-canvas to-canvas/0 px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-6">
+    <div className="sticky bottom-0 z-20 mt-auto w-full bg-gradient-to-t from-canvas via-canvas to-canvas/0 px-5 pb-[max(16px,env(safe-area-inset-bottom))] pt-4">
       <div className="flex flex-col gap-2">{children}</div>
     </div>
   );
