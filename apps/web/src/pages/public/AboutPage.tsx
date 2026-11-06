@@ -74,7 +74,7 @@ export function AboutPage() {
           <h1 id="landing-title">내 계정과 내 얼굴은<br /><span>빌려줄 수 없어요</span></h1>
           <p>학교 계정으로 1인 1매.<br />입구에서 QR과 본인 사진으로 확인해요.</p>
           <div className="landing-actions">
-            <Link to="/signup" className="landing-primary">Campass 사용해보기 <ArrowRight size={18} /></Link>
+            <Link to="/" className="landing-primary">Campass 사용해보기 <ArrowRight size={18} /></Link>
             <a href="#details" className="landing-secondary">더 알아보기</a>
           </div>
           {error && <p role="alert" className="text-label text-danger">{error}</p>}
@@ -105,7 +105,7 @@ export function AboutPage() {
         </StorySection>
         <StorySection id="demo" title="데모 시나리오" lead="폰 두 대(학생·검표)와 노트북(관리자)으로 보면 가장 잘 보여요.">
           <ol className="landing-demo-steps">{DEMO.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, '0')}</span><p>{step}</p></li>)}</ol>
-          <Link to="/signup" className="landing-primary landing-demo-action">Campass 사용해보기 <ArrowRight size={18} /></Link>
+          <Link to="/" className="landing-primary landing-demo-action">Campass 사용해보기 <ArrowRight size={18} /></Link>
         </StorySection>
       </div>
       <footer className="landing-footer">
