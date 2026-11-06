@@ -59,7 +59,7 @@ export function LoginPage() {
 
   return (
     <>
-      {/* 기존 동작을 유지하고 로그인 정보를 흰 카드 하나로 묶는다. */}
+      {/* 소개 문구와 동작 영역을 분리하고 기존 로그인 기능은 유지한다. */}
       <main className="flex min-h-[560px] flex-1 flex-col px-6 pb-[max(16px,env(safe-area-inset-bottom))] pt-4">
         <div className="flex items-center justify-between">
           <Link
@@ -78,15 +78,15 @@ export function LoginPage() {
             <Menu size={20} strokeWidth={1.75} />
           </button>
         </div>
-        <div className="login-surface my-auto">
-        <section className="flex flex-col items-center justify-center gap-4 py-6 text-center">
+        <div className="student-login-hub my-auto">
+        <section className="student-login-heading flex flex-col items-center justify-center gap-4 text-center">
           <div className="flex flex-col gap-2">
             <h1 className="text-display text-ink">Campass</h1>
             <p className="text-body text-ink-2">재학생만을 위한 축제 입장권</p>
           </div>
         </section>
 
-        <section className="flex flex-col gap-3">
+        <section className="student-login-actions flex flex-col gap-4">
           {error && (
             <p role="alert" className="rounded-md bg-danger-bg px-4 py-3 text-center text-label text-danger">
               {error}

@@ -22,6 +22,9 @@ export function EventPage() {
   const eventId = useEventId();
   const navigate = useNavigate();
   const { school, events, user } = useAuth();
+  // 카드의 장식색만 학교에 맞춘다. 서버 데이터와 행사 테마는 변경하지 않는다.
+  const schoolKey = `${school?.id ?? ''} ${school?.name ?? ''} ${school?.domain ?? ''}`.toLowerCase();
+  const cardTone = /skku|성균관|chorok|초록/.test(schoolKey) ? 'green' : /kaist|카이스트|yonsei|연세|pureun|푸른/.test(schoolKey) ? 'blue' : 'pink';
   const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -141,7 +144,7 @@ export function EventPage() {
     <>
       {header}
       <main className="flex flex-col gap-6 px-6 pb-6 pt-8">
-        <section className="flex aspect-[4/3] flex-col justify-end gap-2 rounded-xl bg-grad-ticket p-6 shadow-float">
+        <section data-school-tone={cardTone} className="student-event-card flex aspect-[4/3] flex-col justify-end gap-2 rounded-xl bg-grad-ticket p-6 shadow-float">
           <div className="w-full [container-type:inline-size]">
             <p className="inline-flex max-w-full rounded-full border border-white/[0.22] bg-white/[0.28] px-3 py-1.5 text-[12px] font-medium leading-[1.4] text-ink-2 [overflow-wrap:anywhere] [@container(max-width:240px)]:px-2.5 [@container(max-width:240px)]:py-1 [@container(max-width:240px)]:text-[11px]">
               {school?.name} 재학생 전용
