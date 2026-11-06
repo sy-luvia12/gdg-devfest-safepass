@@ -87,7 +87,7 @@ export function RegistrationPage() {
             <>
               <h2 ref={title} tabIndex={-1} className="mb-2 text-title text-ink outline-none">학생 정보를 확인할게요</h2>
               <p className="mb-6 text-body text-ink-2">{school?.name} 학적 명단에 등록된 정보를 입력해 주세요.</p>
-              <form id="signup-info" noValidate onSubmit={(event) => { event.preventDefault(); void send(); }} className="flex flex-col gap-6">
+              <form data-student-form id="signup-info" noValidate onSubmit={(event) => { event.preventDefault(); void send(); }} className="flex flex-col gap-6">
                 <TextField label="이름" autoComplete="name" maxLength={100} value={fields.name} error={errors.name} disabled={busy} onChange={(event) => setFields({ ...fields, name: event.target.value })} />
                 <TextField label="학번" inputMode="numeric" maxLength={40} value={fields.studentId} error={errors.studentId} disabled={busy} onChange={(event) => setFields({ ...fields, studentId: event.target.value })} />
                 <TextField label="학교 이메일" type="email" autoComplete="email" autoCapitalize="none" maxLength={254} placeholder={`name@${school?.domain}`} value={fields.email} error={errors.email} disabled={busy} onChange={(event) => setFields({ ...fields, email: event.target.value })} hint="학적 명단에 등록된 이메일로 인증 링크를 보내요." />
