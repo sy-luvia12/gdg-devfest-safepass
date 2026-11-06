@@ -60,7 +60,7 @@ export function LoginPage() {
   return (
     <>
       {/* 기존 동작을 유지하고 로그인 정보를 흰 카드 하나로 묶는다. */}
-      <main className="flex min-h-[560px] flex-1 flex-col px-6 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-4">
+      <main className="flex min-h-[560px] flex-1 flex-col px-6 pb-[max(16px,env(safe-area-inset-bottom))] pt-4">
         <div className="flex items-center justify-between">
           <Link
             to="/about"
