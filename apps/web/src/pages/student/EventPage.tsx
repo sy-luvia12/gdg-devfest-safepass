@@ -42,7 +42,7 @@ export function EventPage() {
   }, [eventId, user?.role]);
   useEffect(load, [load]);
 
-  const drawEvent = !!data?.event.instantDraw && user?.role === 'student' && !data.ticket;
+  const drawEvent = !!data?.event.instantDraw && user?.role === 'student' && !data.ticket && data.roster !== 'cancelled';
   useEffect(() => {
     if (!drawEvent || entered.current === eventId) return;
     entered.current = eventId;
@@ -195,7 +195,7 @@ export function EventPage() {
         {issueError && <p role="alert" className="text-center text-caption text-danger">{issueError}</p>}
         {ticket ? (
           <Button onClick={() => navigate('/ticket')}>내 입장권 보기</Button>
-        ) : cancelledBefore ? (
+        ) : cancelledBefore || data.roster === 'cancelled' ? (
           <Button disabled>취소한 입장권은 다시 받을 수 없어요</Button>
         ) : user && user.role !== 'student' ? (
           <Button disabled>학생 계정으로만 받을 수 있어요</Button>

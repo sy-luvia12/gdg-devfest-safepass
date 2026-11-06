@@ -984,6 +984,10 @@ export async function myRosterStatus(eventIds: string[]): Promise<Record<string,
     const event = s.events.find((e) => e.id === id);
     if (!event) continue;
     const roster = s.rosters[id];
+    if (!event.allowReissueAfterCancel && s.reassignments.some((r) => r.eventId === id && r.fromUid === user.uid)) {
+      out[id] = 'cancelled';
+      continue;
+    }
     if (event.instantDraw) {
       const st = mockEntry(id, user.uid)?.status;
       out[id] = st === 'won' ? 'draw_won' : st === 'lost' ? 'draw_lost' : st ? 'draw_pending' : 'draw_open';
