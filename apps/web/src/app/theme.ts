@@ -102,11 +102,15 @@ export function themeSeeds(school: School | null, event: Event | null): string[]
 const KEYS = Object.keys(buildTheme(['#000000'])) as (keyof ThemeVars)[];
 
 export function applyTheme(seeds: string[] | null) {
-  const root = document.documentElement.style;
+  const html = document.documentElement;
+  const root = html.style;
   if (!seeds) {
     KEYS.forEach((k) => root.removeProperty(k));
+    // 기본 테마: 상단 안개는 index.css의 거의 무채색 값을 쓴다
+    delete html.dataset.themed;
     return;
   }
   const vars = buildTheme(seeds);
   KEYS.forEach((k) => root.setProperty(k, vars[k]));
+  html.dataset.themed = '';
 }

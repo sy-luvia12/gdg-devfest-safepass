@@ -7,7 +7,7 @@ export function DemoBanner() {
   if (!DEMO_MODE) return null;
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 bg-lavender px-4 py-2 text-caption text-ink">
-      <span className="min-w-0 truncate">데모 모드 · 가짜 데이터라 이 브라우저에만 남아요</span>
+      <span className="min-w-0 truncate">데모 모드</span>
       <button
         type="button"
         onClick={() => {
