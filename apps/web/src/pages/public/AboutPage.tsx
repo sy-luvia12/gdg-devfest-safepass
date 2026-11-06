@@ -76,8 +76,9 @@ export function AboutPage() {
   return (
     <div className="page-canvas">
       <PageAtmosphere />
-      <header className="navigation-surface sticky top-4 z-20 mx-5 mt-5 rounded-[32px] md:mx-8">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 md:px-6">
+      {/* 상단 바는 본문 폭에만 둔다 (본문: max-w-6xl 안 좌우 여백 md:px-10) */}
+      <header className="navigation-surface sticky top-4 z-20 mx-auto mt-5 w-[calc(100%-2.5rem)] max-w-[calc(theme(maxWidth.6xl)-5rem)] rounded-[32px] md:w-[calc(100%-4rem)]">
+        <div className="flex h-16 items-center justify-between gap-3 px-5 md:px-6">
           <Link to="/about" className="text-title text-ink">
             Campass
           </Link>

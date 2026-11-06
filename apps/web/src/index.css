@@ -105,7 +105,8 @@
 
 /* 참조 이미지의 넓은 상단 안개. 모든 구름 레이어는 기존 Orb 구현을 사용한다. */
 @layer components {
-  .page-canvas { position: relative; isolation: isolate; min-height: 100dvh; overflow-x: clip; background: #f7f7f9; }
+  /* flow-root: 첫 요소(상단 바)의 위 여백이 바깥으로 새어 흰 띠가 생기지 않게 */
+  .page-canvas { display: flow-root; position: relative; isolation: isolate; min-height: 100dvh; overflow-x: clip; background: #f7f7f9; }
   .page-atmosphere { position: absolute; inset: 0 0 auto; height: 400px; overflow: hidden; pointer-events: none; z-index: 0; -webkit-mask-image: linear-gradient(to bottom, #000 50%, transparent 100%); mask-image: linear-gradient(to bottom, #000 50%, transparent 100%); }
   .page-atmosphere .page-atmosphere-cloud {
     --c-p1: 238 233 250;

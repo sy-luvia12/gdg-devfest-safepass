@@ -132,13 +132,18 @@ export function AdminLayout() {
   return (
     <div className="page-canvas">
       <PageAtmosphere />
-      <header className="navigation-surface sticky top-4 z-20 mx-5 mt-5 rounded-[32px]">
-        <div className="mx-auto flex h-16 max-w-admin items-center justify-between gap-4 px-5 md:px-8">
-          <div className="min-w-0">
-            <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · Campass 관리자</p>
-            <h1 className="truncate text-heading text-ink">
-              {inSetup ? '스페이스 만들기' : event ? eventTitle(event) : eventId ? '' : '행사 없음'}
-            </h1>
+      {/* 상단 바는 아래 내용 영역(메뉴~본문) 폭에만 둔다. 넓은 화면 양옆 빈 곳으로 넘치지 않게 */}
+      <header className="navigation-surface sticky top-4 z-20 mx-auto mt-5 w-[calc(100%-2.5rem)] max-w-[calc(theme(maxWidth.admin)-5rem)] rounded-[32px]">
+        <div className="flex h-16 items-center justify-between gap-4 px-5 md:px-8">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="min-w-0">
+              <p className="text-label text-ink-3">{school?.name ?? '새 스페이스'} · Campass 관리자</p>
+              <h1 className="truncate text-heading text-ink">
+                {inSetup ? '스페이스 만들기' : event ? eventTitle(event) : eventId ? '' : '행사 없음'}
+              </h1>
+            </div>
+            {/* 학교·행사 고르기: 넓은 화면은 제목 옆 한 줄에 */}
+            <SchoolSwitcher className="hidden shrink-0 flex-nowrap md:flex" />
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -166,8 +171,8 @@ export function AdminLayout() {
             />
           </div>
         </div>
-        {/* 학교·행사 고르기 (고를 것이 있을 때만) */}
-        <SchoolSwitcher className="mx-auto max-w-admin px-5 pb-3 md:px-8" />
+        {/* 학교·행사 고르기 (고를 것이 있을 때만). 폰에서는 제목 아래 줄 */}
+        <SchoolSwitcher className="px-5 pb-3 md:hidden" />
         {/* 폰·태블릿: 가로 스크롤 메뉴 (스페이스 만드는 중에는 숨김) */}
         <nav
           aria-label="관리자 메뉴"

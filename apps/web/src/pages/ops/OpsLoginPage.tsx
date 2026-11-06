@@ -1,4 +1,3 @@
-import { PageAtmosphere } from '@/components/Orb';
 import { useState, type FormEvent } from 'react';
 import { ShieldHalf } from '@/components/icons';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
@@ -38,7 +37,7 @@ export function OpsLoginPage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-ops-bg">
+      <div className="min-h-dvh bg-ops-canvas">
         <OpsState kind="loading" />
       </div>
     );
@@ -46,9 +45,8 @@ export function OpsLoginPage() {
   if (user?.operator && !submitting) return <Navigate to="/ops" replace />;
 
   return (
-    <main className="page-canvas flex min-h-dvh items-center justify-center px-6 py-10">
-      <PageAtmosphere />
-      <form onSubmit={onSubmit} className="page-content surface-card flex w-full max-w-[400px] flex-col gap-4 rounded-lg p-6">
+    <main className="page-canvas bg-ops-canvas flex min-h-dvh items-center justify-center px-6 py-10">
+      <form onSubmit={onSubmit} className="page-content surface-card border-ops-line bg-ops-panel flex w-full max-w-[400px] flex-col gap-4 rounded-lg p-6">
         <div className="mb-4 flex flex-col items-center gap-3 text-center">
           <ShieldHalf size={36} strokeWidth={1.5} className="text-ops-accent" />
           <h1 className="text-title text-ops-ink">Campass 운영진</h1>

@@ -1,4 +1,4 @@
-// 운영진 콘솔 (/ops) 전용 밝은 테마 기본 부품. 색은 tailwind의 ops 토큰만 쓴다
+// 운영진 콘솔 (/ops) 전용 어두운(차콜) 테마 기본 부품. 색은 tailwind의 ops 토큰만 쓴다
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 import { AlertCircle, Inbox, Loader2 } from '@/components/icons';
 import { cx } from '../cx';
@@ -6,7 +6,7 @@ import { cx } from '../cx';
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-ops-accent text-ops-ink hover:brightness-110',
+  primary: 'bg-ops-accent text-ops-bg hover:brightness-110',
   secondary: 'bg-ops-raised text-ops-ink hover:bg-ops-line',
   ghost: 'bg-transparent text-ops-ink-2 hover:text-ops-ink',
   danger: 'bg-transparent text-ops-bad hover:bg-ops-bad/10',
@@ -52,7 +52,7 @@ export function OpsInput({ className, ...rest }: InputHTMLAttributes<HTMLInputEl
 }
 
 export function OpsPanel({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cx('surface-card rounded-lg bg-ops-panel', className)} {...rest} />;
+  return <div className={cx('surface-card rounded-lg border-ops-line bg-ops-panel', className)} {...rest} />;
 }
 
 export function OpsTitle({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
