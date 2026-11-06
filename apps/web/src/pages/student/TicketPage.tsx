@@ -216,7 +216,7 @@ export function TicketPage() {
             </div>
           ) : (
             <Button variant="ghost" onClick={() => setAskCancel(true)}>
-              못 가게 됐어요 · 입장권 취소
+              입장권 취소
             </Button>
           )}
         </BottomBar>
